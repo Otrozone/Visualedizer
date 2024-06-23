@@ -5,6 +5,12 @@
 			"guid": "00000000000000000000000000000000",
 			"description": "Default Uncontrolled Changelist",
 			"files": [
+				"C:/Users/cek/source/repos/Visualedizer/UE_54/Content/Blueprints/BP_DefaultPawn.uasset",
+				"C:/Users/cek/source/repos/Visualedizer/UE_54/Content/Blueprints/GameModeNoMovement.uasset",
+				"C:/Users/cek/source/repos/Visualedizer/UE_54/Content/Environment/GameModeNoMovement.uasset",
+				"C:/Users/cek/source/repos/Visualedizer/UE_54/Content/Blueprints/BP_StaticPawn.uasset",
+				"C:/Users/cek/source/repos/Visualedizer/UE_54/Content/Blueprints/BP_GameModeNoMovement.uasset",
+				"C:/Users/cek/source/repos/Visualedizer/UE_54/Content/Environment/MainStage.umap",
 				"C:/Users/cek/Documents/Unreal Projects/Visualedizer/Content/StarterContent/Architecture/Floor_400x400.uasset",
 				"C:/Users/cek/Documents/Unreal Projects/Visualedizer/Content/Environment/MainStage.umap",
 				"C:/Users/cek/Documents/Unreal Projects/Visualedizer/Content/NewDMXControlConsole.uasset",
