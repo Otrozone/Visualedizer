@@ -1,2 +1,2 @@
-#define WIFI_SSID "wifiSsid";
-#define WIFI_PASSWORD "wifiPassword";
+#define WIFI_SSID "wifiSsid"
+#define WIFI_PASSWORD "wifiPassword"
