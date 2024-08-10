@@ -21,6 +21,26 @@
       }
     }
 
+    @media (max-width: 460px) {
+      #main-navbar.container-fluid{
+        height: 200px;
+      }
+      main>.container:first-child {
+        margin-top: 6em;
+      }
+      #sidebarMenu {
+        margin-top: 4em;
+      }
+    }
+    
+    #conf .form-outline {
+      max-width: 300px;
+    }
+
+    #main-navbar {
+      background-color: rgb(48, 48, 48);
+    }
+
     .sidebar {
       position: fixed;
       top: 0;
@@ -37,6 +57,7 @@
         width: 100%;
       }
     }
+    
     .sidebar .active {
       border-radius: 5px;
       box-shadow: 0 2px 5px 0 rgb(0 0 0 / 16%), 0 2px 10px 0 rgb(0 0 0 / 12%);
@@ -95,10 +116,6 @@
             <i class="fas fa-rainbow fa-fw me-3"></i>
             <span>Rainbow</span>
           </a>
-          <a href="#" class="list-group-item list-group-item-action py-2 ripple" data-content-id="running-rainbow">
-            <i class="fas fa-person-running fa-fw me-3"></i>
-            <span>Running rainbow</span>
-          </a>
           <a href="#" class="list-group-item list-group-item-action py-2 ripple" data-content-id="strobe">
             <i class="fas fa-bolt fa-fw me-3"></i>
             <span>Strobe</span>
@@ -127,14 +144,25 @@
           <label class="form-check-label" for="chbMain">On/off</label>
         </div>
 
-        <ul class="navbar-nav ms-auto d-flex flex-row">
+        <ul class="navbar-nav ms-auto d-flex flex-row align-items-center">
+          <li class="nav-item me-3 me-lg-0">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="chbUseWebSockets" />
+              <label class="form-check-label" for="chbUseWebSockets">Use web sockets</label>
+            </div>
+          </li>
 
           <li class="nav-item me-3 me-lg-0">
-            <a class="nav-link" href="#">
+            <a class="nav-link" target="_blank" href="https://github.com/Otrozone/Visualedizer">
               <i class="fab fa-github"></i>
             </a>
           </li>
 
+          <li class="nav-item me-3 me-lg-0">
+            <a class="nav-link" href="#" data-content-id="conf">
+              <i class="fa-solid fa-gear"></i>
+            </a>
+          </li>
         </ul>
       </div>
     </nav>
@@ -180,14 +208,10 @@
 
             <div class="content" id="rainbow">
               <h2>Rainbow</h2>
-              <p>-._</p>
-            </div>    
-            <div class="content" id="running-rainbow">
-              <h2>Running rainbow</h2>
 
               <label class="form-label" for="rngDelay">Delay</label>
               <div class="range" data-mdb-range-init>
-                <input type="range" class="form-range" min="0" max="500" step="10" value="50" id="rngDelay" data-param-name="delay" />
+                <input type="range" class="form-range" min="0" max="200" step="5" value="50" id="rngDelay" data-param-name="delay" />
               </div>
 
               <label class="form-label" for="rngStep">Step</label>
@@ -235,6 +259,89 @@
               -->
             </div>
 
+            <div class="content" id="conf">
+              <h2>Configuration</h2>
+
+              <ul class="list-group list-group-light">
+                <li class="list-group-item px-3">
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="number" id="ledCount" class="form-control" />
+                    <label class="form-label" for="ssid">Led count</label>
+                  </div>
+                  <div id="textDetail" class="form-text">
+                    Number of leds connected to this device.
+                  </div>
+                </li>
+                <li class="list-group-item px-3">
+                  <div class="form-outline mb-2" data-mdb-input-init>
+                    <input type="text" id="ssid" class="form-control" />
+                    <label class="form-label" for="ssid">WiFi SSID</label>
+                  </div>
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="password" id="password" class="form-control" />
+                    <label class="form-label" for="password">WiFi password</label>
+                  </div>                      
+                </li>
+                <li class="list-group-item px-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="webSockEnabled" checked>
+                    <label class="form-check-label" for="webSockEnabled">
+                      Web sockets enabled
+                    </label>
+                  </div>
+                  <div class="form-text">
+                    Support of the websockets.
+                  </div>                      
+                </li>
+                <li class="list-group-item px-3">
+                  <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" value="" id="dmxEnabled" checked>
+                    <label class="form-check-label" for="dmxEnabled">
+                      DMX enabled
+                    </label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="dmxUnicast" checked>
+                    <label class="form-check-label" for="dmxUnicast">
+                      Unicast
+                    </label>
+                  </div>
+                  <div class="form-text mb-3">
+                    If not checked, multicast mode is used.
+                  </div>
+                  <!--<div class="form-check">
+                    <input class="form-check-input" type="radio" name="dmxMode" id="dmxUnicast">
+                    <label class="form-check-label" for="dmxUnicast">
+                      Unicast
+                    </label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="dmxMode" id="dmxMulticast" checked>
+                    <label class="form-check-label" for="dmxMulticast">
+                      Multicast
+                    </label>
+                  </div>-->
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="number" id="dmxUniverse" class="form-control" />
+                    <label class="form-label" for="dmxUniverse">DMX universe</label>
+                  </div>
+                  <div class="form-text mb-3">
+                    Definition of DMX universe to take the channels from (for both, the unicast and multicast mode).
+                  </div>
+    
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="number" id="dmxUniverseCount" class="form-control" />
+                    <label class="form-label" for="dmxUniverseCount">DMX universe count</label>
+                  </div>
+                  <div class="form-text mb-3">
+                    In case of multicast, number of universes to scan for the channel data.
+                  </div>
+                </li>
+              </ul>
+
+              <button id="confApply" type="button" class="btn btn-primary" data-mdb-ripple-init>Apply</button>
+            </div>
+
           </div>
         </div>
       </section>
@@ -245,13 +352,14 @@
   <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/7.1.0/mdb.umd.min.js"></script>
 
   <script>
-    /* Menu */
-    const menuItems = document.querySelectorAll('.list-group-item');
+    // Menu
+    const menuItems = document.querySelectorAll('*[data-content-id]');
     const contents = document.querySelectorAll('.content');
-    const mainSwitch = document.getElementById('chbMain');
+    const chbMain = document.getElementById('chbMain');
+    const chbUseWebSockets = document.getElementById('chbUseWebSockets');
 
     menuItems.forEach((item) => {
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (e) => {
         const clickedItem = item;
         menuItems.forEach(item => item.classList.remove('active'));
         clickedItem.classList.add('active');
@@ -264,14 +372,54 @@
         if (mediaQuery.matches) {
           sidebarMenu.classList.remove('show');
         }
+
+        e.preventDefault();
+        // e.stopPropagation();
       });
     });
 
+    // Configuration clicked
+    const confItem = document.querySelector('[data-content-id="conf"]');
+    confItem.addEventListener('click', () => {
+      const config = getConf();
+      Object.keys(config).forEach((key) => {
+        const val = config[key];
+        const element = document.getElementById[key];
+        if (typeof val == "boolean") {
+          element.checked = val;
+        } else {
+          element.value = val;
+        }
+      });
+    });
+
+    // Apply configuration button clicked
+    document.getElementById("confApply").addEventListener('click', () => {
+      const confObj = {};
+      const confInputs = document.querySelectorAll("#conf input");
+      confInputs.forEach((input) => {
+        switch (input.getAttribute("type")) {
+          case "checkbox":
+            confObj[input.id] = input.checked;
+            break;
+          case "number":
+            confObj[input.id] = parseInt(input.value);
+            break;
+          default:
+            confObj[input.id] = input.value;
+            break;
+        }        
+      });
+
+      setConf(confObj);
+    });
+
+    // Set default content
     const defaultItem = document.querySelector('[data-content-id="solid-color"]');
     defaultItem.click();
 
-    mainSwitch.addEventListener('input', () => {
-      if (mainSwitch.checked) {
+    chbMain.addEventListener('input', () => {
+      if (chbMain.checked) {
         const input = document.querySelector('div.content[style*="display: block"] input');
         const event = new Event('input', {
           bubbles: true,
@@ -284,18 +432,21 @@
       }
     });
 
-    /* Inputs -> commands + params */
+    // Inputs -> commands + params
     contents.forEach((content) => {
-       const inputs = content.querySelectorAll('input');
-       inputs.forEach((input) => {
-        input.addEventListener('input', () => {
-          onChange(content, inputs);
-        })
-       });
+      const inputs = content.querySelectorAll('input');
+      inputs.forEach((input) => {
+        const confEl = document.getElementById("#conf");
+        if (!confEl.contains(input)) { // Exclude configuration inputs
+          input.addEventListener('input', () => {
+            onChange(content, inputs);
+          });
+        }
+      });
     });
 
     function onChange(content, inputs) {
-      if (mainSwitch.checked) {
+      if (chbMain.checked) {
         let queryParams = `command=${encodeURIComponent(content.id)}`;
         inputs.forEach(input => {
           queryParams += `&${input.getAttribute('data-param-name')}=${encodeURIComponent(input.value)}`;
@@ -306,17 +457,38 @@
       }
     }
 
-    /* API calling */
+    // API calling
     function updateColors(params) {
-      const apiUrl = `/update?${params}`;
+      if (chbUseWebSockets.checked) {
+        sendMessage(`?${params}`);
+      } else {
+        const apiUrl = `/update?${params}`;
 
-      console.log(apiUrl);
+        console.log(apiUrl);
+        fetch(apiUrl)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.text; // response.json();
+          })
+          .then(data => {
+            console.log('Data received:', data);
+          })
+          .catch(error => {
+            console.error('There was a problem with the fetch operation:', error);
+          });
+      }
+    }
+
+    function getConf() {
+      const apiUrl = `/get-conf`;
       fetch(apiUrl)
         .then(response => {
           if (!response.ok) {
             throw new Error('Network response was not ok');
           }
-          return response.text; /* response.json(); */
+          return JSON.parse(response.json());
         })
         .then(data => {
           console.log('Data received:', data);
@@ -324,6 +496,46 @@
         .catch(error => {
           console.error('There was a problem with the fetch operation:', error);
         });
+    }
+
+    function setConf(conf) {
+      const url = '/set-conf';
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(conf)
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Data sent:', data);
+      })
+      .catch((error) => {
+        console.error('Error:', error);
+      });
+    }
+
+    const socket = new WebSocket(`ws://${location.hostname}:81`);
+
+    socket.onopen = function(event) {
+        console.log('WebSocket connection opened');
+    };
+
+    socket.onmessage = function(event) {
+        console.log('Received message from server:', event.data);
+    };
+
+    socket.onerror = function(error) {
+        console.error('WebSocket error:', error);
+    };
+
+    socket.onclose = function(event) {
+        console.log('WebSocket connection closed');
+    };
+
+    function sendMessage(message) {
+        socket.send(message);
     }
   </script>
 

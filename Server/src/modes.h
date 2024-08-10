@@ -29,9 +29,19 @@ struct TaskParams {
   CRGB *leds;
 };
 
+struct TaskFadeParams {
+  int ledCount;
+  CRGB *leds;
+  int duration; // ms
+  CRGB color;
+};
+
 void taskStrobe(void *pvParameters);
 void taskStrobeRandom(void *pvParameters);
 void taskRunningRainbow(void *pvParameters);
+void taskFadeIn(void *pvParameters);
+void taskFadeOut(void *pvParameters);
+
 CRGB htmlColor2Crgb(String htmlColor);
 CHSV htmlColor2Chsv(String htmlColor);
 

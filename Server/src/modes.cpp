@@ -1,5 +1,5 @@
-#include <FreeRTOS.h>
-#include <task.h>
+// #include <FreeRTOS.h>
+// #include <task.h>
 #include <FastLED.h>
 #include <modes.h>
 
@@ -99,4 +99,60 @@ void taskNoise(void *pvParameters) {
   delete params;
   terminateTaskFlag = false;
   vTaskDelete(NULL);
+}
+
+void taskFadeIn(void *pvParameters) {
+  // Serial.println("termFlag: " + String(terminateTaskFlag));
+
+  TaskFadeParams *params = static_cast<TaskFadeParams *>(pvParameters);
+
+  uint16_t time = millis();
+
+  int delay = 10;
+  int steps = params->duration / delay;
+
+  for (int i = 0; !terminateTaskFlag && i < steps; i++) {
+    for (int j = 0; j < params->ledCount; j++) {
+      params->leds[j] = params->color;
+      params->leds[j].fadeLightBy(255 - round(i * ((float)255 / steps)));
+    }
+    FastLED.show();
+
+    vTaskDelay(delay / portTICK_RATE_MS);
+  }
+
+  // Serial.println("termFlag: " + String(terminateTaskFlag));
+
+  fill_solid(params->leds, params->ledCount, params->color);
+  FastLED.show();
+
+  terminateTaskFlag = false;
+
+  vTaskDelete(NULL); 
+}
+
+void taskFadeOut(void *pvParameters) {
+  TaskFadeParams *params = static_cast<TaskFadeParams *>(pvParameters);
+
+  uint16_t time = millis();
+
+  int delay = 10;
+  int steps = params->duration / delay;
+
+  for (int i = 0; !terminateTaskFlag && i < steps; i++) {
+    for (int j = 0; j < params->ledCount; j++) {
+      params->leds[j] = params->color;
+      params->leds[j].fadeLightBy(round(i * ((float)255 / steps)));
+    }
+    FastLED.show();
+
+    vTaskDelay(delay / portTICK_RATE_MS);
+  }
+
+  fill_solid(params->leds, params->ledCount, params->color);
+  FastLED.show();
+
+  terminateTaskFlag = false;
+
+  vTaskDelete(NULL); 
 }
