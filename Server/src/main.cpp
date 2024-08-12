@@ -396,8 +396,39 @@ void update(AsyncWebServerRequest *request) {
   }
 }
 
+String getContentType(String filename) {
+  String ext = filename.substring(filename.lastIndexOf('.') + 1);
+  Serial.println("File extension for content type: " + ext);
+  if (ext == "html") return "text/html";
+  else if (ext == "css") return "text/css";
+  else if (ext == "js") return "text/javascript";
+  else if (ext == "png") return "image/png";
+  else if (ext == "jpg") return "image/jpeg";
+  else if (ext == "ico") return "image/x-icon";
+  else if (ext == "xml") return "text/xml";
+  else if (ext == "pdf") return "application/pdf";
+  else if (ext == "zip") return "application/zip";
+  else if (ext == "ttf") return "application/octet-stream";
+
+  return "text/plain";
+}
+
+void handleStaticResource(AsyncWebServerRequest *request) {
+  String path = request->url();
+  /*if (path.startsWith("/")) {
+    path = path.substring(1); // Remove leading "/"
+  }*/ 
+  Serial.println("A static resource requested: " + path);
+  if (SPIFFS.exists(path)) {
+    request->send(SPIFFS, path, getContentType(path));
+  } else {
+    Serial.println("File not found in SPIFFS: " + path);
+    request->send(404, "text/plain", "File Not Found");
+  }
+}
+
 void handleRootRequest(AsyncWebServerRequest *request) {
-  request->send(200, "text/html", htmlContent);
+  request->send(SPIFFS, "/index.html", "text/html");
 }
 
 void handleGetConf(AsyncWebServerRequest *request) {
@@ -477,6 +508,7 @@ void initHttpServer() {
   });
 
   server.on("/", HTTP_GET, handleRootRequest);
+  server.on("/res/*", HTTP_GET, handleStaticResource);
   server.on("/get-conf", HTTP_GET, handleGetConf);
   // server.on("/set-conf", HTTP_GET, handleSetConf);
   // server.on("/set-conf", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, handleSetConf);
@@ -562,17 +594,24 @@ void initWifi() {
       Serial.print('.');
       delay(1000);
   }
-  if (WiFi.status() != WL_CONNECTED) {
+  Serial.println();
+
+  IPAddress ipAddress;
+  if (WiFi.status() == WL_CONNECTED) {
+    ipAddress = WiFi.localIP();
+  } else {
     // Wifi connection timeout, switch to AP
+    Serial.print("Unable to connect to WiFi, switching to AP mode");    
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(wifiApSsid, wifiApPassword);
-    Serial.print("Unable to connect to WiFi, switching to AP mode");
+    if (WiFi.softAP(wifiApSsid, wifiApPassword)) {
+      Serial.println("AP started successfully.");
+      ipAddress = WiFi.softAPIP();
+    } else {
+      Serial.println("AP start failed.");
+    }
   }
 
-  // digitalWrite(LED_BUILTIN, HIGH);
-
-  Serial.println();
-  Serial.println(WiFi.localIP());
+  Serial.println("IP address: " + ipAddress.toString());
 }
 
 /*
