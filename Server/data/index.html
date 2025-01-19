@@ -131,6 +131,7 @@
         hsl(360, 100%, 50%) 100% 
       );
     }
+
   </style>
 </head>
 
@@ -184,6 +185,10 @@
         <div class="form-check form-switch">
           <input class="form-check-input" type="checkbox" role="switch" id="chbMain" />
           <label class="form-check-label" for="chbMain">On/off</label>
+        </div>
+
+        <div id="deviceNameLabel" class="text-warning mx-auto px-2">
+          DeviceName
         </div>
 
         <ul class="navbar-nav ms-auto d-flex flex-row align-items-center">
@@ -316,16 +321,82 @@
                     Number of leds connected to this device.
                   </div>
                 </li>
+
                 <li class="list-group-item px-3">
+                  <div class="form-outline">
+                    <label class="form-label select-label" for="wifiMode">WiFi Mode</label>
+                    <select id="wifiMode" type="number" class="form-select mb-3" aria-label="WiFi Mode">
+                      <option value="0">Auto</option>
+                      <option value="1">STA</option>
+                      <option value="2">AP</option>
+                      <option value="3">STA + AP</option>
+                    </select>
+                  </div>
                   <div class="form-outline mb-2" data-mdb-input-init>
-                    <input type="text" id="ssid" class="form-control" />
-                    <label class="form-label" for="ssid">WiFi SSID</label>
+                    <input type="text" id="wifiSsid" class="form-control" />
+                    <label class="form-label" for="wifiSsid">WiFi SSID</label>
+                  </div>
+                  <div class="form-outline mb-4" data-mdb-input-init>
+                    <input type="password" id="wifiPassword" class="form-control" />
+                    <label class="form-label" for="wifiPassword">WiFi password</label>
+                  </div>
+
+                  <div class="form-outline mb-2" data-mdb-input-init>
+                    <input type="text" id="wifiApSsid" class="form-control" />
+                    <label class="form-label" for="wifiApSsid">WiFi AP SSID</label>
                   </div>
                   <div class="form-outline" data-mdb-input-init>
-                    <input type="password" id="password" class="form-control" />
-                    <label class="form-label" for="password">WiFi password</label>
-                  </div>                      
+                    <input type="password" id="wifiApPassword" class="form-control" />
+                    <label class="form-label" for="wifiApPassword">WiFi AP password</label>
+                  </div>
                 </li>
+
+                <li class="list-group-item px-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="bootFadeIn" checked>
+                    <label class="form-check-label" for="bootFadeIn">
+                      Fade in on boot
+                    </label>
+                  </div>
+                  <div class="form-text mb-4">
+                    Turn on the light on boot (with fade in effect).
+                  </div>
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="text" id="bootColor" class="form-control" />
+                    <label class="form-label" for="bootColor">Fade in on boot color</label>
+                  </div>
+                  <div class="form-text mb-4">
+                    Color of the fade in effect in html color format (e.g. #FF0000).
+                  </div>
+
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="bootWol" checked>
+                    <label class="form-check-label" for="bootWol">
+                      Send WOL on boot
+                    </label>
+                  </div>
+                  <div class="form-text mb-4">
+                    Send Wake-On-LAN (magic packet) on boot.
+                  </div>
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="text" id="bootWolMac" class="form-control" />
+                    <label class="form-label" for="bootWolMac">WOL MAC address</label>
+                  </div>
+                  <div class="form-text mb-2">
+                    MAC address of the device to wake up.
+                  </div>
+                </li>
+
+                <li class="list-group-item px-3">
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="text" id="deviceName" class="form-control" />
+                    <label class="form-label" for="deviceName">Device name</label>
+                  </div>
+                  <div id="textDetail" class="form-text">
+                    Device indentification
+                  </div>
+                </li>
+
                 <li class="list-group-item px-3">
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" value="" id="webSockEnabled" checked>
@@ -374,8 +445,8 @@
                   </div>
     
                   <div class="form-outline" data-mdb-input-init>
-                    <input type="number" id="dmxUniverseCount" class="form-control" />
-                    <label class="form-label" for="dmxUniverseCount">DMX universe count</label>
+                    <input type="number" id="dmxUniCount" class="form-control" />
+                    <label class="form-label" for="dmxUniCount">DMX universe count</label>
                   </div>
                   <div class="form-text mb-3">
                     In case of multicast, number of universes to scan for the channel data.
@@ -403,6 +474,14 @@
     const chbMain = document.getElementById('chbMain');
     const chbUseWebSockets = document.getElementById('chbUseWebSockets');
 
+    document.addEventListener("DOMContentLoaded", () => {
+      getConf().then(config => {
+        if (config.deviceName) {
+          document.getElementById("deviceNameLabel").innerHTML = config.deviceName;
+        }
+      });
+    });
+
     menuItems.forEach((item) => {
       item.addEventListener('click', (e) => {
         const clickedItem = item;
@@ -426,22 +505,25 @@
     // Configuration clicked
     const confItem = document.querySelector('[data-content-id="conf"]');
     confItem.addEventListener('click', () => {
-      const config = getConf();
-      Object.keys(config).forEach((key) => {
-        const val = config[key];
-        const element = document.getElementById[key];
-        if (typeof val == "boolean") {
-          element.checked = val;
-        } else {
-          element.value = val;
-        }
+      getConf().then(config => {
+        Object.keys(config).forEach((key) => {
+          const val = config[key];
+          const element = document.getElementById(key);
+          if (typeof val == "boolean") {
+            element.checked = val;
+          } else {
+            element.value = val;
+          }
+          var event = new Event('input', { bubbles: true });
+          element.dispatchEvent(event);
+        });
       });
     });
 
     // Apply configuration button clicked
     document.getElementById("confApply").addEventListener('click', () => {
       const confObj = {};
-      const confInputs = document.querySelectorAll("#conf input");
+      const confInputs = document.querySelectorAll("#conf input, #conf select");
       confInputs.forEach((input) => {
         switch (input.getAttribute("type")) {
           case "checkbox":
@@ -456,7 +538,13 @@
         }        
       });
 
-      setConf(confObj);
+      
+      setConf(confObj).then((data) => {
+        alert(data);
+        setTimeout(() => {
+          window.location.href = window.location.origin;
+        }, 10000);
+      });
     });
 
     // Set default content
@@ -481,7 +569,7 @@
     contents.forEach((content) => {
       const inputs = content.querySelectorAll('input');
       inputs.forEach((input) => {
-        const confEl = document.getElementById("#conf");
+        const confEl = document.getElementById("conf");
         if (!confEl.contains(input)) { // Exclude configuration inputs
           input.addEventListener('input', () => {
             onChange(content, inputs);
@@ -515,10 +603,10 @@
             if (!response.ok) {
               throw new Error('Network response was not ok');
             }
-            return response.text; // response.json();
+            return response.text;
           })
           .then(data => {
-            console.log('Data received:', data);
+            console.log('Update color response:', data);
           })
           .catch(error => {
             console.error('There was a problem with the fetch operation:', error);
@@ -527,16 +615,17 @@
     }
 
     function getConf() {
-      const apiUrl = `/get-conf`;
-      fetch(apiUrl)
+      const apiUrl = '/get-conf';
+      return fetch(apiUrl)
         .then(response => {
           if (!response.ok) {
             throw new Error('Network response was not ok');
           }
-          return JSON.parse(response.json());
+          return response.json();
         })
         .then(data => {
-          console.log('Data received:', data);
+          console.log('Configuration received:', data);
+          return data;
         })
         .catch(error => {
           console.error('There was a problem with the fetch operation:', error);
@@ -545,16 +634,17 @@
 
     function setConf(conf) {
       const url = '/set-conf';
-      fetch(url, {
+      return fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(conf)
       })
-      .then(response => response.json())
+      .then(response => response.text())
       .then(data => {
-        console.log('Data sent:', data);
+        console.log('Response:', data);
+        return data;
       })
       .catch((error) => {
         console.error('Error:', error);

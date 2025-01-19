@@ -1,5 +1,3 @@
-// #include <FreeRTOS.h>
-// #include <task.h>
 #include <FastLED.h>
 #include <modes.h>
 
@@ -7,11 +5,19 @@ volatile bool terminateTaskFlag = false;
 
 // html color -> CRGB
 CRGB htmlColor2Crgb(String htmlColor) {
+  if (htmlColor.length() != 7 || htmlColor[0] != '#') {
+    Serial.println("Invalid HTML color format");
+    return CRGB(255, 223, 191); // default color (warm white)
+  }
   unsigned long colorCode = strtoul(&htmlColor[1], NULL, 16);
-  return CRGB::HTMLColorCode(colorCode);
+  return CRGB(colorCode);
 }
 
 CHSV htmlColor2Chsv(String htmlColor) {
+  if (htmlColor.length() != 7 || htmlColor[0] != '#') {
+    Serial.println("Invalid HTML color format");
+    return CHSV(25, 255, 255); // default color (warm white)
+  }
   CHSV hsvColor = rgb2hsv_approximate(htmlColor2Crgb(htmlColor));
   return hsvColor;
 }
@@ -71,7 +77,7 @@ void taskRunningRainbow(void *pvParameters) {
     fill_rainbow(leds, params->ledCount, hue, params->delta);
     FastLED.show();
     hue += params->step;
-    Serial.println(String(params->delay) + ", " + String(params->step) + ", " + String(params->delta) + " | ");
+    // Serial.println(String(params->delay) + ", " + String(params->step) + ", " + String(params->delta) + " | ");
     vTaskDelay(params->delay / portTICK_RATE_MS);
   }
 
@@ -101,12 +107,35 @@ void taskNoise(void *pvParameters) {
   vTaskDelete(NULL);
 }
 
+void taskBlend(void *pvParameters) {
+  TaskBlendParams *params = static_cast<TaskBlendParams *>(pvParameters);
+
+  int delay = 10;
+  int steps = params->duration / delay;
+
+  for (int i = 0; !terminateTaskFlag && i < steps; i++) {
+    for (int j = 0; j < params->ledCount; j++) {
+      CRGB currentColor = params->leds[j];
+      CRGB targetColor = params->color;
+      uint8_t blendAmount = round(i * (255.0 / steps));
+      params->leds[j] = blend(currentColor, targetColor, blendAmount);
+    }
+    FastLED.show();
+    vTaskDelay(delay / portTICK_RATE_MS);
+  }
+
+  fill_solid(params->leds, params->ledCount, params->color);
+  FastLED.show();
+
+  terminateTaskFlag = false;
+
+  vTaskDelete(NULL); 
+}
+
 void taskFadeIn(void *pvParameters) {
   // Serial.println("termFlag: " + String(terminateTaskFlag));
 
   TaskFadeParams *params = static_cast<TaskFadeParams *>(pvParameters);
-
-  uint16_t time = millis();
 
   int delay = 10;
   int steps = params->duration / delay;
@@ -134,22 +163,20 @@ void taskFadeIn(void *pvParameters) {
 void taskFadeOut(void *pvParameters) {
   TaskFadeParams *params = static_cast<TaskFadeParams *>(pvParameters);
 
-  uint16_t time = millis();
-
   int delay = 10;
   int steps = params->duration / delay;
 
   for (int i = 0; !terminateTaskFlag && i < steps; i++) {
+    uint8_t brightness = 255 - round(i * ((float)255 / steps));
     for (int j = 0; j < params->ledCount; j++) {
-      params->leds[j] = params->color;
-      params->leds[j].fadeLightBy(round(i * ((float)255 / steps)));
+      params->leds[j].nscale8_video(brightness);
     }
     FastLED.show();
 
     vTaskDelay(delay / portTICK_RATE_MS);
   }
 
-  fill_solid(params->leds, params->ledCount, params->color);
+  fill_solid(params->leds, params->ledCount, CRGB::Black);
   FastLED.show();
 
   terminateTaskFlag = false;
