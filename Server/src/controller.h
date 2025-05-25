@@ -11,12 +11,12 @@ enum OperationMode {
     MODE_MENU_TIMEOUT = 4
 };
 
-OperationMode mode = MODE_MENU_INACTIVE;
-
 enum OptionMode {
     OPTMODE_SEGMENT = 0,
     OPTMODE_RANGE = 1,
-    OPTMODE_COLOR = 2
+    OPTMODE_COLOR = 2,
+    OPTMODE_SATURATION = 3,
+    OPTMODE_VALUE = 4
 };
 
 struct ControllerOption {
@@ -33,11 +33,20 @@ struct ControllerOption {
 };*/
 
 struct ControllerConf {
-    ControllerOption hue = {OPTMODE_SEGMENT, 0, 9, 0};
-    ControllerOption saturation = {OPTMODE_SEGMENT, 0, 9, 9};
-    ControllerOption value = {OPTMODE_SEGMENT, 1, 10, 10};
+    ControllerOption hue = {OPTMODE_COLOR, 1, 12, 0};
+    ControllerOption saturation = {OPTMODE_SATURATION, 1, 9, 9};
+    ControllerOption value = {OPTMODE_VALUE, 0, 10, 10};
 };
 
-void handleCtrlCmd(AsyncWebServerRequest *request);
+// extern OperationMode operationMode;
+
+void handleCtrlSignalHttp(AsyncWebServerRequest *request);
+void handleCtrlSignalWs(String queryStr);
+
+void switchLight();
+void ctrlOk();
+void ctrlMenu();
+void ctrlPlus();
+void ctrlMinus();
 
 #endif

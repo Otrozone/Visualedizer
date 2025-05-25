@@ -41,6 +41,30 @@ namespace Visualedizer
             }
         }
 
+        [Browsable(true)]
+        [Category("Color")]
+        [Description("Min value.")]
+        public int MinVal
+        {
+            get { return trackBarHue.Minimum; }
+            set
+            {
+                trackBarHue.Minimum = value;
+            }
+        }
+
+        [Browsable(true)]
+        [Category("Color")]
+        [Description("Max value.")]
+        public int MaxVal
+        {
+            get { return trackBarHue.Maximum; }
+            set
+            {
+                trackBarHue.Maximum = value;
+            }
+        }
+
         public int getHueVal()
         {
             return trackBarHue.Value;

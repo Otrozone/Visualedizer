@@ -38,7 +38,25 @@
             statusStrip = new StatusStrip();
             statLblConnection = new ToolStripStatusLabel();
             tabControl = new TabControl();
-            tabPageAudioCaptureVolume = new TabPage();
+            tabPageBasicControl = new TabPage();
+            gbGradient = new GroupBox();
+            rbGradient = new RadioButton();
+            ucHueMinMaxGradient = new Visualedizer.UcHueMinMax();
+            label3 = new Label();
+            label4 = new Label();
+            label5 = new Label();
+            gbSolidColor = new GroupBox();
+            rbSolid = new RadioButton();
+            ucHueSolid = new Visualedizer.UcHue();
+            label1 = new Label();
+            trackBrightnessBasic = new TrackBar();
+            lblSaturation = new Label();
+            trackSaturationBasic = new TrackBar();
+            tabPageAcVolume = new TabPage();
+            lblAudioDevice = new Label();
+            cbAudioDevices = new ComboBox();
+            lblLevel = new Label();
+            trackBarNormalizationLevel = new TrackBar();
             trackBarRotate = new TrackBar();
             chbRotate = new CheckBox();
             rbBrightness = new RadioButton();
@@ -53,7 +71,6 @@
             trackBarBgBrightness = new TrackBar();
             lblBgBrightness = new Label();
             lblBackgroundColor = new Label();
-            pnlBackgroundColor = new Panel();
             lblHueMax = new Label();
             lblHueMin = new Label();
             lblBrightness = new Label();
@@ -64,11 +81,26 @@
             rbModeEndToStart = new RadioButton();
             rbModeStartToEnd = new RadioButton();
             lblPreview = new Label();
-            tabPageAudioCaptureEqualizer = new TabPage();
             tabPageScreenCapture = new TabPage();
             chbReverse = new CheckBox();
             chbShowGuide = new CheckBox();
             lblScreenRowCapturePreview = new Label();
+            tabPageAcSpectralAnalysis = new TabPage();
+            tabPageOtherDevices = new TabPage();
+            gbLaser = new GroupBox();
+            numLaserColorY = new NumericUpDown();
+            numLaserColorX = new NumericUpDown();
+            lblLaserColor = new Label();
+            numLaserPatternY = new NumericUpDown();
+            numLaserPatternX = new NumericUpDown();
+            lblLaserPattern = new Label();
+            numLaserTriggerY = new NumericUpDown();
+            numLaserTriggerX = new NumericUpDown();
+            lblLaserTrigger = new Label();
+            gbStrobe = new GroupBox();
+            numStrobeY = new NumericUpDown();
+            numStrobeX = new NumericUpDown();
+            lblStrobeTrigger = new Label();
             panel1 = new Panel();
             btnTerminate = new Button();
             btnInitiate = new Button();
@@ -81,29 +113,43 @@
             lblHostname = new Label();
             colorBackground = new ColorDialog();
             timerRotate = new System.Windows.Forms.Timer(components);
-            trackBarLevel = new TrackBar();
-            lblLevel = new Label();
             ((System.ComponentModel.ISupportInitialize)pictureBox).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numScreenRow).BeginInit();
             pnlScreenRowSelector.SuspendLayout();
             statusStrip.SuspendLayout();
             tabControl.SuspendLayout();
-            tabPageAudioCaptureVolume.SuspendLayout();
+            tabPageBasicControl.SuspendLayout();
+            gbGradient.SuspendLayout();
+            gbSolidColor.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)trackBrightnessBasic).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)trackSaturationBasic).BeginInit();
+            tabPageAcVolume.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)trackBarNormalizationLevel).BeginInit();
             ((System.ComponentModel.ISupportInitialize)trackBarRotate).BeginInit();
             gbBackground.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trackBarBgBrightness).BeginInit();
             ((System.ComponentModel.ISupportInitialize)trackBarBrightness).BeginInit();
             tabPageScreenCapture.SuspendLayout();
+            tabPageOtherDevices.SuspendLayout();
+            gbLaser.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)numLaserColorY).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserColorX).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserPatternY).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserPatternX).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserTriggerY).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserTriggerX).BeginInit();
+            gbStrobe.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)numStrobeY).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numStrobeX).BeginInit();
             panel1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numLedCount).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numDelay).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarLevel).BeginInit();
             SuspendLayout();
             // 
             // progressBar
             // 
             progressBar.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            progressBar.Location = new Point(8, 551);
+            progressBar.Location = new Point(8, 539);
             progressBar.Name = "progressBar";
             progressBar.Size = new Size(785, 25);
             progressBar.Style = ProgressBarStyle.Continuous;
@@ -144,6 +190,7 @@
             numScreenRow.ReadOnly = true;
             numScreenRow.Size = new Size(65, 23);
             numScreenRow.TabIndex = 8;
+            numScreenRow.ValueChanged += numScreenRow_ValueChanged;
             // 
             // pnlScreenRowSelector
             // 
@@ -157,7 +204,7 @@
             // statusStrip
             // 
             statusStrip.Items.AddRange(new ToolStripItem[] { statLblConnection });
-            statusStrip.Location = new Point(0, 726);
+            statusStrip.Location = new Point(0, 714);
             statusStrip.Name = "statusStrip";
             statusStrip.Size = new Size(807, 22);
             statusStrip.TabIndex = 10;
@@ -171,47 +218,244 @@
             // 
             // tabControl
             // 
-            tabControl.Controls.Add(tabPageAudioCaptureVolume);
-            tabControl.Controls.Add(tabPageAudioCaptureEqualizer);
+            tabControl.Controls.Add(tabPageBasicControl);
+            tabControl.Controls.Add(tabPageAcVolume);
             tabControl.Controls.Add(tabPageScreenCapture);
+            tabControl.Controls.Add(tabPageAcSpectralAnalysis);
+            tabControl.Controls.Add(tabPageOtherDevices);
             tabControl.Dock = DockStyle.Fill;
             tabControl.Location = new Point(0, 112);
             tabControl.Name = "tabControl";
             tabControl.SelectedIndex = 0;
-            tabControl.Size = new Size(807, 614);
+            tabControl.Size = new Size(807, 602);
             tabControl.TabIndex = 11;
+            tabControl.SelectedIndexChanged += tabControl_SelectedIndexChanged;
             // 
-            // tabPageAudioCaptureVolume
+            // tabPageBasicControl
             // 
-            tabPageAudioCaptureVolume.Controls.Add(lblLevel);
-            tabPageAudioCaptureVolume.Controls.Add(trackBarLevel);
-            tabPageAudioCaptureVolume.Controls.Add(trackBarRotate);
-            tabPageAudioCaptureVolume.Controls.Add(chbRotate);
-            tabPageAudioCaptureVolume.Controls.Add(rbBrightness);
-            tabPageAudioCaptureVolume.Controls.Add(chbHueRevers);
-            tabPageAudioCaptureVolume.Controls.Add(chbRevers);
-            tabPageAudioCaptureVolume.Controls.Add(ucHueMinMax);
-            tabPageAudioCaptureVolume.Controls.Add(chbWhite);
-            tabPageAudioCaptureVolume.Controls.Add(gbBackground);
-            tabPageAudioCaptureVolume.Controls.Add(pnlBackgroundColor);
-            tabPageAudioCaptureVolume.Controls.Add(lblHueMax);
-            tabPageAudioCaptureVolume.Controls.Add(lblHueMin);
-            tabPageAudioCaptureVolume.Controls.Add(lblBrightness);
-            tabPageAudioCaptureVolume.Controls.Add(trackBarBrightness);
-            tabPageAudioCaptureVolume.Controls.Add(rbModeMidToOutPoint);
-            tabPageAudioCaptureVolume.Controls.Add(rbModeColorPush);
-            tabPageAudioCaptureVolume.Controls.Add(rbModeMidToOut);
-            tabPageAudioCaptureVolume.Controls.Add(rbModeEndToStart);
-            tabPageAudioCaptureVolume.Controls.Add(rbModeStartToEnd);
-            tabPageAudioCaptureVolume.Controls.Add(lblPreview);
-            tabPageAudioCaptureVolume.Controls.Add(progressBar);
-            tabPageAudioCaptureVolume.Location = new Point(4, 24);
-            tabPageAudioCaptureVolume.Name = "tabPageAudioCaptureVolume";
-            tabPageAudioCaptureVolume.Padding = new Padding(3);
-            tabPageAudioCaptureVolume.Size = new Size(799, 586);
-            tabPageAudioCaptureVolume.TabIndex = 0;
-            tabPageAudioCaptureVolume.Text = "Audio capture volume";
-            tabPageAudioCaptureVolume.UseVisualStyleBackColor = true;
+            tabPageBasicControl.Controls.Add(gbGradient);
+            tabPageBasicControl.Controls.Add(label5);
+            tabPageBasicControl.Controls.Add(gbSolidColor);
+            tabPageBasicControl.Controls.Add(trackBrightnessBasic);
+            tabPageBasicControl.Controls.Add(lblSaturation);
+            tabPageBasicControl.Controls.Add(trackSaturationBasic);
+            tabPageBasicControl.Location = new Point(4, 24);
+            tabPageBasicControl.Name = "tabPageBasicControl";
+            tabPageBasicControl.Size = new Size(799, 574);
+            tabPageBasicControl.TabIndex = 3;
+            tabPageBasicControl.Text = "Basic control";
+            tabPageBasicControl.UseVisualStyleBackColor = true;
+            // 
+            // gbGradient
+            // 
+            gbGradient.Controls.Add(rbGradient);
+            gbGradient.Controls.Add(ucHueMinMaxGradient);
+            gbGradient.Controls.Add(label3);
+            gbGradient.Controls.Add(label4);
+            gbGradient.Location = new Point(3, 106);
+            gbGradient.Name = "gbGradient";
+            gbGradient.Size = new Size(793, 138);
+            gbGradient.TabIndex = 28;
+            gbGradient.TabStop = false;
+            gbGradient.Text = "Gradient";
+            // 
+            // rbGradient
+            // 
+            rbGradient.AutoSize = true;
+            rbGradient.BackColor = SystemColors.ControlLight;
+            rbGradient.Location = new Point(6, 0);
+            rbGradient.Name = "rbGradient";
+            rbGradient.Size = new Size(70, 19);
+            rbGradient.TabIndex = 33;
+            rbGradient.TabStop = true;
+            rbGradient.Text = "Gradient";
+            rbGradient.UseVisualStyleBackColor = false;
+            rbGradient.CheckedChanged += rbBasic_CheckedChanged;
+            // 
+            // ucHueMinMaxGradient
+            // 
+            ucHueMinMaxGradient.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            ucHueMinMaxGradient.HueMax = 360;
+            ucHueMinMaxGradient.HueMin = 0;
+            ucHueMinMaxGradient.Location = new Point(251, 37);
+            ucHueMinMaxGradient.Name = "ucHueMinMaxGradient";
+            ucHueMinMaxGradient.Size = new Size(536, 59);
+            ucHueMinMaxGradient.TabIndex = 28;
+            // 
+            // label3
+            // 
+            label3.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            label3.AutoSize = true;
+            label3.Location = new Point(734, 19);
+            label3.Name = "label3";
+            label3.Size = new Size(53, 15);
+            label3.TabIndex = 27;
+            label3.Text = "Max hue";
+            // 
+            // label4
+            // 
+            label4.AutoSize = true;
+            label4.Location = new Point(251, 99);
+            label4.Name = "label4";
+            label4.Size = new Size(51, 15);
+            label4.TabIndex = 26;
+            label4.Text = "Min hue";
+            // 
+            // label5
+            // 
+            label5.AutoSize = true;
+            label5.Location = new Point(254, 338);
+            label5.Name = "label5";
+            label5.Size = new Size(62, 15);
+            label5.TabIndex = 28;
+            label5.Text = "Brightness";
+            // 
+            // gbSolidColor
+            // 
+            gbSolidColor.Controls.Add(rbSolid);
+            gbSolidColor.Controls.Add(ucHueSolid);
+            gbSolidColor.Controls.Add(label1);
+            gbSolidColor.Location = new Point(3, 3);
+            gbSolidColor.Name = "gbSolidColor";
+            gbSolidColor.Size = new Size(793, 97);
+            gbSolidColor.TabIndex = 27;
+            gbSolidColor.TabStop = false;
+            gbSolidColor.Text = "Solid color";
+            // 
+            // rbSolid
+            // 
+            rbSolid.AutoSize = true;
+            rbSolid.BackColor = SystemColors.ControlLight;
+            rbSolid.Checked = true;
+            rbSolid.Location = new Point(6, 0);
+            rbSolid.Name = "rbSolid";
+            rbSolid.Size = new Size(81, 19);
+            rbSolid.TabIndex = 29;
+            rbSolid.TabStop = true;
+            rbSolid.Text = "Solid color";
+            rbSolid.UseVisualStyleBackColor = false;
+            rbSolid.CheckedChanged += rbBasic_CheckedChanged;
+            // 
+            // ucHueSolid
+            // 
+            ucHueSolid.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            ucHueSolid.Hue = 0;
+            ucHueSolid.Location = new Point(251, 35);
+            ucHueSolid.MaxVal = 360;
+            ucHueSolid.MinVal = 0;
+            ucHueSolid.Name = "ucHueSolid";
+            ucHueSolid.Size = new Size(536, 45);
+            ucHueSolid.TabIndex = 23;
+            // 
+            // label1
+            // 
+            label1.AutoSize = true;
+            label1.Location = new Point(251, 17);
+            label1.Name = "label1";
+            label1.Size = new Size(36, 15);
+            label1.TabIndex = 26;
+            label1.Text = "Color";
+            // 
+            // trackBrightnessBasic
+            // 
+            trackBrightnessBasic.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            trackBrightnessBasic.Location = new Point(254, 356);
+            trackBrightnessBasic.Maximum = 100;
+            trackBrightnessBasic.Name = "trackBrightnessBasic";
+            trackBrightnessBasic.Size = new Size(537, 45);
+            trackBrightnessBasic.TabIndex = 27;
+            trackBrightnessBasic.Value = 50;
+            // 
+            // lblSaturation
+            // 
+            lblSaturation.AutoSize = true;
+            lblSaturation.Location = new Point(254, 262);
+            lblSaturation.Name = "lblSaturation";
+            lblSaturation.Size = new Size(61, 15);
+            lblSaturation.TabIndex = 25;
+            lblSaturation.Text = "Saturation";
+            // 
+            // trackSaturationBasic
+            // 
+            trackSaturationBasic.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            trackSaturationBasic.Location = new Point(254, 280);
+            trackSaturationBasic.Maximum = 100;
+            trackSaturationBasic.Name = "trackSaturationBasic";
+            trackSaturationBasic.Size = new Size(537, 45);
+            trackSaturationBasic.TabIndex = 24;
+            trackSaturationBasic.Value = 100;
+            // 
+            // tabPageAcVolume
+            // 
+            tabPageAcVolume.Controls.Add(lblAudioDevice);
+            tabPageAcVolume.Controls.Add(cbAudioDevices);
+            tabPageAcVolume.Controls.Add(lblLevel);
+            tabPageAcVolume.Controls.Add(trackBarNormalizationLevel);
+            tabPageAcVolume.Controls.Add(trackBarRotate);
+            tabPageAcVolume.Controls.Add(chbRotate);
+            tabPageAcVolume.Controls.Add(rbBrightness);
+            tabPageAcVolume.Controls.Add(chbHueRevers);
+            tabPageAcVolume.Controls.Add(chbRevers);
+            tabPageAcVolume.Controls.Add(ucHueMinMax);
+            tabPageAcVolume.Controls.Add(chbWhite);
+            tabPageAcVolume.Controls.Add(gbBackground);
+            tabPageAcVolume.Controls.Add(lblHueMax);
+            tabPageAcVolume.Controls.Add(lblHueMin);
+            tabPageAcVolume.Controls.Add(lblBrightness);
+            tabPageAcVolume.Controls.Add(trackBarBrightness);
+            tabPageAcVolume.Controls.Add(rbModeMidToOutPoint);
+            tabPageAcVolume.Controls.Add(rbModeColorPush);
+            tabPageAcVolume.Controls.Add(rbModeMidToOut);
+            tabPageAcVolume.Controls.Add(rbModeEndToStart);
+            tabPageAcVolume.Controls.Add(rbModeStartToEnd);
+            tabPageAcVolume.Controls.Add(lblPreview);
+            tabPageAcVolume.Controls.Add(progressBar);
+            tabPageAcVolume.Location = new Point(4, 24);
+            tabPageAcVolume.Name = "tabPageAcVolume";
+            tabPageAcVolume.Padding = new Padding(3);
+            tabPageAcVolume.Size = new Size(799, 574);
+            tabPageAcVolume.TabIndex = 0;
+            tabPageAcVolume.Text = "Volume";
+            tabPageAcVolume.UseVisualStyleBackColor = true;
+            // 
+            // lblAudioDevice
+            // 
+            lblAudioDevice.AutoSize = true;
+            lblAudioDevice.Location = new Point(225, 9);
+            lblAudioDevice.Name = "lblAudioDevice";
+            lblAudioDevice.Size = new Size(76, 15);
+            lblAudioDevice.TabIndex = 31;
+            lblAudioDevice.Text = "Audio device";
+            // 
+            // cbAudioDevices
+            // 
+            cbAudioDevices.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbAudioDevices.FormattingEnabled = true;
+            cbAudioDevices.Location = new Point(225, 27);
+            cbAudioDevices.Name = "cbAudioDevices";
+            cbAudioDevices.Size = new Size(340, 23);
+            cbAudioDevices.TabIndex = 9;
+            // 
+            // lblLevel
+            // 
+            lblLevel.AutoSize = true;
+            lblLevel.Location = new Point(227, 73);
+            lblLevel.Name = "lblLevel";
+            lblLevel.Size = new Size(34, 15);
+            lblLevel.TabIndex = 30;
+            lblLevel.Text = "Level";
+            // 
+            // trackBarNormalizationLevel
+            // 
+            trackBarNormalizationLevel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            trackBarNormalizationLevel.Location = new Point(225, 93);
+            trackBarNormalizationLevel.Maximum = 100;
+            trackBarNormalizationLevel.Minimum = 1;
+            trackBarNormalizationLevel.Name = "trackBarNormalizationLevel";
+            trackBarNormalizationLevel.Size = new Size(554, 45);
+            trackBarNormalizationLevel.TabIndex = 29;
+            trackBarNormalizationLevel.Value = 10;
+            trackBarNormalizationLevel.Scroll += trackBarNormalizationLevel_Scroll;
             // 
             // trackBarRotate
             // 
@@ -250,7 +494,7 @@
             // chbHueRevers
             // 
             chbHueRevers.AutoSize = true;
-            chbHueRevers.Location = new Point(664, 244);
+            chbHueRevers.Location = new Point(652, 307);
             chbHueRevers.Name = "chbHueRevers";
             chbHueRevers.Size = new Size(60, 19);
             chbHueRevers.TabIndex = 27;
@@ -269,9 +513,10 @@
             // 
             // ucHueMinMax
             // 
+            ucHueMinMax.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             ucHueMinMax.HueMax = 360;
             ucHueMinMax.HueMin = 0;
-            ucHueMinMax.Location = new Point(237, 179);
+            ucHueMinMax.Location = new Point(225, 242);
             ucHueMinMax.Name = "ucHueMinMax";
             ucHueMinMax.Size = new Size(554, 59);
             ucHueMinMax.TabIndex = 25;
@@ -279,7 +524,7 @@
             // chbWhite
             // 
             chbWhite.AutoSize = true;
-            chbWhite.Location = new Point(730, 244);
+            chbWhite.Location = new Point(718, 307);
             chbWhite.Name = "chbWhite";
             chbWhite.Size = new Size(57, 19);
             chbWhite.TabIndex = 24;
@@ -296,7 +541,7 @@
             gbBackground.Controls.Add(trackBarBgBrightness);
             gbBackground.Controls.Add(lblBgBrightness);
             gbBackground.Controls.Add(lblBackgroundColor);
-            gbBackground.Location = new Point(239, 309);
+            gbBackground.Location = new Point(227, 372);
             gbBackground.Name = "gbBackground";
             gbBackground.Size = new Size(554, 159);
             gbBackground.TabIndex = 21;
@@ -327,6 +572,8 @@
             ucHueBg.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             ucHueBg.Hue = 0;
             ucHueBg.Location = new Point(12, 40);
+            ucHueBg.MaxVal = 360;
+            ucHueBg.MinVal = 0;
             ucHueBg.Name = "ucHueBg";
             ucHueBg.Size = new Size(536, 45);
             ucHueBg.TabIndex = 9;
@@ -358,20 +605,11 @@
             lblBackgroundColor.TabIndex = 15;
             lblBackgroundColor.Text = "Color";
             // 
-            // pnlBackgroundColor
-            // 
-            pnlBackgroundColor.BorderStyle = BorderStyle.FixedSingle;
-            pnlBackgroundColor.Location = new Point(8, 343);
-            pnlBackgroundColor.Name = "pnlBackgroundColor";
-            pnlBackgroundColor.Size = new Size(41, 39);
-            pnlBackgroundColor.TabIndex = 14;
-            pnlBackgroundColor.Click += pnlBackgroundColor_Click;
-            // 
             // lblHueMax
             // 
             lblHueMax.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblHueMax.AutoSize = true;
-            lblHueMax.Location = new Point(738, 161);
+            lblHueMax.Location = new Point(726, 224);
             lblHueMax.Name = "lblHueMax";
             lblHueMax.Size = new Size(53, 15);
             lblHueMax.TabIndex = 13;
@@ -380,7 +618,7 @@
             // lblHueMin
             // 
             lblHueMin.AutoSize = true;
-            lblHueMin.Location = new Point(239, 248);
+            lblHueMin.Location = new Point(227, 311);
             lblHueMin.Name = "lblHueMin";
             lblHueMin.Size = new Size(51, 15);
             lblHueMin.TabIndex = 12;
@@ -389,7 +627,7 @@
             // lblBrightness
             // 
             lblBrightness.AutoSize = true;
-            lblBrightness.Location = new Point(237, 88);
+            lblBrightness.Location = new Point(225, 151);
             lblBrightness.Name = "lblBrightness";
             lblBrightness.Size = new Size(62, 15);
             lblBrightness.TabIndex = 10;
@@ -398,7 +636,7 @@
             // trackBarBrightness
             // 
             trackBarBrightness.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarBrightness.Location = new Point(237, 106);
+            trackBarBrightness.Location = new Point(225, 169);
             trackBarBrightness.Maximum = 100;
             trackBarBrightness.Minimum = 1;
             trackBarBrightness.Name = "trackBarBrightness";
@@ -469,20 +707,11 @@
             // 
             lblPreview.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             lblPreview.AutoSize = true;
-            lblPreview.Location = new Point(8, 533);
+            lblPreview.Location = new Point(8, 521);
             lblPreview.Name = "lblPreview";
             lblPreview.Size = new Size(48, 15);
             lblPreview.TabIndex = 4;
             lblPreview.Text = "Preview";
-            // 
-            // tabPageAudioCaptureEqualizer
-            // 
-            tabPageAudioCaptureEqualizer.Location = new Point(4, 24);
-            tabPageAudioCaptureEqualizer.Name = "tabPageAudioCaptureEqualizer";
-            tabPageAudioCaptureEqualizer.Size = new Size(799, 443);
-            tabPageAudioCaptureEqualizer.TabIndex = 2;
-            tabPageAudioCaptureEqualizer.Text = "Audio capture equalizer";
-            tabPageAudioCaptureEqualizer.UseVisualStyleBackColor = true;
             // 
             // tabPageScreenCapture
             // 
@@ -496,7 +725,7 @@
             tabPageScreenCapture.Location = new Point(4, 24);
             tabPageScreenCapture.Name = "tabPageScreenCapture";
             tabPageScreenCapture.Padding = new Padding(3);
-            tabPageScreenCapture.Size = new Size(799, 443);
+            tabPageScreenCapture.Size = new Size(799, 574);
             tabPageScreenCapture.TabIndex = 1;
             tabPageScreenCapture.Text = "Screen row capture";
             tabPageScreenCapture.UseVisualStyleBackColor = true;
@@ -530,6 +759,163 @@
             lblScreenRowCapturePreview.Size = new Size(48, 15);
             lblScreenRowCapturePreview.TabIndex = 10;
             lblScreenRowCapturePreview.Text = "Preview";
+            // 
+            // tabPageAcSpectralAnalysis
+            // 
+            tabPageAcSpectralAnalysis.Location = new Point(4, 24);
+            tabPageAcSpectralAnalysis.Name = "tabPageAcSpectralAnalysis";
+            tabPageAcSpectralAnalysis.Size = new Size(799, 574);
+            tabPageAcSpectralAnalysis.TabIndex = 2;
+            tabPageAcSpectralAnalysis.Text = "Spectral analysis";
+            // 
+            // tabPageOtherDevices
+            // 
+            tabPageOtherDevices.Controls.Add(gbLaser);
+            tabPageOtherDevices.Controls.Add(gbStrobe);
+            tabPageOtherDevices.Location = new Point(4, 24);
+            tabPageOtherDevices.Name = "tabPageOtherDevices";
+            tabPageOtherDevices.Size = new Size(799, 574);
+            tabPageOtherDevices.TabIndex = 4;
+            tabPageOtherDevices.Text = "Other devices";
+            tabPageOtherDevices.UseVisualStyleBackColor = true;
+            // 
+            // gbLaser
+            // 
+            gbLaser.Controls.Add(numLaserColorY);
+            gbLaser.Controls.Add(numLaserColorX);
+            gbLaser.Controls.Add(lblLaserColor);
+            gbLaser.Controls.Add(numLaserPatternY);
+            gbLaser.Controls.Add(numLaserPatternX);
+            gbLaser.Controls.Add(lblLaserPattern);
+            gbLaser.Controls.Add(numLaserTriggerY);
+            gbLaser.Controls.Add(numLaserTriggerX);
+            gbLaser.Controls.Add(lblLaserTrigger);
+            gbLaser.Location = new Point(8, 93);
+            gbLaser.Name = "gbLaser";
+            gbLaser.Size = new Size(236, 135);
+            gbLaser.TabIndex = 7;
+            gbLaser.TabStop = false;
+            gbLaser.Text = "Laser";
+            // 
+            // numLaserColorY
+            // 
+            numLaserColorY.Location = new Point(159, 91);
+            numLaserColorY.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
+            numLaserColorY.Name = "numLaserColorY";
+            numLaserColorY.Size = new Size(54, 23);
+            numLaserColorY.TabIndex = 9;
+            numLaserColorY.ValueChanged += numLaserColorY_ValueChanged;
+            // 
+            // numLaserColorX
+            // 
+            numLaserColorX.Location = new Point(99, 91);
+            numLaserColorX.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
+            numLaserColorX.Name = "numLaserColorX";
+            numLaserColorX.Size = new Size(54, 23);
+            numLaserColorX.TabIndex = 8;
+            numLaserColorX.ValueChanged += numLaserColorX_ValueChanged;
+            // 
+            // lblLaserColor
+            // 
+            lblLaserColor.AutoSize = true;
+            lblLaserColor.Location = new Point(17, 93);
+            lblLaserColor.Name = "lblLaserColor";
+            lblLaserColor.Size = new Size(65, 15);
+            lblLaserColor.TabIndex = 10;
+            lblLaserColor.Text = "Color [x, y]";
+            // 
+            // numLaserPatternY
+            // 
+            numLaserPatternY.Location = new Point(159, 62);
+            numLaserPatternY.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
+            numLaserPatternY.Name = "numLaserPatternY";
+            numLaserPatternY.Size = new Size(54, 23);
+            numLaserPatternY.TabIndex = 6;
+            numLaserPatternY.ValueChanged += numLaserPatternY_ValueChanged;
+            // 
+            // numLaserPatternX
+            // 
+            numLaserPatternX.Location = new Point(99, 62);
+            numLaserPatternX.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
+            numLaserPatternX.Name = "numLaserPatternX";
+            numLaserPatternX.Size = new Size(54, 23);
+            numLaserPatternX.TabIndex = 5;
+            numLaserPatternX.ValueChanged += numLaserPatternX_ValueChanged;
+            // 
+            // lblLaserPattern
+            // 
+            lblLaserPattern.AutoSize = true;
+            lblLaserPattern.Location = new Point(17, 64);
+            lblLaserPattern.Name = "lblLaserPattern";
+            lblLaserPattern.Size = new Size(74, 15);
+            lblLaserPattern.TabIndex = 7;
+            lblLaserPattern.Text = "Pattern [x, y]";
+            // 
+            // numLaserTriggerY
+            // 
+            numLaserTriggerY.Location = new Point(159, 33);
+            numLaserTriggerY.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
+            numLaserTriggerY.Name = "numLaserTriggerY";
+            numLaserTriggerY.Size = new Size(54, 23);
+            numLaserTriggerY.TabIndex = 1;
+            numLaserTriggerY.ValueChanged += numLaserTriggerY_ValueChanged;
+            // 
+            // numLaserTriggerX
+            // 
+            numLaserTriggerX.Location = new Point(99, 33);
+            numLaserTriggerX.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
+            numLaserTriggerX.Name = "numLaserTriggerX";
+            numLaserTriggerX.Size = new Size(54, 23);
+            numLaserTriggerX.TabIndex = 0;
+            numLaserTriggerX.ValueChanged += numLaserTriggerX_ValueChanged;
+            // 
+            // lblLaserTrigger
+            // 
+            lblLaserTrigger.AutoSize = true;
+            lblLaserTrigger.Location = new Point(17, 35);
+            lblLaserTrigger.Name = "lblLaserTrigger";
+            lblLaserTrigger.Size = new Size(72, 15);
+            lblLaserTrigger.TabIndex = 4;
+            lblLaserTrigger.Text = "Trigger [x, y]";
+            // 
+            // gbStrobe
+            // 
+            gbStrobe.Controls.Add(numStrobeY);
+            gbStrobe.Controls.Add(numStrobeX);
+            gbStrobe.Controls.Add(lblStrobeTrigger);
+            gbStrobe.Location = new Point(8, 3);
+            gbStrobe.Name = "gbStrobe";
+            gbStrobe.Size = new Size(236, 84);
+            gbStrobe.TabIndex = 6;
+            gbStrobe.TabStop = false;
+            gbStrobe.Text = "Strobe";
+            // 
+            // numStrobeY
+            // 
+            numStrobeY.Location = new Point(161, 35);
+            numStrobeY.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
+            numStrobeY.Name = "numStrobeY";
+            numStrobeY.Size = new Size(54, 23);
+            numStrobeY.TabIndex = 3;
+            numStrobeY.ValueChanged += numStrobeY_ValueChanged;
+            // 
+            // numStrobeX
+            // 
+            numStrobeX.Location = new Point(101, 35);
+            numStrobeX.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
+            numStrobeX.Name = "numStrobeX";
+            numStrobeX.Size = new Size(54, 23);
+            numStrobeX.TabIndex = 2;
+            numStrobeX.ValueChanged += numStrobeX_ValueChanged;
+            // 
+            // lblStrobeTrigger
+            // 
+            lblStrobeTrigger.AutoSize = true;
+            lblStrobeTrigger.Location = new Point(20, 37);
+            lblStrobeTrigger.Name = "lblStrobeTrigger";
+            lblStrobeTrigger.Size = new Size(72, 15);
+            lblStrobeTrigger.TabIndex = 5;
+            lblStrobeTrigger.Text = "Trigger [x, y]";
             // 
             // panel1
             // 
@@ -578,6 +964,7 @@
             numLedCount.Size = new Size(60, 23);
             numLedCount.TabIndex = 6;
             numLedCount.Value = new decimal(new int[] { 218, 0, 0, 0 });
+            numLedCount.ValueChanged += numLedCount_ValueChanged;
             // 
             // lblLedCount
             // 
@@ -622,6 +1009,7 @@
             textIpAddress.Size = new Size(132, 23);
             textIpAddress.TabIndex = 1;
             textIpAddress.Text = "10.0.1.11";
+            textIpAddress.TextChanged += textIpAddress_TextChanged;
             // 
             // lblHostname
             // 
@@ -637,35 +1025,17 @@
             timerRotate.Interval = 20000;
             timerRotate.Tick += timerRotate_Tick;
             // 
-            // trackBarLevel
-            // 
-            trackBarLevel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarLevel.Location = new Point(237, 30);
-            trackBarLevel.Maximum = 50;
-            trackBarLevel.Minimum = -50;
-            trackBarLevel.Name = "trackBarLevel";
-            trackBarLevel.Size = new Size(554, 45);
-            trackBarLevel.TabIndex = 29;
-            // 
-            // lblLevel
-            // 
-            lblLevel.AutoSize = true;
-            lblLevel.Location = new Point(239, 10);
-            lblLevel.Name = "lblLevel";
-            lblLevel.Size = new Size(38, 15);
-            lblLevel.TabIndex = 30;
-            lblLevel.Text = "label1";
-            // 
             // FrmMain
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(807, 748);
+            ClientSize = new Size(807, 736);
             Controls.Add(tabControl);
             Controls.Add(panel1);
             Controls.Add(statusStrip);
             Name = "FrmMain";
             Text = "Visualedizer";
+            FormClosing += FrmMain_FormClosing;
             Load += frmMain_Load;
             ((System.ComponentModel.ISupportInitialize)pictureBox).EndInit();
             ((System.ComponentModel.ISupportInitialize)numScreenRow).EndInit();
@@ -673,8 +1043,17 @@
             statusStrip.ResumeLayout(false);
             statusStrip.PerformLayout();
             tabControl.ResumeLayout(false);
-            tabPageAudioCaptureVolume.ResumeLayout(false);
-            tabPageAudioCaptureVolume.PerformLayout();
+            tabPageBasicControl.ResumeLayout(false);
+            tabPageBasicControl.PerformLayout();
+            gbGradient.ResumeLayout(false);
+            gbGradient.PerformLayout();
+            gbSolidColor.ResumeLayout(false);
+            gbSolidColor.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)trackBrightnessBasic).EndInit();
+            ((System.ComponentModel.ISupportInitialize)trackSaturationBasic).EndInit();
+            tabPageAcVolume.ResumeLayout(false);
+            tabPageAcVolume.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)trackBarNormalizationLevel).EndInit();
             ((System.ComponentModel.ISupportInitialize)trackBarRotate).EndInit();
             gbBackground.ResumeLayout(false);
             gbBackground.PerformLayout();
@@ -682,11 +1061,23 @@
             ((System.ComponentModel.ISupportInitialize)trackBarBrightness).EndInit();
             tabPageScreenCapture.ResumeLayout(false);
             tabPageScreenCapture.PerformLayout();
+            tabPageOtherDevices.ResumeLayout(false);
+            gbLaser.ResumeLayout(false);
+            gbLaser.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)numLaserColorY).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserColorX).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserPatternY).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserPatternX).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserTriggerY).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numLaserTriggerX).EndInit();
+            gbStrobe.ResumeLayout(false);
+            gbStrobe.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)numStrobeY).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numStrobeX).EndInit();
             panel1.ResumeLayout(false);
             panel1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)numLedCount).EndInit();
             ((System.ComponentModel.ISupportInitialize)numDelay).EndInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarLevel).EndInit();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -699,11 +1090,10 @@
         private Label lblScreenRow;
         private NumericUpDown numScreenRow;
         private Panel pnlScreenRowSelector;
-        private StatusStrip statusStrip;
         private ToolStripStatusLabel statLblConnection;
         private TabControl tabControl;
-        private TabPage tabPageAudioCaptureVolume;
-        private TabPage tabPageAudioCaptureEqualizer;
+        private TabPage tabPageAcVolume;
+        private TabPage tabPageAcSpectralAnalysis;
         private TabPage tabPageScreenCapture;
         private Panel panel1;
         private NumericUpDown numDelay;
@@ -727,7 +1117,6 @@
         public TrackBar trackBarBrightness;
         private Label lblBackgroundColor;
         private ColorDialog colorBackground;
-        public Panel pnlBackgroundColor;
         private GroupBox gbBackground;
         private Label lblBgBrightness;
         public TrackBar trackBarBgBrightness;
@@ -748,6 +1137,38 @@
         private CheckBox chbRotate;
         private System.Windows.Forms.Timer timerRotate;
         private Label lblLevel;
-        private TrackBar trackBarLevel;
+        public StatusStrip statusStrip;
+        public TrackBar trackBarNormalizationLevel;
+        private TabPage tabPageBasicControl;
+        private Label label1;
+        public Visualedizer.UcHue ucHueSolid;
+        public TrackBar trackSaturationBasic;
+        private Label lblSaturation;
+        private GroupBox gbGradient;
+        public Visualedizer.UcHueMinMax ucHueMinMaxGradient;
+        private Label label3;
+        private Label label4;
+        private GroupBox gbSolidColor;
+        public ComboBox cbAudioDevices;
+        private Label lblAudioDevice;
+        private Label label5;
+        public TrackBar trackBrightnessBasic;
+        public RadioButton rbSolid;
+        public RadioButton rbGradient;
+        private TabPage tabPageOtherDevices;
+        private Label lblLaserTrigger;
+        private NumericUpDown numLaserTriggerY;
+        private NumericUpDown numLaserTriggerX;
+        private Label lblStrobeTrigger;
+        private NumericUpDown numStrobeY;
+        private NumericUpDown numStrobeX;
+        private GroupBox gbLaser;
+        private GroupBox gbStrobe;
+        private NumericUpDown numLaserColorY;
+        private NumericUpDown numLaserColorX;
+        private Label lblLaserColor;
+        private NumericUpDown numLaserPatternY;
+        private NumericUpDown numLaserPatternX;
+        private Label lblLaserPattern;
     }
 }

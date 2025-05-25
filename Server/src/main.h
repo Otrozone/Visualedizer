@@ -3,15 +3,26 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
-#include "devices.h"
 #include <FastLED.h>
-#include <led.h>
+#include <ESPAsyncWebServer.h>
+
+#include "led.h"
+#include "common.h"
+#include "devices.h"
 
 enum DeviceWifiModeType {
     DEVICE_WIFI_MODE_AUTO = 0,
     DEVICE_WIFI_MODE_STA = 1,
     DEVICE_WIFI_MODE_AP = 2,
     DEVICE_WIFI_MODE_AP_STA = 3
+};
+
+// For a mapping between command strings and handler functions
+typedef void (*CommandHandler)(AsyncWebServerRequest*);
+
+struct CommandEntry {
+  const char* cmd;
+  CommandHandler handler;
 };
 
 extern Preferences preferences;
@@ -33,7 +44,8 @@ extern uint16_t dmxUniverse;
 extern uint16_t dmxUniverseCount;
 extern String deviceName;
 
+extern bool irEnabled;
+
 float normalize(float x, float min, float max);
-void terminateCurrTask();
 
 #endif

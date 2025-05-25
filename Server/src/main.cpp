@@ -5,20 +5,20 @@
 // #include <Arduino.h>
 #include <WiFi.h>
 // #include <FastLED.h>
-#include <ESPAsyncWebServer.h>
 #include <WebSocketsServer.h>
 // #include <Preferences.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
-#include "SPIFFS.h"
+#include <SPIFFS.h>
 
 #include "main.h"
 // #include "devices.h"
 #include "credentials.h"
 #include "nvm.h"
-#include "modes.h"
+#include "effects.h"
 #include "dmx.h"
-// #include "controller.h"
+#include "controller.h"
+#include "controller_ir.h"
 
 Preferences preferences;
 
@@ -43,8 +43,8 @@ String deviceName = "Unnamed";
 String htmlContent = "";
 
 String taskCommand = "";
-TaskHandle_t taskHandle;
-const uint32_t StackSize = 2048; // What is the good value for my operations?
+// TaskHandle_t taskHandle;
+// const uint32_t StackSize = 2048; // What is the good value for my operations?
 
 static uint8_t hue = 0;
 
@@ -59,6 +59,10 @@ unsigned long lastActivity = 0;
 unsigned long activityTimeout = 0;
 bool activityTimeoutEnabled = false;
 int fadeOutDuration = 10000;
+
+bool irEnabled = false;
+
+static unsigned long lastReconnectAttempt = 0;
 
 void updateActivity() {
     lastActivity = millis();
@@ -92,90 +96,33 @@ void FastLedShow() {
   FastLED.show();
 }*/
 
-void terminateCurrTask() {
-  Serial.println("Terminating current task");
-  if (taskHandle != NULL) {
-    TaskHandle_t xCurrentTask = xTaskGetCurrentTaskHandle();
-    if (xCurrentTask == taskHandle) {
-      Serial.println("Delete task using handle...");
-      vTaskDelete(taskHandle);
-      taskHandle = NULL;
-    } else {
-      Serial.println("Delete task using flag...");
-      terminateTaskFlag = true;
-      delay(50);
-      terminateTaskFlag = false;
-    }
-  }
-}
-
-int mapRange(int value, int fromLow, int fromHigh, int toLow, int toHigh) {
-    return (value - fromLow) * (toHigh - toLow) / (fromHigh - fromLow) + toLow;
-}
-
-float normalize(float x, float min, float max) {
-  return (x - min) / (max - min);
-}
-
-String urlDecode(const String& input) {
-    String decoded = "";
-    char c;
-    int len = input.length();
-    int i = 0;
-
-    while (i < len) {
-        c = input.charAt(i);
-        if (c == '%') {
-            char hex[3];
-            hex[0] = input.charAt(++i);
-            hex[1] = input.charAt(++i);
-            hex[2] = '\0';
-            decoded += char(strtol(hex, nullptr, 16));
-        } else if (c == '+') {
-            decoded += ' ';
-        } else {
-            decoded += c;
-        }
-        i++;
-    }
-
-    return decoded;
-}
-
-String getQueryParameterValue(String url, String parameterName) {
-  int startIdx = url.indexOf("?" + parameterName + "=");
-  if (startIdx == -1) {
-    startIdx = url.indexOf("&" + parameterName + "=");
-    if (startIdx == -1) {
-      return "";
-    }
-  }
-  startIdx += parameterName.length() + 2; // Skip parameter name, '?' or '&', and '='
-
-  int endIdx = url.indexOf('&', startIdx + 1);
-  if (endIdx == -1) {
-    endIdx = url.length();
-  }
-
-  String encVal = url.substring(startIdx, endIdx);
-  Serial.println("Query parameter encoding value: " + encVal);
-
-  return urlDecode(encVal);
-}
-
-void processCommand(String message) {
+void processMessage(String message) {
   Serial.println("WebSockets message: " + message);
-  String cmd = getQueryParameterValue(message, "command");
-  Serial.println("WebSockets command: " + cmd);
-  if (cmd.equals("off")) {
-    terminateCurrTask();
-    fill_solid(leds, ledCount, CRGB::Black);
-    FastLedShow();
-  } else if (cmd.equals("solid-color")) {
-    terminateCurrTask();
-    CRGB color = htmlColor2Crgb(getQueryParameterValue(message, "color"));
-    fill_solid(leds, ledCount, color);
-    FastLedShow();
+
+  int idx = message.indexOf('?');
+  String urlPath = (idx != -1) ? message.substring(0, idx) : message;
+  Serial.println("URL path of WebSocket message: " + urlPath);
+
+  if (urlPath.equals("ctrl")) {
+    handleCtrlSignalWs(message);
+  }
+
+  if (urlPath.equals("update")) {
+    String cmd = getQueryParameterValue(message, "command");
+    if (cmd.length() > 0) {
+      Serial.println("WebSockets command: " + cmd);
+
+      if (cmd.equals("off")) {
+        terminateCurrTask();
+        fill_solid(leds, ledCount, CRGB::Black);
+        FastLedShow();
+      } else if (cmd.equals("solid-color")) {
+        terminateCurrTask();
+        CRGB color = htmlColor2Crgb(getQueryParameterValue(message, "color"));
+        fill_solid(leds, ledCount, color);
+        FastLedShow();
+      }
+    }
   }
 }
 
@@ -241,14 +188,170 @@ void updateSection(int sectionCount, int sectionIdx, CRGB color) {
   }
 }
 
+void startTaskRunningRainbow(AsyncWebServerRequest *request) {
+  int delay = request->getParam("delay", false, false)->value().toInt();
+  int step = request->getParam("step", false, false)->value().toInt();
+  int delta = request->getParam("delta", false, false)->value().toInt();
+
+  runEffectRunningRainbow(delay, step, delta);
+}
+
+void startTaskStrobe(AsyncWebServerRequest *request) {
+  int delay1 = request->getParam("delay1", false, false)->value().toInt();
+  int delay2 = request->getParam("delay2", false, false)->value().toInt();
+  CRGB color = htmlColor2Crgb(request->getParam("color", false, false)->value());
+
+  runEffectStrobe(color, delay1, delay2);
+}
+
+void startTaskStrobeRandom(AsyncWebServerRequest *request) {
+  CRGB color = htmlColor2Crgb(request->getParam("color", false, false)->value());
+  
+  runEffectStrobeRandom(color);
+}
+
+void startTaskSolidColor(AsyncWebServerRequest *request) {
+  if (request->hasParam("color")) {
+    // RGB
+    terminateCurrTask();
+    CRGB color = htmlColor2Crgb(request->getParam("color", false, false)->value());
+
+    if (request->hasParam("section-count") && request->hasParam("section-index")) {
+      int sectionCount = request->getParam("section-count", false, false)->value().toInt();
+      int sectionIdx = request->getParam("section-index", false, false)->value().toInt();
+      updateSection(sectionCount, sectionIdx, color);
+    } else {
+      fill_solid(leds, ledCount, color);
+    }
+
+    FastLedShow();
+  } else if (request->hasParam("hue") && request->hasParam("saturation") && request->hasParam("value")) {
+    int hue = request->getParam("hue", false, false)->value().toInt();
+    int saturation = request->getParam("saturation", false, false)->value().toInt();
+    int value = request->getParam("value", false, false)->value().toInt();
+    CHSV color = CHSV(hue, saturation, value);
+
+    if (request->hasParam("section-count") && request->hasParam("section-index")) {
+      int sectionCount = request->getParam("section-count", false, false)->value().toInt();
+      int sectionIdx = request->getParam("section-index", false, false)->value().toInt();
+      
+      updateSection(sectionCount, sectionIdx,  color);
+    } else {
+      fill_solid(leds, ledCount, color);
+    }
+  } else {
+    request->send(200, "text/plain", "Command solid-color: Missing required parameters.");
+    return;
+  }
+}
+
+void startTaskFadeIn(AsyncWebServerRequest *request) {
+  CRGB color;
+  int duration = request->getParam("duration", false, false)->value().toInt();
+
+  if (request->hasParam("color") && request->hasParam("duration")) {
+    // RGB
+    color = htmlColor2Crgb(request->getParam("color", false, false)->value());
+  } else if (request->hasParam("hue") && request->hasParam("saturation") && request->hasParam("value") && request->hasParam("duration")) {
+    // HSV
+
+    int hue = request->getParam("hue", false, false)->value().toInt();
+    int saturation = request->getParam("saturation", false, false)->value().toInt();
+    int value = request->getParam("value", false, false)->value().toInt();
+
+    color = CHSV(hue, saturation, value);
+  } else {
+    request->send(200, "text/plain", "Command fade-in: Missing required parameters.");
+    return;
+  }
+
+  runEffectFadeIn(color, duration);
+}
+
+void startTaskFadeOut(AsyncWebServerRequest *request) {
+  if (request->hasParam("duration")) {
+    int duration = request->getParam("duration", false, false)->value().toInt();
+    runEffectFadeOut(duration);
+  } else {
+    request->send(200, "text/plain", "Command fade-out: Missing required parameters.");
+    return;
+  }
+}
+
+void startTaskBlend(AsyncWebServerRequest *request) {
+  int duration = request->getParam("duration", false, false)->value().toInt();
+  CRGB color;
+
+  if (request->hasParam("color") && request->hasParam("duration")) {
+    // RGB
+    color = htmlColor2Crgb(request->getParam("color", false, false)->value());
+  } else if (request->hasParam("hue") && request->hasParam("saturation") && request->hasParam("value") && request->hasParam("duration")) {
+    // HSV
+    int hue = request->getParam("hue", false, false)->value().toInt();
+    int saturation = request->getParam("saturation", false, false)->value().toInt();
+    int value = request->getParam("value", false, false)->value().toInt();
+
+    color = CHSV(hue, saturation, value);
+  } else {
+    request->send(200, "text/plain", "Command fade-out: Missing required parameters.");
+    return;
+  }
+
+  runEffectBlend(color, duration);
+}
+
+void startTaskGradient(AsyncWebServerRequest *request) {
+  int hueStart = request->getParam("hueStart", false, false)->value().toInt();
+  int hueEnd = request->getParam("hueEnd", false, false)->value().toInt();
+  int brightness = request->getParam("brightness", false, false)->value().toInt();
+
+  CHSV chsvStart;
+  chsvStart.hue = mapRange(std::min(hueStart, hueEnd), 0, 360, 0, 255);
+  chsvStart.value = mapRange(brightness, 0, 100, 0, 255);
+  chsvStart.saturation = 255;
+
+  CHSV chsvEnd;
+  chsvEnd.hue = mapRange(std::max(hueStart, hueEnd), 0, 360, 0, 255);
+  chsvEnd.value = mapRange(brightness, 0, 100, 0, 255);
+  chsvEnd.saturation = 255;
+
+  fill_gradient_HSV(leds, ledCount, chsvStart, chsvEnd, FORWARD_HUES );
+  FastLedShow();
+}
+
+void handleOff(AsyncWebServerRequest* request) {
+  terminateCurrTask();
+  fill_solid(leds, ledCount, CRGB::Black);      
+  FastLedShow();
+}
+
+void handleNoise(AsyncWebServerRequest* request) {
+  // Not yet implemented
+}
+
+void handleAbort(AsyncWebServerRequest* request) {
+  vTaskDelete(taskHandle);
+}
+
+const CommandEntry commandTable[] = {
+  {"off", handleOff},
+  {"running-rainbow", startTaskRunningRainbow},
+  {"strobe", startTaskStrobe},
+  {"strobe-random", startTaskStrobeRandom},
+  {"solid-color", startTaskSolidColor},
+  {"fade-in", startTaskFadeIn},
+  {"fade-out", startTaskFadeOut},
+  {"blend", startTaskBlend},
+  {"gradient", startTaskGradient},
+  {"noise", handleNoise},
+  {"abort", handleAbort},
+};
+
 void update(AsyncWebServerRequest *request) {
   if (request->hasParam("command", false, false)) {
     AsyncWebParameter* command = request->getParam("command", false, false);
-
     String cmd = command->value();
-    
-    // Serial.println("Received command: " + cmd);
-    
+
     if (cmd.length() > 0) {
       updateActivity();
       if (request->hasParam("activity-timeout")) {
@@ -261,181 +364,24 @@ void update(AsyncWebServerRequest *request) {
         }
       }
 
-      // Static effects are directly here, for dynamic effects (animations) 
-      // is started new thread using a task
-      if (cmd.equals("off")) {
-        terminateCurrTask();
-        fill_solid(leds, ledCount, CRGB::Black);      
-        FastLedShow();
-      } else if (cmd.equals("running-rainbow")) {
-        terminateCurrTask();
+      Serial.println("Executing command: " + cmd);
 
-        Serial.println("Starting task: " + cmd);
-
-        TaskRunningRainbowParams *params = new TaskRunningRainbowParams;
-        params->ledCount = ledCount;
-        params->leds = leds;
-        params->delay = request->getParam("delay", false, false)->value().toInt();
-        params->step = request->getParam("step", false, false)->value().toInt();
-        params->delta = request->getParam("delta", false, false)->value().toInt();
-        
-        xTaskCreate(taskRunningRainbow, "CurrentLedTask", StackSize, params, 10, &taskHandle);
-      } else if (cmd.equals("strobe")) {
-        terminateCurrTask();
-
-        Serial.println("Starting task: " + cmd);
-
-        TaskStrobeParams *params = new TaskStrobeParams;
-        // TaskStrobeParams params;
-        params->ledCount = ledCount;
-        params->leds = leds;
-        params->delay1 = request->getParam("delay1", false, false)->value().toInt();
-        params->delay2 = request->getParam("delay2", false, false)->value().toInt();
-        params->color = htmlColor2Crgb(request->getParam("color", false, false)->value());
-
-        Serial.println("Delay1: " + String(params->delay1));
-        Serial.println("Delay2: " + String(params->delay2));
-        
-        xTaskCreate(taskStrobe, "CurrentLedTask", StackSize, params, 10, &taskHandle);
-
-      } else if (cmd.equals("strobe-random")) {
-        terminateCurrTask();
-
-        Serial.println("Starting task: " + cmd);
-
-        TaskStrobeParams *params = new TaskStrobeParams;
-        params->ledCount = ledCount;
-        params->leds = leds;
-        // params.delay1 = request->getParam("delay1", false, false)->value().toInt();
-        // params.delay2 = request->getParam("delay2", false, false)->value().toInt();
-        params->color = htmlColor2Crgb(request->getParam("color", false, false)->value());
-        
-        xTaskCreate(taskStrobe, "CurrentLedTask", StackSize, params, 10, &taskHandle);
-
-      } else if (cmd.equals("solid-color")) {
-        if (request->hasParam("color")) {
-          // RGB
-          terminateCurrTask();
-          CRGB color = htmlColor2Crgb(request->getParam("color", false, false)->value());
-
-          if (request->hasParam("section-count") && request->hasParam("section-index")) {
-            int sectionCount = request->getParam("section-count", false, false)->value().toInt();
-            int sectionIdx = request->getParam("section-index", false, false)->value().toInt();
-            updateSection(sectionCount, sectionIdx, color);
-          } else {
-            fill_solid(leds, ledCount, color);
-          }
-
-          FastLedShow();
-        } else if (request->hasParam("hue") && request->hasParam("saturation") && request->hasParam("value")) {
-          int hue = request->getParam("hue", false, false)->value().toInt();
-          int saturation = request->getParam("saturation", false, false)->value().toInt();
-          int value = request->getParam("value", false, false)->value().toInt();
-          CHSV color = CHSV(hue, saturation, value);
-
-          if (request->hasParam("section-count") && request->hasParam("section-index")) {
-            int sectionCount = request->getParam("section-count", false, false)->value().toInt();
-            int sectionIdx = request->getParam("section-index", false, false)->value().toInt();
-            
-            updateSection(sectionCount, sectionIdx,  color);
-          } else {
-            fill_solid(leds, ledCount, color);
-          }
-        } else {
-          request->send(200, "text/plain", "Command solid-color: Missing required parameters.");
-          return;
+      // Search for the command in the command table
+      // and call the corresponding handler function
+      bool found = false;
+      for (const auto& entry : commandTable) {
+        if (cmd.equals(entry.cmd)) {
+          entry.handler(request);
+          found = true;
+          break;
         }
-      } else if (cmd.equals("fade-in")) {
-        if (request->hasParam("color") && request->hasParam("duration")) {
-          // RGB
-          terminateCurrTask();
+      }
 
-          TaskFadeParams *params = new TaskFadeParams;
-          params->ledCount = ledCount;
-          params->leds = leds;
-          params->duration = request->getParam("duration", false, false)->value().toInt();
-          params->color = htmlColor2Crgb(request->getParam("color", false, false)->value());
-
-          xTaskCreate(taskFadeIn, "CurrentLedTask", StackSize, params, 10, &taskHandle);
-        } else if (request->hasParam("hue") && request->hasParam("saturation") && request->hasParam("value") && request->hasParam("duration")) {
-          // HSV
-          terminateCurrTask();
-
-          int hue = request->getParam("hue", false, false)->value().toInt();
-          int saturation = request->getParam("saturation", false, false)->value().toInt();
-          int value = request->getParam("value", false, false)->value().toInt();
-
-          TaskFadeParams *params = new TaskFadeParams;
-          params->ledCount = ledCount;
-          params->leds = leds;
-          params->duration = request->getParam("duration", false, false)->value().toInt();
-          params->color = CHSV(hue, saturation, value);
-
-          xTaskCreate(taskFadeIn, "CurrentLedTask", StackSize, params, 10, &taskHandle);
-        } else {
-          request->send(200, "text/plain", "Command fade-in: Missing required parameters.");
-          return;
-        }
-      } else if (cmd.equals("fade-out")) {
-        if (request->hasParam("color") && request->hasParam("duration")) {
-          // RGB
-          terminateCurrTask();
-
-          TaskFadeParams *params = new TaskFadeParams;
-          params->ledCount = ledCount;
-          params->leds = leds;
-          params->duration = request->getParam("duration", false, false)->value().toInt();
-          params->color = htmlColor2Crgb(request->getParam("color", false, false)->value());
-
-          xTaskCreate(taskFadeOut, "CurrentLedTask", StackSize, params, 10, &taskHandle);
-        } else if (request->hasParam("hue") && request->hasParam("saturation") && request->hasParam("value") && request->hasParam("duration")) {
-          // HSV
-          terminateCurrTask();
-
-          int hue = request->getParam("hue", false, false)->value().toInt();
-          int saturation = request->getParam("saturation", false, false)->value().toInt();
-          int value = request->getParam("value", false, false)->value().toInt();
-
-          TaskFadeParams *params = new TaskFadeParams;
-          params->ledCount = ledCount;
-          params->leds = leds;
-          params->duration = request->getParam("duration", false, false)->value().toInt();
-          params->color = CHSV(hue, saturation, value);
-
-          xTaskCreate(taskFadeOut, "CurrentLedTask", StackSize, params, 10, &taskHandle);
-        } else {
-          request->send(200, "text/plain", "Command fade-out: Missing required parameters.");
-          return;
-        }
-      } else if (cmd.equals("gradient")) {
-        terminateCurrTask();
-
-        int hueStart = request->getParam("hueStart", false, false)->value().toInt();
-        int hueEnd = request->getParam("hueEnd", false, false)->value().toInt();
-        int brightness = request->getParam("brightness", false, false)->value().toInt();
-
-        CHSV chsvStart;
-        chsvStart.hue = mapRange(std::min(hueStart, hueEnd), 0, 360, 0, 255);
-        chsvStart.value = mapRange(brightness, 0, 100, 0, 255);
-        chsvStart.saturation = 255;
-
-        CHSV chsvEnd;
-        chsvEnd.hue = mapRange(std::max(hueStart, hueEnd), 0, 360, 0, 255);
-        chsvEnd.value = mapRange(brightness, 0, 100, 0, 255);
-        chsvEnd.saturation = 255;
-
-        fill_gradient_HSV(leds, ledCount, chsvStart, chsvEnd, FORWARD_HUES );
-        FastLedShow();
-      } else if (cmd.equals("noise")) {
-        // Not yet implemented
-      } else if (cmd.equals("abort")) {
-        vTaskDelete(taskHandle);
-      } else {
-        Serial.println("Unknown command: " + cmd);  
+      if (!found) {
+        Serial.println("Unknown command: " + cmd);
       }
 
       taskCommand = cmd;
-
       request->send(200, "text/plain", "Processing command: " + cmd);
 
     } else {
@@ -493,7 +439,7 @@ void initHttpServer() {
   server.on("/set-conf", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, handleSetConf);
   server.on("/update", HTTP_GET, update);
   server.on("/wol", HTTP_GET, handleWol);
-  // server.on("/ctrl", HTTP_GET, handleCtrlCmd);
+  server.on("/ctrl", HTTP_GET, handleCtrlSignalHttp);
 
   server.begin();
   Serial.println("HTTP server started");
@@ -531,7 +477,7 @@ void processWsTxtPayload(uint8_t num, uint8_t *payload, size_t length) {
   Serial.print("Received web socket message: ");
   Serial.println(message);
 
-  processCommand(message);
+  processMessage(message);
 
   webSocket.sendTXT(num, message);
 }
@@ -563,7 +509,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 }
 
-void initWifi() {
+void confWifi() {
   switch (wifiMode) {
     case DEVICE_WIFI_MODE_STA:
       WiFi.mode(WIFI_STA);
@@ -587,19 +533,52 @@ void initWifi() {
       WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
       break;
   }
+}
 
+void waitForWifiConnection(uint8_t timeout) {
   uint8_t tryCount = 0;
   Serial.print("Connecting to WiFi ..");
-  while (WiFi.status() != WL_CONNECTED && tryCount < wifiTimeout) {
+  while (WiFi.status() != WL_CONNECTED && tryCount < timeout) {
     tryCount++;
     Serial.print('.');
     delay(1000);
   }
   Serial.println();
 
+  if (WiFi.status() == WL_CONNECTED) {
+    IPAddress ipAddress = WiFi.localIP();
+    Serial.println("IP address: http://" + ipAddress.toString());
+  } else {
+    Serial.println("Failed to reconnect to WiFi.");
+  }
+}
+
+void reconnectWifi() {
+  if (WiFi.status() != WL_CONNECTED) {
+    unsigned long now = millis();
+    if (now - lastReconnectAttempt >= 60000) { // 1 minute
+      lastReconnectAttempt = now;
+      Serial.println("Attempting to reconnect to WiFi...");
+      confWifi();
+      WiFi.reconnect();
+
+      waitForWifiConnection(wifiTimeout);
+    }
+  }
+}
+
+void initWifi() {
+  confWifi();
+
+  uint8_t tryCount = 0;
+  Serial.print("Connecting to WiFi ..");
+  waitForWifiConnection(wifiTimeout);
+
   IPAddress ipAddress;
   if (WiFi.status() == WL_CONNECTED) {
     ipAddress = WiFi.localIP();
+    // Disable WiFi sleep mode
+    WiFi.setSleep(false); 
   } else if (wifiMode == DEVICE_WIFI_MODE_AUTO || wifiMode == DEVICE_WIFI_MODE_AP_STA) {
     // Wifi connection timeout, switch to AP
     Serial.print("Unable to connect to WiFi, switching to AP mode");
@@ -628,30 +607,6 @@ void lightOn() {
   FastLedShow();
 }
 
-void fadeIn(CRGB color, int duration) {
-  terminateCurrTask();
-
-  TaskFadeParams *params = new TaskFadeParams;
-  params->ledCount = ledCount;
-  params->leds = leds;
-  params->duration = duration;
-  params->color = color;
-
-  xTaskCreate(taskFadeIn, "CurrentLedTask", StackSize, params, 10, &taskHandle);
-}
-
-void fadeOut(int duration) {
-  terminateCurrTask();
-
-  TaskFadeParams *params = new TaskFadeParams;
-  params->ledCount = ledCount;
-  params->leds = leds;
-  params->duration = duration;
-  // params->color = color;
-
-  xTaskCreate(taskFadeOut, "CurrentLedTask", StackSize, params, 10, &taskHandle);
-}
-
 uint8_t getLedMaxBrightness() {
   uint8_t maxBrightness = 0;
   for (int i = 0; i < ledCount; i++) {
@@ -661,66 +616,19 @@ uint8_t getLedMaxBrightness() {
   return maxBrightness;
 }
 
-/*void setLedColorRgb(int idx, int r, int g, int b) {
-  leds[i] = CRGB(r, g, b);
-}*/
-
-/*
-void lightFadeOut(int duration) {
-  Serial.println(F("Fading out"));
-  uint8_t maxBrightness = getLedMaxBrightness();
-  int steps = maxBrightness;
-  int delayTime = duration / steps;
-
-  for (int brightness = maxBrightness; brightness > 0; brightness--) {
-    for (int i = 0; i < ledCount; i++) {
-      leds[i].nscale8_video(brightness);
-    }
-    FastLedShow();
-    delay(delayTime);
-  }
-  Serial.println(F("Fade out loop ended, setting all leds to black"));
-  fill_solid(leds, ledCount, CRGB::Black);
-  FastLedShow();
-  Serial.println(F("Fading out done"));
-}
-
-void lightFadeIn(CRGB color, int duration) {
-  Serial.println(F("Fading in"));
-  int steps = 255;
-  int delayTime = duration / steps;
-
-  for (int brightness = 0; brightness <= 255; brightness++) {
-    for (int i = 0; i < ledCount; i++) {
-      leds[i] = color;
-      leds[i].nscale8_video(brightness);
-    }
-    FastLedShow();
-    delay(delayTime);
-  }
-  Serial.println(F("Fading in done"));
-}*/
-
 void checkActivityTimout() {
-  Serial.printf("Last activity timestamp: %d\n", lastActivity);
-  Serial.printf("Current timestamp: %d\n", millis());
   uint diff = millis() - lastActivity;
-  Serial.printf("Time diff: %d\n", diff);
-  Serial.printf("activityTimeout: %d\n", activityTimeout);
-  Serial.printf("activityTimerTimeoutEnable: %s\n", activityTimeoutEnabled ? "true" : "false");
-
   if (activityTimeoutEnabled && millis() - lastActivity > activityTimeout) {
     activityTimeoutEnabled = false;
-    fadeOut(fadeOutDuration);
+    runEffectFadeOut(fadeOutDuration);
   }
-  Serial.println(F("Activity timeout check done"));
 }
 
 // Boot procedure - phase one (before WiFi connection)
 void startBootFadeIn() {
   Serial.println("Starting boot fade in");
   CRGB warmWhite = htmlColor2Crgb(bootColor);
-  fadeIn(warmWhite, 3000);
+  runEffectFadeIn(warmWhite, 3000);
 }
 
 // Boot procedure - phase two (after WiFi connection)
@@ -744,6 +652,7 @@ void setup() {
   initWifi();
   initHttpServer();
   initWebSockets();
+  initIr();
   #ifdef ESP32S3
     // initDmx();
   #endif
@@ -754,6 +663,7 @@ void setup() {
 }
 
 void loop() {
+
   if (webSockEnabled) {
     webSocket.loop();
   }
@@ -763,8 +673,18 @@ void loop() {
       // processDmx();
     #endif
   }
-  
+
   checkActivityTimout();
 
-  // delay(200);
+  processIr();
+
+  static unsigned long lastSerialPrint = 0;
+  if (millis() - lastSerialPrint >= 10000) {
+    Serial.print('*');
+    lastSerialPrint = millis();
+  }
+
+  reconnectWifi();
+
+  delay(10);
 }

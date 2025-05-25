@@ -1,45 +1,43 @@
-#include <main.h>
-#include <controller.h>
-#include <modes.h>
+#include "main.h"
+#include "controller.h"
+#include "effects.h"
 
 unsigned long menuTimeout = 0;
 
 ControllerConf controllerConfig;
 bool lightState = false;
 
+OperationMode operationMode = MODE_MENU_INACTIVE;
+
+int calculateByteValue(int value, int min, int max) {
+    return (255 * (value - min)) / (max - min);
+}
+
 void ctrlLightOn() {
-    terminateCurrTask();
+    Serial.println("Light on");
 
-    TaskBlendParams *params = new TaskBlendParams;
-    params->leds = leds;
-    params->ledCount = ledCount;
-    int hueVal = (255 * (controllerConfig.hue.value - controllerConfig.hue.min)) / (controllerConfig.hue.max - controllerConfig.hue.min);
-    int satVal = (255 * (controllerConfig.saturation.value - controllerConfig.saturation.min)) / (controllerConfig.saturation.max - controllerConfig.saturation.min);
-    int valVal = (255 * (controllerConfig.value.value - controllerConfig.value.min)) / (controllerConfig.value.max - controllerConfig.value.min);
+    int hueVal = calculateByteValue(controllerConfig.hue.value, controllerConfig.hue.min, controllerConfig.hue.max);
+    int satVal = calculateByteValue(controllerConfig.saturation.value, controllerConfig.saturation.min, controllerConfig.saturation.max);
+    int valVal = calculateByteValue(controllerConfig.value.value, controllerConfig.value.min, controllerConfig.value.max);
 
-    params->color = CHSV(hueVal, satVal, valVal);
-    params->duration = 1000; // milliseconds
+    CRGB color = CHSV(hueVal, satVal, valVal);
+    int duration = 1000; // milliseconds
 
-    xTaskCreate(taskBlend, "BlendTask", 2048, params, 1, NULL);
+    runEffectBlend(color, duration);
 
     lightState = true;
 }
 
 void ctrlLightOff() {
-    terminateCurrTask();
-
-    TaskFadeParams *params = new TaskFadeParams;
-    params->leds = leds;
-    params->duration = 1000;
-    params->ledCount = ledCount;
-    params->color = CRGB::Black;
-
-    xTaskCreate(taskFadeOut, "FadeOutTask", 2048, params, 1, NULL);
+    Serial.println("Light off");
+    
+    runEffectFadeOut(1000);
 
     lightState = false;
 }
 
 void switchLight() {
+    Serial.println("Switch light");
     if (lightState) {
         ctrlLightOff();
     } else {
@@ -48,16 +46,22 @@ void switchLight() {
 }
 
 void drawOptionSegment(ControllerOption ctrlOpt) {
+    Serial.println("Draw option segment");
     int segmentStart = 0;
     int segmentEnd = 0;
     int segmentCount = ctrlOpt.max - ctrlOpt.min;
 
-    switch (mode) {
+    switch (ctrlOpt.mode) {
     case OPTMODE_COLOR:
-    case OPTMODE_SEGMENT:
-        segmentStart = round(ledCount * normalize(ctrlOpt.value, ctrlOpt.min, ctrlOpt.max));
-        segmentEnd = round(ledCount * normalize(ctrlOpt.value + 1, ctrlOpt.min, ctrlOpt.max));
+        segmentStart = 0;
+        segmentEnd = ledCount;
         break;
+    case OPTMODE_SATURATION:
+    case OPTMODE_SEGMENT:
+        segmentStart = round(ledCount * normalize(ctrlOpt.value - 1, ctrlOpt.min - 1 , ctrlOpt.max));
+        segmentEnd = round(ledCount * normalize(ctrlOpt.value, ctrlOpt.min - 1, ctrlOpt.max));
+        break;
+    case OPTMODE_VALUE:
     case OPTMODE_RANGE:
         segmentStart = 0;
         segmentEnd = round(ledCount * normalize(ctrlOpt.value, ctrlOpt.min, ctrlOpt.max));
@@ -68,18 +72,41 @@ void drawOptionSegment(ControllerOption ctrlOpt) {
     Serial.println("Segment end: " + String(segmentEnd));
 
     int hueVal;
-    int satVal;
-    int valVal = 255;
-    switch (mode) {
+    switch (ctrlOpt.mode) {
+    case OPTMODE_SATURATION:
     case OPTMODE_COLOR:
-        hueVal = (255 * (controllerConfig.hue.value - controllerConfig.hue.min)) / (controllerConfig.hue.max - controllerConfig.hue.min);
-        satVal = 255;
+        hueVal = calculateByteValue(controllerConfig.hue.value, controllerConfig.hue.min, controllerConfig.hue.max);
         break;
+    case OPTMODE_VALUE:
+        hueVal = controllerConfig.hue.value;
     default:
         hueVal = 0;
-        satVal = 0;
     }
-    Serial.println("HSV: " + String(hueVal) + " " + String(satVal) + "" + String(valVal));
+
+    int satVal;
+    switch (ctrlOpt.mode) {
+        case OPTMODE_SATURATION:
+            satVal = calculateByteValue(controllerConfig.saturation.value, controllerConfig.saturation.min, controllerConfig.saturation.max);
+            break;
+        case OPTMODE_COLOR:
+            satVal = 255;
+            break;
+        default:
+            satVal = 0;
+            break;
+    }
+
+    int valVal;
+    switch (ctrlOpt.mode) {
+        case OPTMODE_VALUE:
+            valVal = calculateByteValue(controllerConfig.value.value, controllerConfig.value.min, controllerConfig.value.max);
+            break;
+        default:
+            valVal = 255;
+            break;
+    }
+
+    Serial.println("HSV: " + String(hueVal) + " " + String(satVal) + " " + String(valVal));
     
     fill_solid(leds, ledCount, CRGB::Black);
     for (int i = segmentStart; i < segmentEnd; i++) {
@@ -88,7 +115,8 @@ void drawOptionSegment(ControllerOption ctrlOpt) {
 }
 
 void drawOption() {
-    switch (mode) {
+    Serial.println("Draw option");
+    switch (operationMode) {
     case MODE_MENU_HUE:
         drawOptionSegment(controllerConfig.hue);
         Serial.println("Hue: " + String(controllerConfig.hue.value));
@@ -106,33 +134,52 @@ void drawOption() {
     FastLedShow();
 }
 
+void enterOptions() {
+    Serial.println("Enter options");
+    operationMode = MODE_MENU_HUE;
+
+    runEffectMid2Out(CRGB::White, 1000);
+    delay(1000);
+
+    drawOption();
+}
+
 void finishOptions() {
-    mode = MODE_MENU_INACTIVE;
+    Serial.println("Finish options");
+    operationMode = MODE_MENU_INACTIVE;
+
+    runEffectOut2Mid(CRGB::White, 1000);
+    delay(1000);
+
     ctrlLightOn();
 }
 
 void confirmOption() {
-    mode = MODE_MENU_INACTIVE;
-    switch (mode) {
+    Serial.println("Confirm option");
+    switch (operationMode) {
     case MODE_MENU_HUE:
-        controllerConfig.hue.value = min(controllerConfig.hue.value + 1, controllerConfig.hue.max);
-        mode = MODE_MENU_SATURATION;
+        // controllerConfig.hue.value = min(controllerConfig.hue.value + 1, controllerConfig.hue.max);
+        Serial.println("Hue: " + String(controllerConfig.hue.value));
+        operationMode = MODE_MENU_SATURATION;
         drawOption();
         break;
     case MODE_MENU_SATURATION:
-        controllerConfig.saturation.value = min(controllerConfig.saturation.value + 1, controllerConfig.saturation.max);
-        mode = MODE_MENU_VALUE;
+        // controllerConfig.saturation.value = min(controllerConfig.saturation.value + 1, controllerConfig.saturation.max);
+        Serial.println("Saturation: " + String(controllerConfig.saturation.value));
+        operationMode = MODE_MENU_VALUE;
         drawOption();
         break;
     case MODE_MENU_VALUE:
-        controllerConfig.value.value = min(controllerConfig.value.value + 1, controllerConfig.value.max);
+        // controllerConfig.value.value = min(controllerConfig.value.value + 1, controllerConfig.value.max);
+        Serial.println("Value: " + String(controllerConfig.value.value));
         finishOptions();
         break;
     }
 }
 
 void incrementOption() {
-    switch (mode) {
+    Serial.println("Increment option");
+    switch (operationMode) {
     case MODE_MENU_HUE:
         controllerConfig.hue.value = min(controllerConfig.hue.value + 1, controllerConfig.hue.max);
         break;
@@ -141,14 +188,14 @@ void incrementOption() {
         break;
     case MODE_MENU_VALUE:
         controllerConfig.value.value = min(controllerConfig.value.value + 1, controllerConfig.value.max);
-        switchLight();
         break;
     }
     drawOption();
 }
 
 void decrementOption() {
-    switch (mode) {
+    Serial.println("Decrement option");
+    switch (operationMode) {
     case MODE_MENU_HUE:
         controllerConfig.hue.value = max(controllerConfig.hue.value - 1, controllerConfig.hue.min);
         break;
@@ -157,38 +204,70 @@ void decrementOption() {
         break;
     case MODE_MENU_VALUE:
         controllerConfig.value.value = max(controllerConfig.value.value - 1, controllerConfig.value.min);
-        switchLight();
         break;
     }
     drawOption();
 }
 
-void handleCtrlCmd(AsyncWebServerRequest *request) {
-    AsyncWebParameter* command = request->getParam("signal", false, false);
+void ctrlOk() {
+    if (operationMode == MODE_MENU_INACTIVE) {
+        switchLight();
+    } else {
+        confirmOption();
+    }
+}
 
-    String signal = command->value();
+void ctrlMenu() {
+    if (operationMode == MODE_MENU_INACTIVE) {
+        enterOptions();
+    } else {
+        finishOptions();
+    }
+}
 
+void ctrlPlus() {
+    if (operationMode != MODE_MENU_INACTIVE) {
+        incrementOption();
+    }
+}
+
+void ctrlMinus() {
+    if (operationMode != MODE_MENU_INACTIVE) {
+        decrementOption();
+    }
+}
+
+void handleCtrlSignal(String signal) {
     if (signal.length() > 0) {
-        if (signal == "btn1" || signal == "push") {
-            if (mode == MODE_MENU_INACTIVE) {
-                switchLight();
-            } else {
-                confirmOption();
-            }
+        if (signal == "btn1" || signal == "press") {
+            ctrlOk();
         }
 
         if (signal == "btn2" || signal == "hold") {
-            finishOptions();
+            ctrlMenu();
         }
 
         if (signal == "inc" || signal == "cw") {
-            incrementOption();
+            ctrlPlus();
         }
 
         if (signal == "dec" || signal == "ccw") {
-            decrementOption();
+            ctrlMinus();
         }
     }
+}
 
-    request->send(200, "text/html", "Received signal: ");
+void handleCtrlSignalHttp(AsyncWebServerRequest *request) {
+    AsyncWebParameter* command = request->getParam("signal", false, false);
+    String signal = command->value();
+
+    handleCtrlSignal(signal);
+
+    request->send(200, "text/html", "Received signal: " + signal);
+}
+
+void handleCtrlSignalWs(String queryStr) {
+    String signal = getQueryParameterValue(queryStr, "signal");
+    Serial.println("Received signal: " + signal);
+    handleCtrlSignal(signal);
 }

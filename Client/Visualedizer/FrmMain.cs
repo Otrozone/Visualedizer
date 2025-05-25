@@ -1,7 +1,10 @@
 using NAudio.CoreAudioApi;
 using System.Threading;
 using System.Windows.Forms;
+using Visualedizer;
+using static Ledqualizer.AcVolume;
 using static Ledqualizer.ScreenCapture;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 // https://github.com/naudio/NAudio
 
 namespace Ledqualizer
@@ -18,7 +21,7 @@ namespace Ledqualizer
 
         private bool isDragging = false;
         private int scrollValue = 0;
-        private AudioCaptureVolume.AudioCaptureVolumeMode audioCaptureVolumeMode;
+        private AcVolume.AudioCaptureVolumeMode audioCaptureVolumeMode;
 
         Config config = new Config();
 
@@ -56,14 +59,37 @@ namespace Ledqualizer
             InitializeComponent();
         }
 
+        private void InitConfFrmFields()
+        {
+            textIpAddress.Text = config.ipAddress;
+            numLedCount.Value = config.ledCount;
+            numDelay.Value = config.delay;
+
+            numScreenRow.Value = config.screenCaptureRow;
+
+            numStrobeX.Value = config.strobeTriggerX;
+            numStrobeY.Value = config.strobeTriggerY;
+
+            numLaserTriggerX.Value = config.laserTriggerX;
+            numLaserTriggerY.Value = config.laserTriggerY;
+            numLaserPatternX.Value = config.laserPatternX;
+            numLaserPatternY.Value = config.laserPatternY;
+            numLaserColorX.Value = config.laserColorX;
+            numLaserColorY.Value = config.laserColorY;
+        }
+
         private void frmMain_Load(object sender, EventArgs e)
         {
             hsbScreenRowSelector.Maximum = ScreenCapture.GetScreenHeight();
             numScreenRow.Maximum = hsbScreenRowSelector.Maximum;
             CountHz();
 
-            pnlBackgroundColor.BackColor = Color.Black;
             rotateModeRadios = new RadioButton[] { rbModeColorPush, rbModeEndToStart, rbModeMidToOut, rbModeMidToOutPoint, rbModeStartToEnd };
+
+            tabControl.TabPages.Remove(tabPageAcSpectralAnalysis); // Not yet fully implemented
+
+            config.LoadFromIni();
+            InitConfFrmFields();
         }
 
         private async void btnCaptureStart_Click(object sender, EventArgs e)
@@ -133,44 +159,63 @@ namespace Ledqualizer
             }*/
         }
 
-        private Config GetConfig()
+        /* private Config GetConfig()
         {
-            config = new Config()
-            {
-                delay = (int)numDelay.Value,
-                ledCount = (int)numLedCount.Value,
-                ipAddress = textIpAddress.Text,
-                brightness = (float)trackBarBrightness.Value / trackBarBrightness.Maximum
-            };
+            config.delay = (int)numDelay.Value;
+            config.ledCount = (int)numLedCount.Value;
+            config.ipAddress = textIpAddress.Text;
+            config.brightness = (float)trackBarBrightness.Value / trackBarBrightness.Maximum;
+            config.normalizationLevel = (float)trackBarNormalizationLevel.Value;
 
             return config;
-        }
+        }*/
 
         private async void btnInitiate_Click(object sender, EventArgs e)
         {
-            GetConfig();
+            // GetConfig();
             ctsMain = new CancellationTokenSource();
 
             // LedSync ledSync = LedSync.GetInstance(config);
             LedSync ledSync = new LedSync(config);
             await ledSync.ConnectAsync();
 
-            switch (tabControl.SelectedIndex)
+            if (tabControl.SelectedTab == tabPageBasicControl)
             {
-                case 0:
-                    // AudioCaptureVolume
-                    AudioCaptureVolume audioCaptureVolume = new AudioCaptureVolume(this, ledSync, audioCaptureVolumeMode);
-                    await audioCaptureVolume.CaptureAudioAsync(ctsMain.Token);
-                    break;
-                case 1:
-                    AudioCaptureEqualizer audioCaptureEqualizer = new AudioCaptureEqualizer(ledSync);
-                    await audioCaptureEqualizer.Capture(ctsMain.Token);
-                    break;
-                case 2:
-                    ScreenCapture screenCapture = new ScreenCapture(ledSync, pictureBox, numScreenRow, chbReverse);
-                    await screenCapture.Capture(ctsMain.Token);
-                    break;
+                Basic basic = new Basic(this, ledSync);
+                await basic.BasicOperations(ctsMain.Token);
             }
+            else if (tabControl.SelectedTab == tabPageAcVolume)
+            {
+                // AudioCaptureVolume
+                AcVolume audioCaptureVolume = new AcVolume(this, ledSync, audioCaptureVolumeMode);
+
+                var selectedDeviceItem = cbAudioDevices.SelectedItem as DeviceDescriptor;
+                var selectedDevice = selectedDeviceItem?.Device;
+                if (selectedDevice != null)
+                {
+                    audioCaptureVolume.audioDevice = selectedDevice;
+                }
+                cbAudioDevices.SelectedIndexChanged += audioCaptureVolume.CbAudioDevices_SelectedIndexChanged;
+
+                await audioCaptureVolume.CaptureAudioAsync(ctsMain.Token);
+            }
+            else if (tabControl.SelectedTab == tabPageScreenCapture)
+            {
+                ScreenCapture screenCapture = new ScreenCapture(ledSync, pictureBox, numScreenRow, chbReverse);
+                await screenCapture.Capture(ctsMain.Token);
+            }
+            else if (tabControl.SelectedTab == tabPageAcSpectralAnalysis)
+            {
+                AcSpectralAnalysis audioCaptureEqualizer = new AcSpectralAnalysis(ledSync);
+                await audioCaptureEqualizer.Capture(ctsMain.Token);
+            }
+            else if (tabControl.SelectedTab == tabPageOtherDevices)
+            {
+                ScreenCaptureOtherDevices screenCaptureOtherDevices =
+                    new ScreenCaptureOtherDevices(ledSync);
+                await screenCaptureOtherDevices.Capture(ctsMain.Token);
+            }
+
             await ledSync.DisconnectAsync();
         }
 
@@ -213,11 +258,15 @@ namespace Ledqualizer
 
         private void CountHz()
         {
-            lblRefreshRate.Text = (1000 / numDelay.Value).ToString("F1") + " Hz";
+            if (numDelay.Value > 0)
+            {
+                lblRefreshRate.Text = (1000 / numDelay.Value).ToString("F1") + " Hz";
+            }
         }
 
         private void numDelay_ValueChanged(object sender, EventArgs e)
         {
+            config.delay = (int)numDelay.Value;
             CountHz();
         }
 
@@ -225,29 +274,29 @@ namespace Ledqualizer
         {
             if (rbModeStartToEnd.Checked)
             {
-                audioCaptureVolumeMode = AudioCaptureVolume.AudioCaptureVolumeMode.ModeStartToEnd;
+                audioCaptureVolumeMode = AcVolume.AudioCaptureVolumeMode.ModeStartToEnd;
             }
             if (rbModeEndToStart.Checked)
             {
-                audioCaptureVolumeMode = AudioCaptureVolume.AudioCaptureVolumeMode.ModeEndToStart;
+                audioCaptureVolumeMode = AcVolume.AudioCaptureVolumeMode.ModeEndToStart;
             }
             if (rbModeMidToOut.Checked)
             {
-                audioCaptureVolumeMode = AudioCaptureVolume.AudioCaptureVolumeMode.ModeMidToOut;
+                audioCaptureVolumeMode = AcVolume.AudioCaptureVolumeMode.ModeMidToOut;
             }
             if (rbModeColorPush.Checked)
             {
-                audioCaptureVolumeMode = AudioCaptureVolume.AudioCaptureVolumeMode.ModeColorPush;
+                audioCaptureVolumeMode = AcVolume.AudioCaptureVolumeMode.ModeColorPush;
             }
             if (rbModeMidToOutPoint.Checked)
             {
-                audioCaptureVolumeMode = AudioCaptureVolume.AudioCaptureVolumeMode.ModeMidToOut_Point;
+                audioCaptureVolumeMode = AcVolume.AudioCaptureVolumeMode.ModeMidToOut_Point;
             }
         }
 
         private void trackBarBrightness_Scroll(object sender, EventArgs e)
         {
-            config = GetConfig();
+            // config = GetConfig();
         }
 
         private void pnlBackgroundColor_Click(object sender, EventArgs e)
@@ -257,10 +306,10 @@ namespace Ledqualizer
             colorDialog.AllowFullOpen = true;
             colorDialog.AnyColor = true;
 
-            if (colorDialog.ShowDialog() == DialogResult.OK)
+            /*if (colorDialog.ShowDialog() == DialogResult.OK)
             {
                 pnlBackgroundColor.BackColor = colorDialog.Color;
-            }
+            }*/
         }
 
         private void chbWhite_CheckedChanged(object sender, EventArgs e)
@@ -286,6 +335,102 @@ namespace Ledqualizer
             }
             rotateModeRadios[rotateIdx].Checked = true;
             rotateIdx++;
+        }
+
+        private void trackBarNormalizationLevel_Scroll(object sender, EventArgs e)
+        {
+            // config = GetConfig();
+        }
+
+        private void FrmMain_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            config.SaveToIni();
+        }
+
+        private void textIpAddress_TextChanged(object sender, EventArgs e)
+        {
+            config.ipAddress = textIpAddress.Text;
+        }
+
+        private void numLedCount_ValueChanged(object sender, EventArgs e)
+        {
+            config.ledCount = (int)numLedCount.Value;
+        }
+
+        private void numScreenRow_ValueChanged(object sender, EventArgs e)
+        {
+            config.screenCaptureRow = (int)numScreenRow.Value;
+        }
+
+        private void tabControl_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            btnTerminate_Click(sender, e);
+
+            if (tabControl.SelectedTab == tabPageAcVolume)
+            {
+                AcVolume.LoadAudioDevicesToComboBox(cbAudioDevices);
+            }
+
+            btnInitiate_Click(sender, e);
+        }
+
+        private void rbBasic_CheckedChanged(object sender, EventArgs e)
+        {
+            RadioButton[] radioButtonGroup = { rbSolid, rbGradient };
+
+            if (sender is RadioButton changedRadioButton)
+            {
+                if (changedRadioButton == null || !changedRadioButton.Checked)
+                    return;
+
+                foreach (var radioButton in radioButtonGroup)
+                {
+                    if (radioButton != changedRadioButton)
+                    {
+                        radioButton.Checked = false;
+                    }
+                }
+            }
+        }
+
+        private void numStrobeX_ValueChanged(object sender, EventArgs e)
+        {
+            config.strobeTriggerX = (int)numStrobeX.Value;
+        }
+
+        private void numStrobeY_ValueChanged(object sender, EventArgs e)
+        {
+            config.strobeTriggerY = (int)numStrobeY.Value;
+        }
+
+        private void numLaserTriggerX_ValueChanged(object sender, EventArgs e)
+        {
+            config.laserTriggerX = (int)numLaserTriggerX.Value;
+        }
+
+        private void numLaserTriggerY_ValueChanged(object sender, EventArgs e)
+        {
+            config.laserTriggerY = (int)numLaserTriggerY.Value;
+        }
+
+        private void numLaserPatternX_ValueChanged(object sender, EventArgs e)
+        {
+            config.laserPatternX = (int)numLaserPatternX.Value;
+        }
+
+        private void numLaserPatternY_ValueChanged(object sender, EventArgs e)
+        {
+            config.laserPatternY = (int)numLaserPatternY.Value;
+        }
+
+        private void numLaserColorX_ValueChanged(object sender, EventArgs e)
+        {
+            config.laserColorX = (int)numLaserColorX.Value;
+        }
+
+        private void numLaserColorY_ValueChanged(object sender, EventArgs e)
+        {
+            config.laserColorY = (int)numLaserColorY.Value;
         }
     }
 }

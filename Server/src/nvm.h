@@ -24,6 +24,8 @@
 #define NVM_BOOT_COLOR "bootColor"
 #define NVM_BOOT_WOL "bootWol"
 #define NVM_BOOT_WOL_MAC "bootWolMac"
+// #define NVM_ACTIVITY_TIMEOUT "activityTimeout"
+#define NVM_IR_ENABLED "irEnabled"
 
 void initConf();
 void handleGetConf(AsyncWebServerRequest *request);

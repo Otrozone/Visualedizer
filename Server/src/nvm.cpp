@@ -1,4 +1,5 @@
 #include <Arduino.h>
+
 #include "main.h"
 #include "dmx.h"
 #include "nvm.h"
@@ -29,6 +30,8 @@ void initConf() {
 
   deviceName = preferences.getString(NVM_DEVICE_NAME, deviceName);
 
+  irEnabled = preferences.getBool(NVM_IR_ENABLED, irEnabled);
+
   preferences.end();
 }
 
@@ -55,6 +58,8 @@ void handleGetConf(AsyncWebServerRequest *request) {
   jsonDoc[NVM_DMX_UNICAST] = dmxUnicast;
   jsonDoc[NVM_DMX_UNIVERSE] = dmxUniverse;
   jsonDoc[NVM_DMX_UNIVERSE_COUNT] = dmxUniverseCount;
+
+  jsonDoc[NVM_IR_ENABLED] = irEnabled;
 
   String jsonData;
   serializeJson(jsonDoc, jsonData);
@@ -98,6 +103,8 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   
   const char* paramDeviceName = jsonDoc[NVM_DEVICE_NAME].as<const char*>();
 
+  const bool paramIrEnabled = jsonDoc[NVM_IR_ENABLED].as<bool>();
+
   preferences.begin(NVM_NAMESPACE, false);
   preferences.putUInt(NVM_LED_COUNT, paramLedCount);
 
@@ -119,6 +126,8 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   preferences.putUInt(NVM_DMX_UNIVERSE, paramDmxUniverse);
   preferences.putUInt(NVM_DMX_UNIVERSE_COUNT, paramDmxUniverseCount);
   preferences.putString(NVM_DEVICE_NAME, paramDeviceName);
+
+  preferences.putBool(NVM_IR_ENABLED, paramIrEnabled);
 
   preferences.end();
 
