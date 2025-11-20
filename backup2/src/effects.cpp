@@ -25,16 +25,15 @@ void terminateCurrTask() {
 void taskStrobe(void *pvParameters) {
   TaskStrobeParams *params = static_cast<TaskStrobeParams *>(pvParameters);
 
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
+  CRGB *leds = params->leds;
 
   while (!terminateTaskFlag) {
-    fill_solid(leds, ledCount, params->color);
+    fill_solid(leds, params->ledCount, params->color);
     FastLED.show();
     Serial.println("Delay1: " + String(params->delay1) + " -> " + String(params->delay1 / portTICK_RATE_MS));
     vTaskDelay(params->delay1 / portTICK_RATE_MS);
 
-    fill_solid(leds, ledCount, CRGB::Black);
+    fill_solid(leds, params->ledCount, CRGB::Black);
     FastLED.show();
     Serial.println("Delay2: " + String(params->delay2) + " -> " + String(params->delay2 / portTICK_RATE_MS));
     vTaskDelay(params->delay2 / portTICK_RATE_MS);
@@ -48,18 +47,17 @@ void taskStrobe(void *pvParameters) {
 void taskStrobeRandom(void *pvParameters) {
   TaskStrobeParams *params = static_cast<TaskStrobeParams *>(pvParameters);
 
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
+  CRGB *leds = params->leds;
 
   randomSeed(analogRead(0));
 
   while (!terminateTaskFlag) {
-    fill_solid(leds, ledCount, params->color);
+    fill_solid(leds, params->ledCount, params->color);
     FastLED.show();
     int delay1 = random(1, 500);
     vTaskDelay(delay1 / portTICK_RATE_MS);
 
-    fill_solid(leds, ledCount, CRGB::Black);
+    fill_solid(leds, params->ledCount, CRGB::Black);
     FastLED.show();
     int delay2 = random(1, 500);
     vTaskDelay(delay2 / portTICK_RATE_MS);
@@ -73,13 +71,10 @@ void taskStrobeRandom(void *pvParameters) {
 void taskRunningRainbow(void *pvParameters) {
   TaskRunningRainbowParams *params = static_cast<TaskRunningRainbowParams *>(pvParameters);
   static uint8_t hue = 0;
-
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
-
+  
+  CRGB *leds = params->leds;
   while (!terminateTaskFlag) {
-    Serial.printf("Running rainbow effect update on strip index %d\n", params->ledStrip->ledIdx);
-    fill_rainbow(leds, ledCount, hue, params->delta);
+    fill_rainbow(leds, params->ledCount, hue, params->delta);
     FastLED.show();
     hue += params->step;
     // Serial.println(String(params->delay) + ", " + String(params->step) + ", " + String(params->delta) + " | ");
@@ -91,38 +86,8 @@ void taskRunningRainbow(void *pvParameters) {
   vTaskDelete(NULL);
 };
 
-void taskRunningGradient(void *pvParameters) {
-  TaskRunningGradientParams *params = static_cast<TaskRunningGradientParams *>(pvParameters);
-
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
-
-  float shift = 0.0f;
-
-  while (!terminateTaskFlag) {
-    for (int i = 0; i < ledCount; i++) {
-      float t = (float)i / (ledCount - 1);
-      leds[i] = blend(params->color1, params->color2, (uint8_t)(t * 255));
-    }
-
-    shift += params->step;
-    if (shift > 1.0f)
-      shift -= 1.0f; // wrap around
-
-    CRGB startColor = blend(params->color1, params->color2, (uint8_t)(shift * 255));
-    CRGB endColor = blend(params->color2, params->color1, (uint8_t)(shift * 255));
-
-    FastLED.show();
-    vTaskDelay(params->delay / portTICK_RATE_MS);
-  }
-  
-  delete params;
-  terminateTaskFlag = false;
-  vTaskDelete(NULL);
-}
-
 void taskNoise(void *pvParameters) {
-  TaskBaseParams *params = static_cast<TaskBaseParams *>(pvParameters);
+  TaskParams *params = static_cast<TaskParams *>(pvParameters);
 
   uint8_t octaves = 3;
   int scale = 80;
@@ -133,7 +98,7 @@ void taskNoise(void *pvParameters) {
 
   while (!terminateTaskFlag) {
     noise_x += 1;
-    fill_noise8(params->ledStrip->leds, params->ledStrip->ledCount, octaves, noise_x, scale, hue_octaves, noise_x, hue_scale, time);
+    fill_noise8(params->leds, params->ledCount, octaves, noise_x, scale, hue_octaves, noise_x, hue_scale, time);
     vTaskDelay(100 / portTICK_RATE_MS);
   }
 
@@ -148,21 +113,18 @@ void taskBlend(void *pvParameters) {
   int delay = 10;
   int steps = params->duration / delay;
 
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
-
   for (int i = 0; !terminateTaskFlag && i < steps; i++) {
-    for (int j = 0; j < ledCount; j++) {
-      CRGB currentColor = leds[j];
+    for (int j = 0; j < params->ledCount; j++) {
+      CRGB currentColor = params->leds[j];
       CRGB targetColor = params->color;
       uint8_t blendAmount = round(i * (255.0 / steps));
-      leds[j] = blend(currentColor, targetColor, blendAmount);
+      params->leds[j] = blend(currentColor, targetColor, blendAmount);
     }
     FastLED.show();
     vTaskDelay(delay / portTICK_RATE_MS);
   }
 
-  fill_solid(leds, ledCount, params->color);
+  fill_solid(params->leds, params->ledCount, params->color);
   FastLED.show();
 
   terminateTaskFlag = false;
@@ -178,13 +140,10 @@ void taskFadeIn(void *pvParameters) {
   int delay = 10;
   int steps = params->duration / delay;
 
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
-
   for (int i = 0; !terminateTaskFlag && i < steps; i++) {
-    for (int j = 0; j < ledCount; j++) {
-      leds[j] = params->color;
-      leds[j].fadeLightBy(255 - round(i * ((float)255 / steps)));
+    for (int j = 0; j < params->ledCount; j++) {
+      params->leds[j] = params->color;
+      params->leds[j].fadeLightBy(255 - round(i * ((float)255 / steps)));
     }
     FastLED.show();
 
@@ -193,104 +152,60 @@ void taskFadeIn(void *pvParameters) {
 
   // Serial.println("termFlag: " + String(terminateTaskFlag));
 
-  fill_solid(leds, ledCount, params->color);
+  fill_solid(params->leds, params->ledCount, params->color);
   FastLED.show();
 
   terminateTaskFlag = false;
 
   vTaskDelete(NULL); 
 }
-
-/*void taskFadeOut(void *pvParameters) {
-  TaskColorAndDurationParams *params = static_cast<TaskColorAndDurationParams *>(pvParameters);
-
-  int delay = 10;
-  int steps = params->duration / delay;
-
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
-
-  for (int i = 0; !terminateTaskFlag && i < steps; i++) {
-    uint8_t brightness = 255 - round(i * ((float)255 / steps));
-    for (int j = 0; j < ledCount; j++) {
-      leds[j].nscale8_video(brightness);
-    }
-    FastLED.show();
-
-    vTaskDelay(delay / portTICK_RATE_MS);
-  }
-
-  fill_solid(leds, ledCount, CRGB::Black);
-  FastLED.show();
-
-  terminateTaskFlag = false;
-
-  vTaskDelete(NULL); 
-}*/
 
 void taskFadeOut(void *pvParameters) {
   TaskColorAndDurationParams *params = static_cast<TaskColorAndDurationParams *>(pvParameters);
 
   int delay = 10;
-  int steps = (params->duration * 2) / delay;
-
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
-
-  // Gamma correction factor (to get the smoothness)
-  float gamma = 15.0f;
+  int steps = params->duration / delay;
 
   for (int i = 0; !terminateTaskFlag && i < steps; i++) {
-    float t = (float)i / (float)steps;
-
-    float factor = powf(1.0f - t, gamma);
-    uint8_t brightness = (uint8_t)roundf(factor * 255.0f);
-
-    // Clamp tiny brightness values to 0 to avoid flicker
-    if (brightness < 150)
-      brightness = 0;
-
-    for (int j = 0; j < ledCount; j++)
-    {
-      leds[j].nscale8_video(brightness);
+    uint8_t brightness = 255 - round(i * ((float)255 / steps));
+    for (int j = 0; j < params->ledCount; j++) {
+      params->leds[j].nscale8_video(brightness);
     }
-
     FastLED.show();
+
     vTaskDelay(delay / portTICK_RATE_MS);
   }
 
-  fill_solid(leds, ledCount, CRGB::Black);
+  fill_solid(params->leds, params->ledCount, CRGB::Black);
   FastLED.show();
 
   terminateTaskFlag = false;
-  vTaskDelete(NULL);
+
+  vTaskDelete(NULL); 
 }
 
 void taskMid2Out(void *pvParameters) {
   TaskColorAndDurationParams *params = static_cast<TaskColorAndDurationParams *>(pvParameters);
 
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
-
   int delay = 10;
   int steps = params->duration / delay;
-  int center = ledCount / 2;
+  int center = params->ledCount / 2;
 
   for (int i = 0; !terminateTaskFlag && i < steps; i++) {
     int range = round(i * ((float)center / steps));
     for (int j = 0; j <= range; j++) {
-      if (center + j < ledCount) {
-        leds[center + j] = params->color;
+      if (center + j < params->ledCount) {
+        params->leds[center + j] = params->color;
       }
       if (center - j >= 0) {
-        leds[center - j] = params->color;
+        params->leds[center - j] = params->color;
       }
     }
     FastLED.show();
     vTaskDelay(delay / portTICK_RATE_MS);
   }
 
-  fill_solid(leds, ledCount, params->color);
+  fill_solid(params->leds, params->ledCount, params->color);
   FastLED.show();
 
   terminateTaskFlag = false;
@@ -301,29 +216,26 @@ void taskMid2Out(void *pvParameters) {
 void taskOut2Mid(void *pvParameters) {
   TaskColorAndDurationParams *params = static_cast<TaskColorAndDurationParams *>(pvParameters);
 
-  CRGB *leds = params->ledStrip->leds;
-  int ledCount = params->ledStrip->ledCount;
-
   int delay = 10;
   int steps = params->duration / delay;
-  int center = ledCount / 2;
+  int center = params->ledCount / 2;
 
   for (int i = 0; !terminateTaskFlag && i < steps; i++) {
     int range = center - round(i * ((float)center / steps));
     for (int j = 0; j < center; j++) {
       if (j <= range) {
-        if (center + j < ledCount) {
-          leds[center + j] = params->color;
+        if (center + j < params->ledCount) {
+          params->leds[center + j] = params->color;
         }
         if (center - j >= 0) {
-          leds[center - j] = params->color;
+          params->leds[center - j] = params->color;
         }
       } else {
-        if (center + j < ledCount) {
-          leds[center + j] = CRGB::Black;
+        if (center + j < params->ledCount) {
+          params->leds[center + j] = CRGB::Black;
         }
         if (center - j >= 0) {
-          leds[center - j] = CRGB::Black;
+          params->leds[center - j] = CRGB::Black;
         }
       }
     }
@@ -331,7 +243,7 @@ void taskOut2Mid(void *pvParameters) {
     vTaskDelay(delay / portTICK_RATE_MS);
   }
 
-  fill_solid(leds, ledCount, CRGB::Black);
+  fill_solid(params->leds, params->ledCount, CRGB::Black);
   FastLED.show();
 
   terminateTaskFlag = false;
@@ -340,7 +252,7 @@ void taskOut2Mid(void *pvParameters) {
 }
 
 // -----------------------------------------------
-/*
+
 void runEffectStrobe(CRGB color, int delay1, int delay2) {
   terminateCurrTask();
 
@@ -447,4 +359,3 @@ void runEffectOut2Mid(CRGB color, int duration) {
 
   xTaskCreate(taskOut2Mid, "CurrentLedTask", StackSize, params, 10, &taskHandle);
 }
-*/

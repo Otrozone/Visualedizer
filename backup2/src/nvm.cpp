@@ -2,7 +2,6 @@
 
 #include "main.h"
 #include "dmx.h"
-#include "controller_ir.h"
 #include "nvm.h"
 #include "credentials.h"
 
@@ -10,7 +9,7 @@ void initConf() {
   preferences.begin(NVM_NAMESPACE, false);
 
   if (DVC_STRIP_COUNT == 1) {
-    ledCount = preferences.getUInt(NVM_LED_COUNT, DVC_NUM_LEDS_LIST[0]);
+    ledCount = preferences.getUInt(NVM_LED_COUNT, DVC_NUM_LEDS);
   }
 
   wifiMode = static_cast<DeviceWifiModeType>(preferences.getUInt(NVM_WIFI_MODE));
@@ -37,7 +36,6 @@ void initConf() {
   deviceName = preferences.getString(NVM_DEVICE_NAME, deviceName);
 
   irEnabled = preferences.getBool(NVM_IR_ENABLED, irEnabled);
-  irUnrecognizedAsOnOff = preferences.getBool(NVM_IR_UNRECOGNIZED_AS_ONOFF, irUnrecognizedAsOnOff);
 
   preferences.end();
 }
@@ -70,7 +68,6 @@ void handleGetConf(AsyncWebServerRequest *request) {
   jsonDoc[NVM_DMX_UNIVERSE_COUNT] = dmxUniverseCount;
 
   jsonDoc[NVM_IR_ENABLED] = irEnabled;
-  jsonDoc[NVM_IR_UNRECOGNIZED_AS_ONOFF] = irUnrecognizedAsOnOff;
 
   String jsonData;
   serializeJson(jsonDoc, jsonData);
@@ -118,7 +115,6 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   const char* paramDeviceName = jsonDoc[NVM_DEVICE_NAME].as<const char*>();
 
   const bool paramIrEnabled = jsonDoc[NVM_IR_ENABLED].as<bool>();
-  const bool paramIrUnrecognizedAsOnOff = jsonDoc[NVM_IR_UNRECOGNIZED_AS_ONOFF].as<bool>();
 
   preferences.begin(NVM_NAMESPACE, false);
   preferences.putUInt(NVM_LED_COUNT, paramLedCount);
@@ -146,7 +142,6 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   preferences.putString(NVM_DEVICE_NAME, paramDeviceName);
 
   preferences.putBool(NVM_IR_ENABLED, paramIrEnabled);
-  preferences.putBool(NVM_IR_UNRECOGNIZED_AS_ONOFF, paramIrUnrecognizedAsOnOff);
 
   preferences.end();
 

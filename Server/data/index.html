@@ -388,6 +388,23 @@
                 </li>
 
                 <li class="list-group-item px-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="timeoutEnabled" 
+                      onchange="document.getElementById('timeout').disabled = !this.checked;">
+                    <label class="form-check-label" for="timeoutEnabled">
+                      Activity timeout enabled
+                    </label>
+                  </div>
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="number" id="timeout" class="form-control" />
+                    <label class="form-label" for="timeout">Activity timout (sec)</label>
+                  </div>
+                  <div id="textDetail" class="form-text">
+                    Number of seconds of inactivity before the light is turned off.
+                  </div>
+                </li>
+
+                <li class="list-group-item px-3">
                   <div class="form-outline" data-mdb-input-init>
                     <input type="text" id="deviceName" class="form-control" />
                     <label class="form-label" for="deviceName">Device name</label>
@@ -459,6 +476,15 @@
                       IR enabled
                     </label>
                   </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="irUnrecAsOnOff" checked>
+                    <label class="form-check-label" for="irUnrecAsOnOff">
+                      Unrecognized IR signals interpret as on/off signal
+                    </label>
+                  </div>
+                  <div class="form-text mb-3">
+                    Unrecognized IR signals are interpreted as on/off signal, except when in menu mode.
+                  </div>                  
                 </li>
                 <!--
                 <li class="list-group-item px-3">
@@ -487,8 +513,20 @@
   </main>
   
   <!--<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/7.1.0/mdb.umd.min.js"></script>-->
-  <script type="text/javascript" src="res/mdb.umd.min.js"></script>
-
+  <!--<script type="text/javascript" src="res/mdb.umd.min.js"></script>-->
+  <script>
+    (function() {
+      var isApMode = location.hostname === "192.168.0.4";
+      var script = document.createElement("script");
+      script.type = "text/javascript";
+      if (isApMode) {
+        script.src = "res/mdb.umd.min.js";
+      } else {
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/7.1.0/mdb.umd.min.js";
+      }
+      document.head.appendChild(script);
+    })();
+  </script>
   <script>
     // Menu
     const menuItems = document.querySelectorAll('*[data-content-id]');

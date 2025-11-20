@@ -6,6 +6,4 @@
 extern void processIr();
 extern void initIr();
 
-extern bool irUnrecognizedAsOnOff;
-
 #endif

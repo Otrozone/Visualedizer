@@ -38,7 +38,7 @@ struct ControllerConf {
     ControllerOption value = {OPTMODE_VALUE, 0, 10, 10};
 };
 
-extern OperationMode operationMode;
+// extern OperationMode operationMode;
 
 void handleCtrlSignalHttp(AsyncWebServerRequest *request);
 void handleCtrlSignalWs(String queryStr);
@@ -48,21 +48,5 @@ void ctrlOk();
 void ctrlMenu();
 void ctrlPlus();
 void ctrlMinus();
-
-void ctrlRed();
-void ctrlGreen();
-void ctrlYellow();
-void ctrlBlue();
-
-void ctrlBtn0();
-void ctrlBtn1();
-void ctrlBtn2();
-void ctrlBtn3();
-void ctrlBtn4();
-void ctrlBtn5();
-void ctrlBtn6();
-void ctrlBtn7();
-void ctrlBtn8();
-void ctrlBtn9();
 
 #endif

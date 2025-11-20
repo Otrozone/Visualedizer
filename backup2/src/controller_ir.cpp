@@ -9,8 +9,6 @@
 IRrecv irrecv(IR_RECV_PIN);
 decode_results results;
 
-bool irUnrecognizedAsOnOff = false;
-
 enum IrBtnMapping {
     IR_BTN_UP = 0x807F609F,
     IR_BTN_RIGHT = 0x807FD827,
@@ -43,41 +41,6 @@ enum IrBtnMapping {
     IR_BTN_BLUE = 0x807FC03F
 };
 
-typedef void (*IrCommandHandler)();
-
-struct SignalCtrlEntry {
-  const uint32_t signal;
-  IrCommandHandler handler;
-};
-
-const SignalCtrlEntry signalTable[] = {
-  {IR_BTN_POWER, switchLight},
-  {IR_BTN_UP, ctrlPlus},
-  {IR_BTN_RIGHT, ctrlPlus},
-  {IR_BTN_DOWN, ctrlMinus},
-  {IR_BTN_LEFT, ctrlMinus},
-  {IR_BTN_OK, ctrlOk},
-  {IR_BTN_MENU, ctrlMenu},
-
-  {IR_BTN_RED, ctrlRed},
-  {IR_BTN_GREEN, ctrlGreen},
-  {IR_BTN_YELLOW, ctrlYellow},
-  {IR_BTN_BLUE, ctrlBlue},
-
-  {IR_BTN_0, ctrlBtn0},
-  {IR_BTN_1, ctrlBtn1},
-  {IR_BTN_2, ctrlBtn2},
-  {IR_BTN_3, ctrlBtn3},
-  {IR_BTN_4, ctrlBtn4},
-  {IR_BTN_5, ctrlBtn5},
-  {IR_BTN_6, ctrlBtn6},
-  {IR_BTN_7, ctrlBtn7},
-  {IR_BTN_8, ctrlBtn8},
-  {IR_BTN_9, ctrlBtn9}
- 
-};
-
-
 void initIr() {
     if (irEnabled) {
         irrecv.enableIRIn();
@@ -88,33 +51,13 @@ void initIr() {
     }
 }
 
+
 void processIrResult(decode_results *results) {
     if (results->repeat) {
         // Serial.println("Repeat signal received");
         return;
     }
-
-    Serial.println("Received IR signal: " + String(results->value, HEX));
-
-    bool found = false;
-    for (const auto& entry : signalTable) {
-        if (results->value == entry.signal) {
-            entry.handler();
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
-        Serial.println("Unknown button pressed");
-
-        if (irUnrecognizedAsOnOff && operationMode == MODE_MENU_INACTIVE) {
-            Serial.println("Toggling light state, unrecognized IR signal configured as on/off signal");
-            switchLight();
-        }
-    }
-
-    /*
+    
     switch (results->value) {
         case IR_BTN_POWER:
             Serial.println("Button POWER pressed");
@@ -144,32 +87,15 @@ void processIrResult(decode_results *results) {
             Serial.println("Button MENU pressed");
             ctrlMenu();
             break;
-        case IR_BTN_0:
-            Serial.println("Button 0 pressed");
-            ctrlBtn0();
-            break;
-        case IR_BTN_1:
-            Serial.println("Button 1 pressed");
-            ctrlBtn1();
-            break;
-
         default:
             Serial.println("Unknown button pressed");
-
-            if (irUnrecognizedAsOnOff && operationMode == MODE_MENU_INACTIVE) {
-                Serial.println("Toggling light state, unrecognized IR signal configured as on/off signal");
-                switchLight();
-            }
-
             break;
-    }*/
+    }
 }
 
 void processIr() {
-    if (!irEnabled) return;
-
     if (irrecv.decode(&results)) {
-        // Serial.println(resultToHumanReadableBasic(&results));
+        Serial.println(resultToHumanReadableBasic(&results));
         processIrResult(&results);
         irrecv.resume();
     }

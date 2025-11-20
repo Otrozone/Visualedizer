@@ -17,19 +17,23 @@
   #define DVC_LED_COLOR_ORDER RGB
 #endif
 #ifdef ID_DESK 
-  // #define DVC_DATA_PIN 3
+  #define DVC_DATA_PIN 2
   // #define DVC_NUM_LEDS 274 // (93 + 44) * 2
-  // #define DVC_NUM_LEDS 30 // (93 + 44) * 2
-
-  constexpr int DVC_NUM_LEDS_LIST[] = {30};
-  constexpr uint16_t DVC_DATA_PIN_LIST[] = {2};
-  // constexpr int DVC_NUM_LEDS_LIST[] = {274};
-  // constexpr uint16_t DVC_DATA_PIN_LIST[] = {3};
-  #define DVC_STRIP_COUNT 1 //sizeof(DVC_NUM_LEDS_LIST) / sizeof(DVC_NUM_LEDS_LIST[0]);
-  // Max strip count is 5
+  #define DVC_NUM_LEDS 30 // (93 + 44) * 2
   
-  // #define DVC_OFFSET 184
-  #define DVC_OFFSET 0
+  // Max strip count is 5
+  constexpr int DVC_STRIP_COUNT = 2; //sizeof(DVC_NUM_LEDS_LIST) / sizeof(DVC_NUM_LEDS_LIST[0]);
+  constexpr int DVC_NUM_LEDS_LIST[] = {274, 30}; 
+  constexpr uint16_t DVC_DATA_PIN_LIST[] = {3, 2};
+
+
+  /*
+  constexpr int DVC_NUM_LEDS_LIST[] = {274, 80}; 
+  constexpr int DVC_DATA_PIN_LIST[] = {3, 2};
+  constexpr int DVC_STRIP_COUNT = 2; //sizeof(DVC_NUM_LEDS_LIST) / sizeof(DVC_NUM_LEDS_LIST[0]);
+  */
+ 
+  #define DVC_OFFSET 184
   #define DVC_DMX_UNIVERSE 2
   #define DVC_LED_TYPE WS2813
   #define DVC_LED_COLOR_ORDER RGB
@@ -54,12 +58,8 @@
 #endif
 #ifdef ID_WARDROBE
   #define DVC_STRIP_COUNT 1
-  // #define DVC_DATA_PIN 4 // D2
-  // #define DVC_NUM_LEDS 269
-
-  constexpr int DVC_NUM_LEDS_LIST[] = {30};
-  constexpr uint16_t DVC_DATA_PIN_LIST[] = {4};
-
+  #define DVC_DATA_PIN 4 // D2
+  #define DVC_NUM_LEDS 269
   #define DVC_OFFSET 0
   #define DVC_DMX_UNIVERSE 99
   #define DVC_LED_TYPE WS2813

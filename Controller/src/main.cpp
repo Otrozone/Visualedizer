@@ -16,8 +16,10 @@ RTC_DATA_ATTR uint hue;
 RTC_DATA_ATTR uint saturation;
 RTC_DATA_ATTR uint value;
 
-String targetHost = "198.168.4.1";
-// String targetHost = "10.0.1.50";
+// String targetHost = "198.168.4.1";
+String targetHost = "10.0.1.50";
+// String targetHost = "10.0.1.200";
+// String targetHost = "10.0.1.202";
 
 int counter = 0;
 int currentStateCLK;
@@ -64,7 +66,7 @@ void goSleep() {
     esp_deep_sleep_start();
 }
 
-void print_wakeup_reason() {
+void printWakeupReason() {
     esp_sleep_wakeup_cause_t wakeup_reason;
 
     wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -84,7 +86,7 @@ void wifiConnect() {
     }
 
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("Failed to connect to WiFi, going to sleep...");
+        Serial.println("\nFailed to connect to WiFi, going to sleep...");
         goSleep();
     }
     Serial.print('.');
@@ -184,7 +186,9 @@ void lightOnHsvFadeIn(int h, int s, int v) {
     lightUpdate("update?command=fade-in&hue=" + String(h) + "&saturation=" + String(s) + "&value=" + String(v));
 }
 
-void lightOnHsvFadeOut(int h, int s, int v) {}
+void lightOnHsvFadeOut(int h, int s, int v) {
+    lightUpdate("update?command=fade-out&hue=" + String(h) + "&saturation=" + String(s) + "&value=" + String(v));
+}
 
 void lightSwitch() {
     if (lightOn) {
@@ -275,7 +279,7 @@ void setup() {
     // delay(10000);
     Serial.println("Boot number: " + String(bootCount));
 
-    print_wakeup_reason();
+    printWakeupReason();
     esp_deep_sleep_enable_gpio_wakeup(BIT(ENC_BTN), ESP_GPIO_WAKEUP_GPIO_LOW);
 
     initEncoder();

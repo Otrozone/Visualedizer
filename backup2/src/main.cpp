@@ -42,7 +42,6 @@ String deviceName = "Unnamed";
 
 String htmlContent = "";
 
-String taskCommand = "";
 // TaskHandle_t taskHandle;
 // const uint32_t StackSize = 2048; // What is the good value for my operations?
 
@@ -199,14 +198,7 @@ void startTaskRunningRainbow(AsyncWebServerRequest *request) {
   int step = request->getParam("step", false, false)->value().toInt();
   int delta = request->getParam("delta", false, false)->value().toInt();
 
-  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-    if (ledStrips[i] != nullptr) {
-      Serial.printf("Starting running rainbow effect on strip %d\n", i);
-      ledStrips[i]->runEffectRunningRainbow(delay, step, delta);
-    } else {
-      Serial.printf("Led strip %d is null\n", i);
-    }
-  }
+  runEffectRunningRainbow(delay, step, delta);
 }
 
 void startTaskStrobe(AsyncWebServerRequest *request) {
@@ -217,7 +209,7 @@ void startTaskStrobe(AsyncWebServerRequest *request) {
   if (request->hasParam("stripIdx", false, false)) {
     int stripIdx = request->getParam("stripIdx", false, false)->value().toInt();
     Serial.printf("Starting strobe effect on strip %d\n", stripIdx);
-    ledStrips[stripIdx]->runEffectStrobe(color, delay1, delay2);
+    runEffectStrobe(color, delay1, delay2);
   } else {
     Serial.println("Starting strobe effect on all strips");
     for (int i = 0; i < DVC_STRIP_COUNT; i++) {
@@ -230,42 +222,16 @@ void startTaskStrobe(AsyncWebServerRequest *request) {
 
 void startTaskStrobeRandom(AsyncWebServerRequest *request) {
   CRGB color = htmlColor2Crgb(request->getParam("color", false, false)->value());
-
-  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-    if (ledStrips[i] != nullptr) {
-      Serial.printf("Starting strobe random effect on strip %d\n", i);
-      ledStrips[i]->runEffectStrobeRandom(color);
-    } else {
-      Serial.printf("Led strip %d is null\n", i);
-    }
-  }
+  
+  runEffectStrobeRandom(color);
 }
-
-/*CRGB getColorDefinition(AsyncWebServerRequest *request) {
-  CRGB color;
-
-  if (request->hasParam("color")) {
-    // RGB
-    color = htmlColor2Crgb(request->getParam("color", false, false)->value());
-  } else if (request->hasParam("hue") && request->hasParam("saturation") && request->hasParam("value")) {
-    // HSV
-    int hue = request->getParam("hue", false, false)->value().toInt();
-    int saturation = request->getParam("saturation", false, false)->value().toInt();
-    int value = request->getParam("value", false, false)->value().toInt();
-    color = CHSV(hue, saturation, value);
-  } else {
-    Serial.println("Error: Missing color parameters");
-  }
-
-  return color;
-}*/
 
 void startTaskSolidColor(AsyncWebServerRequest *request) {
   Serial.printf("Solid-color - Led count: %d\n", ledStrips[0]->ledCount);
 
   if (request->hasParam("color")) {
     // RGB
-    // terminateCurrTask();
+    terminateCurrTask();
     CRGB color = htmlColor2Crgb(request->getParam("color", false, false)->value());
 
     if (request->hasParam("section-count") && request->hasParam("section-index")) {
@@ -277,7 +243,6 @@ void startTaskSolidColor(AsyncWebServerRequest *request) {
       Serial.println("Solid color via ledStrips object.");
       for (int i = 0; i < DVC_STRIP_COUNT; i++) {
         if (ledStrips[i] != nullptr) {
-          Serial.printf("Filling strip idx %d with color (R:%d, G:%d, B:%d)\n", ledStrips[i]->ledIdx, color.r, color.g, color.b);
           ledStrips[i]->fillSolid(color);
         } else {
           Serial.printf("Led strip %d is null\n", i);
@@ -288,6 +253,7 @@ void startTaskSolidColor(AsyncWebServerRequest *request) {
       // fill_solid(leds, ledCount, color);
     }
 
+    FastLedShow();
   } else if (request->hasParam("hue") && request->hasParam("saturation") && request->hasParam("value")) {
     int hue = request->getParam("hue", false, false)->value().toInt();
     int saturation = request->getParam("saturation", false, false)->value().toInt();
@@ -305,14 +271,7 @@ void startTaskSolidColor(AsyncWebServerRequest *request) {
         ledStrips[stripIdx]->fillSolid(color);
       } else {
         Serial.println("Solid color command HSV");
-        
-        for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-          if (ledStrips[i] != nullptr) {
-            ledStrips[i]->fillSolid(color);
-          } else {
-            Serial.printf("Led strip %d is null\n", i);
-          }
-        }
+        fill_solid(leds, ledCount, color);
       }
     }
   } else {
@@ -341,27 +300,13 @@ void startTaskFadeIn(AsyncWebServerRequest *request) {
     return;
   }
 
-  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-    if (ledStrips[i] != nullptr) {
-      Serial.printf("Starting fade-in effect on strip %d\n", i);
-      ledStrips[i]->runEffectFadeIn(color, duration);
-    } else {
-      Serial.printf("Led strip %d is null\n", i);
-    }
-  }
+  runEffectFadeIn(color, duration);
 }
 
 void startTaskFadeOut(AsyncWebServerRequest *request) {
   if (request->hasParam("duration")) {
     int duration = request->getParam("duration", false, false)->value().toInt();
-    for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-      if (ledStrips[i] != nullptr) {
-        Serial.printf("Starting fade-out effect on strip %d\n", i);
-        ledStrips[i]->runEffectFadeOut(duration);
-      } else {
-        Serial.printf("Led strip %d is null\n", i);
-      }
-    }
+    runEffectFadeOut(duration);
   } else {
     request->send(200, "text/plain", "Command fade-out: Missing required parameters.");
     return;
@@ -387,14 +332,7 @@ void startTaskBlend(AsyncWebServerRequest *request) {
     return;
   }
 
-  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-    if (ledStrips[i] != nullptr) {
-      Serial.printf("Starting blend effect on strip %d\n", i);
-      ledStrips[i]->runEffectBlend(color, duration);
-    } else {
-      Serial.printf("Led strip %d is null\n", i);
-    }
-  }
+  runEffectBlend(color, duration);
 }
 
 void startTaskGradient(AsyncWebServerRequest *request) {
@@ -412,29 +350,14 @@ void startTaskGradient(AsyncWebServerRequest *request) {
   chsvEnd.value = mapRange(brightness, 0, 100, 0, 255);
   chsvEnd.saturation = 255;
 
-  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-    if (ledStrips[i] != nullptr) {
-      Serial.printf("Starting gradient effect on strip %d\n", i);
-      ledStrips[i]->fillGradientHSV(chsvStart, chsvEnd);
-    } else {
-      Serial.printf("Led strip %d is null\n", i);
-    }
-  }
-
-  // fill_gradient_HSV(leds, ledCount, chsvStart, chsvEnd, FORWARD_HUES );
+  fill_gradient_HSV(leds, ledCount, chsvStart, chsvEnd, FORWARD_HUES );
+  FastLedShow();
 }
 
 void handleOff(AsyncWebServerRequest* request) {
   terminateCurrTask();
 
-  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-    if (ledStrips[i] != nullptr) {
-      ledStrips[i]->off();
-    } else {
-      Serial.printf("Led strip %d is null\n", i);
-    }
-  }
-
+  fill_solid(leds, ledCount, CRGB::Black);      
   FastLedShow();
 }
 
@@ -460,6 +383,17 @@ const CommandEntry commandTable[] = {
   {"abort", handleAbort},
 };
 
+void executeCommand(const std::string& cmd, AsyncWebServerRequest *request) {
+  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
+    if (ledStrips[i] != nullptr) {
+      Serial.printf("Executing command '%s' on strip %d\n", cmd.c_str(), i);
+      ledStrips[i]->executeCommand(cmd, request);
+    } else {
+      Serial.printf("Led strip %d is null, skipping command '%s'\n", i, cmd.c_str());
+    }
+  }
+}
+
 void update(AsyncWebServerRequest *request) {
   if (request->hasParam("command", false, false)) {
     AsyncWebParameter* command = request->getParam("command", false, false);
@@ -478,7 +412,9 @@ void update(AsyncWebServerRequest *request) {
       }
 
       Serial.println("Executing command: " + cmd);
+      executeCommand(cmd.c_str(), request);
 
+      /*
       // Search for the command in the command table
       // and call the corresponding handler function
       bool found = false;
@@ -489,12 +425,12 @@ void update(AsyncWebServerRequest *request) {
           break;
         }
       }
+      
 
       if (!found) {
         Serial.println("Unknown command: " + cmd);
-      }
+      }*/
 
-      taskCommand = cmd;
       request->send(200, "text/plain", "Processing command: " + cmd);
 
     } else {
@@ -740,38 +676,14 @@ void checkActivityTimout() {
       ((tmpActivityTimeout > 0 && (millis() - lastActivity > tmpActivityTimeout * 1000)) || 
        (activityTimeoutRequested && (millis() - lastActivity > activityTimeout * 1000)))) {
 
-    Serial.printf("tmpActivityTimeout: %d, millis - last activity: %d \n",
-    tmpActivityTimeout, (millis() - lastActivity));
+  Serial.printf("tmpActivityTimeout: %d, millis - last activity: %d \n",
+     tmpActivityTimeout, (millis() - lastActivity));
 
     Serial.println("Activity timeout reached, fading out LEDs");
     activityTimeoutRequested = false;
     tmpActivityTimeout = 0;
-
-    for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-      if (ledStrips[i] != nullptr) {
-        Serial.printf("Running fade-out effect on strip %d\n", i);
-        ledStrips[i]->runEffectFadeOut(fadeOutDuration);
-      } else {
-        Serial.printf("Led strip %d is null\n", i);
-      }
-    }
+    runEffectFadeOut(fadeOutDuration);
   }
-}
-
-void checkInternetAccess() {
-  Serial.println("Checking internet access");
-  HTTPClient http;
-  http.setTimeout(3000);
-  http.begin("http://www.google.com");
-  int httpCode = http.GET();
-
-  if (httpCode > 0) {
-    Serial.println("Internet access is available");
-  } else {
-    Serial.println("No internet access");
-  }
-
-  http.end();
 }
 
 void printHearthbeat() {
@@ -790,7 +702,6 @@ void printHearthbeat() {
         Serial.print("connected");
         IPAddress ipAddress = WiFi.localIP();
         Serial.println(" (http://" + ipAddress.toString() + ")");
-        checkInternetAccess();
       } else {
         Serial.println("disconnected");
       }
@@ -804,14 +715,7 @@ void printHearthbeat() {
 void startBootFadeIn() {
   Serial.println("Starting boot fade in");
   CRGB warmWhite = htmlColor2Crgb(bootColor);
-  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-    if (ledStrips[i] != nullptr) {
-      Serial.printf("Starting fade-in effect on strip %d\n", i);
-      ledStrips[i]->runEffectFadeIn(warmWhite, 3000);
-    } else {
-      Serial.printf("Led strip %d is null\n", i);
-    }
-  }
+  runEffectFadeIn(warmWhite, 3000);
 }
 
 // Boot procedure - phase two (after WiFi connection)
@@ -833,14 +737,6 @@ void initPins() {
   } 
 }
 
-void initOnBoardLed() {
-  #ifdef ONBOARD_LED_PIN
-    Serial.printf("Onboard LED pin defined: %d\n", ONBOARD_LED_PIN);
-    pinMode(ONBOARD_LED_PIN, OUTPUT);
-    digitalWrite(ONBOARD_LED_PIN, LOW);
-  #endif
-}
-
 void setup() {
   Serial.begin(115200);
 
@@ -853,8 +749,6 @@ void setup() {
   initHttpServer();
   initWebSockets();
   initIr();
-  initOnBoardLed();
-
   #ifdef ESP32S3
     // initDmx();
   #endif
@@ -880,7 +774,7 @@ void loop() {
 
   checkActivityTimout();
 
-  processIr();
+  // processIr();
 
   printHearthbeat();
 

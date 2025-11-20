@@ -13,14 +13,6 @@ int calculateByteValue(int value, int min, int max) {
     return (255 * (value - min)) / (max - min);
 }
 
-void lightRgbColor(CRGB color) {
-    int duration = 1000; // milliseconds
-
-    ledStrips[0]->runEffectBlend(color, duration);
-
-    lightState = true;
-}
-
 void ctrlLightOn() {
     Serial.println("Light on");
 
@@ -29,13 +21,17 @@ void ctrlLightOn() {
     int valVal = calculateByteValue(controllerConfig.value.value, controllerConfig.value.min, controllerConfig.value.max);
 
     CRGB color = CHSV(hueVal, satVal, valVal);
-    lightRgbColor(color);
+    int duration = 1000; // milliseconds
+
+    runEffectBlend(color, duration);
+
+    lightState = true;
 }
 
 void ctrlLightOff() {
     Serial.println("Light off");
     
-    ledStrips[0]->runEffectFadeOut(1000);
+    runEffectFadeOut(1000);
 
     lightState = false;
 }
@@ -142,7 +138,7 @@ void enterOptions() {
     Serial.println("Enter options");
     operationMode = MODE_MENU_HUE;
 
-    ledStrips[0]->runEffectMid2Out(CRGB::White, 1000);
+    runEffectMid2Out(CRGB::White, 1000);
     delay(1000);
 
     drawOption();
@@ -152,7 +148,7 @@ void finishOptions() {
     Serial.println("Finish options");
     operationMode = MODE_MENU_INACTIVE;
 
-    ledStrips[0]->runEffectOut2Mid(CRGB::White, 1000);
+    runEffectOut2Mid(CRGB::White, 1000);
     delay(1000);
 
     ctrlLightOn();
@@ -240,106 +236,6 @@ void ctrlMinus() {
         decrementOption();
     }
 }
-
-void ctrlRed() {
-    lightRgbColor(CRGB(123, 14, 14));
-}
-
-void ctrlGreen() {
-    lightRgbColor(CRGB(14, 123, 14));
-}
-
-void ctrlYellow() {
-    lightRgbColor(CRGB(23, 12, 2));
-}
-
-void ctrlBlue() {
-    lightRgbColor(CRGB(14, 14, 123));
-}
-
-void ctrlBtn0() {
-    lightRgbColor(CRGB(14, 14, 123));
-}
-
-void ctrlBtn1() {
-    ledStrips[0]->runEffectRunningRainbow(50, 4, 7);
-    lightState = true;
-}
-
-void ctrlBtn2() {
-    // CHSV can be converted to CRGB using the .convert() method or assignment
-    CRGB color1;
-    CRGB color2;
-    color1 = CHSV(128, 50, 50);
-    color2 = CHSV(255, 50, 50);
-    ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
-    lightState = true;
-}
-
-void ctrlBtn3() {
-    CRGB color1;
-    CRGB color2;
-    color1 = CHSV(0, 50, 50);
-    color2 = CHSV(128, 50, 50);
-    ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
-    lightState = true;
-}
-
-void ctrlBtn4() {
-    CRGB color1;
-    CRGB color2;
-    color1 = CHSV(128, 200, 200);
-    color2 = CHSV(255, 200, 200);
-    ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
-    lightState = true;
-}
-
-void ctrlBtn5() {
-    CRGB color1;
-    CRGB color2;
-    color1 = CHSV(0, 50, 50);
-    color2 = CHSV(25, 50, 50);
-    ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
-    lightState = true;
-
-}
-
-void ctrlBtn6() {
-    CRGB color1;
-    CRGB color2;
-    color1 = CHSV(140, 50, 50);
-    color2 = CHSV(225, 50, 50);
-    ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
-    lightState = true;
-}
-
-void ctrlBtn7() {
-    CRGB color1;
-    CRGB color2;
-    color1 = CHSV(205, 100, 100);
-    color2 = CHSV(180, 100, 100);
-    ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
-    lightState = true;
-}
-
-void ctrlBtn8() {
-    CRGB color1;
-    CRGB color2;
-    color1 = CHSV(145, 200, 200);
-    color2 = CHSV(320, 200, 200);
-    ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
-    lightState = true;
-}
-
-void ctrlBtn9() {
-    CRGB color1;
-    CRGB color2;
-    color1 = CHSV(128, 180, 180);
-    color2 = CHSV(255, 180, 180);
-    ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
-    lightState = true;
-}
-
 
 void handleCtrlSignal(String signal) {
     if (signal.length() > 0) {

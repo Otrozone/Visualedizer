@@ -14,32 +14,33 @@ extern volatile bool terminateTaskFlag;
 
 extern SemaphoreHandle_t taskDeletedSemaphore;
 
-struct TaskBaseParams {
-  LedStripDvc *ledStrip;
-};
-
-struct TaskStrobeParams : public TaskBaseParams {
+struct TaskStrobeParams {
+  int ledCount;
+  CRGB *leds;
   int delay1;
   int delay2;
   CRGB color;
 };
 
-struct TaskRunningRainbowParams : public TaskBaseParams {
+struct TaskRunningRainbowParams {
+  int ledCount;
+  CRGB *leds;
   int delay;
   int step;
   int delta;
 };
 
-struct TaskColorAndDurationParams : public TaskBaseParams {
-  int duration; // ms
-  CRGB color;
+// Common param structure
+struct TaskParams {
+  int ledCount;
+  CRGB *leds;
 };
 
-struct TaskRunningGradientParams : public TaskBaseParams {
-  CRGB color1;
-  CRGB color2;
-  int delay;
-  float step; // 0.0 to 1.0
+struct TaskColorAndDurationParams {
+  int ledCount;
+  CRGB *leds;
+  int duration; // ms
+  CRGB color;
 };
 
 /*void taskStrobe(void *pvParameters);
@@ -55,7 +56,7 @@ void terminateCurrTask();
 
 void taskStrobe(void *pvParameters);
 
-/*
+
 void runEffectStrobe(CRGB color, int delay1, int delay2);
 void runEffectStrobeRandom(CRGB color);
 void runEffectRunningRainbow(int delay, int step, int delta);
@@ -65,12 +66,10 @@ void runEffectFadeIn(CRGB color, int duration);
 void runEffectFadeOut(int duration);
 void runEffectMid2Out(CRGB color, int duration);
 void runEffectOut2Mid(CRGB color, int duration);
-*/
 
 void taskStrobe(void *pvParameters);
 void taskStrobeRandom(void *pvParameters);
 void taskRunningRainbow(void *pvParameters);
-void taskRunningGradient(void *pvParameters);
 void taskNoise(void *pvParameters);
 void taskBlend(void *pvParameters);
 void taskFadeIn(void *pvParameters);

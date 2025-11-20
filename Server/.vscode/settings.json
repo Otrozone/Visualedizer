@@ -3,6 +3,13 @@
         "array": "cpp",
         "string": "cpp",
         "string_view": "cpp",
-        "new": "cpp"
+        "new": "cpp",
+        "bitset": "cpp",
+        "functional": "cpp",
+        "random": "cpp",
+        "iomanip": "cpp",
+        "istream": "cpp",
+        "streambuf": "cpp",
+        "typeinfo": "cpp"
     }
 }

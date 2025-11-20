@@ -27,7 +27,6 @@
 #define NVM_ACTIVITY_TIMEOUT_ENABLED "timeoutEnabled"
 #define NVM_ACTIVITY_TIMEOUT "timeout"
 #define NVM_IR_ENABLED "irEnabled"
-#define NVM_IR_UNRECOGNIZED_AS_ONOFF "irUnrecAsOnOff"
 
 void initConf();
 void handleGetConf(AsyncWebServerRequest *request);
