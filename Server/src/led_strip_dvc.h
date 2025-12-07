@@ -6,14 +6,15 @@
 #include <Devices.h>
 
 class LedStripDvc {
-    TaskHandle_t taskHandle;
-    volatile bool terminateTaskFlag;
     const uint32_t StackSize = 2048;
 
 public:
     int ledIdx;
     uint16_t ledCount;
     CRGB *leds;
+
+    volatile bool terminateTaskFlag;
+    TaskHandle_t taskHandle;
 
     LedStripDvc(int idx, uint16_t count);
 

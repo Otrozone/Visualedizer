@@ -11,21 +11,20 @@ LedStripDvc::LedStripDvc(int idx, uint16_t count)
 }
 
 void LedStripDvc::terminateCurrTask() {
-    Serial.println("Terminating current task");
-    if (taskHandle != NULL) {
-        TaskHandle_t xCurrentTask = xTaskGetCurrentTaskHandle();
-        if (xCurrentTask == taskHandle) {
-            Serial.println("Delete task using handle...");
-            vTaskDelete(taskHandle);
-            taskHandle = NULL;
-        } else {
-            Serial.println("Delete task using flag...");
-            terminateTaskFlag = true;
-            delay(50);
-            terminateTaskFlag = false;
+    Serial.println("Requesting task termination");
+    if (taskHandle != nullptr) {
+        Serial.println("Terminating task");
+        terminateTaskFlag = true;
+
+        // Wait for task to really die
+        while (taskHandle != nullptr) {
+            vTaskDelay(5);
         }
+
+        Serial.println("Task terminated");
     }
 }
+
 
 void LedStripDvc::runEffectStrobe(CRGB color, int delay1, int delay2) {
     terminateCurrTask();
@@ -36,6 +35,8 @@ void LedStripDvc::runEffectStrobe(CRGB color, int delay1, int delay2) {
     params->delay1 = delay1;
     params->delay2 = delay2;
 
+    terminateTaskFlag = false;
+
     xTaskCreate(taskStrobe, "StrobeTask", StackSize, params, 10, &taskHandle);
 }
 
@@ -45,6 +46,8 @@ void LedStripDvc::runEffectStrobeRandom(CRGB color) {
     TaskStrobeParams *params = new TaskStrobeParams;
     params->ledStrip = this;
     params->color = color;
+
+    terminateTaskFlag = false;
 
     xTaskCreate(taskStrobeRandom, "StrobeRandomTask", StackSize, params, 10, &taskHandle);
 }
@@ -57,6 +60,8 @@ void LedStripDvc::runEffectRunningRainbow(int delay, int step, int delta) {
     params->delay = delay;
     params->step = step;
     params->delta = delta;
+
+    terminateTaskFlag = false;
 
     xTaskCreate(taskRunningRainbow, "RunningRainbowTask", StackSize, params, 10, &taskHandle);
 }
@@ -71,6 +76,8 @@ void LedStripDvc::runEffectRunningGradient(CRGB color1, CRGB color2, int delay, 
     params->color1 = color1;
     params->color2 = color2;
 
+    terminateTaskFlag = false;
+
     xTaskCreate(taskRunningGradient, "RunningGradientTask", StackSize, params, 10, &taskHandle);
 }
 
@@ -79,6 +86,8 @@ void LedStripDvc::runEffectNoise() {
 
     TaskBaseParams *params = new TaskBaseParams;
     params->ledStrip = this;
+
+    terminateTaskFlag = false;
 
     xTaskCreate(taskNoise, "NoiseTask", StackSize, params, 10, &taskHandle);
 }
@@ -91,6 +100,8 @@ void LedStripDvc::runEffectBlend(CRGB color, int duration) {
     params->duration = duration;
     params->color = color;
 
+    terminateTaskFlag = false;
+
     xTaskCreate(taskBlend, "BlendTask", StackSize, params, 10, &taskHandle);
 }
 
@@ -101,6 +112,8 @@ void LedStripDvc::runEffectFadeIn(CRGB color, int duration) {
     params->ledStrip = this;
     params->duration = duration;
     params->color = color;
+
+    terminateTaskFlag = false;
 
     xTaskCreate(taskFadeIn, "FadeInTask", StackSize, params, 10, &taskHandle);
 }
@@ -113,6 +126,8 @@ void LedStripDvc::runEffectFadeOut(int duration) {
     params->duration = duration;
     params->color = CRGB::Black;
 
+    terminateTaskFlag = false;
+
     xTaskCreate(taskFadeOut, "FadeOutTask", StackSize, params, 10, &taskHandle);
 }
 
@@ -124,6 +139,8 @@ void LedStripDvc::runEffectMid2Out(CRGB color, int duration) {
     params->duration = duration;
     params->color = color;
 
+    terminateTaskFlag = false;
+
     xTaskCreate(taskMid2Out, "CurrentLedTask", StackSize, params, 10, &taskHandle);
 }
 
@@ -134,6 +151,8 @@ void LedStripDvc::runEffectOut2Mid(CRGB color, int duration) {
     params->ledStrip = this;
     params->duration = duration;
     params->color = color;
+
+    terminateTaskFlag = false;
 
     xTaskCreate(taskOut2Mid, "CurrentLedTask", StackSize, params, 10, &taskHandle);
 }
