@@ -22,9 +22,9 @@ void initLeds() {
   */
 
   // This is a workaround for the FastLED library limitation with multiple strips and dynamic pin assignments.
-  ledStrips[0] = new LedStripDvc(0, DVC_NUM_LEDS_LIST[0]);
+  ledStrips[0] = new LedStripDvc(0, ledCount /*DVC_NUM_LEDS_LIST[0]*/ );
   leds = ledStrips[0]->leds;
-  ledCount = ledStrips[0]->ledCount;
+  // ledCount = ledStrips[0]->ledCount;
   FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[0], DVC_LED_COLOR_ORDER>(ledStrips[0]->leds, ledStrips[0]->ledCount);
 
   #if DVC_STRIP_COUNT > 1

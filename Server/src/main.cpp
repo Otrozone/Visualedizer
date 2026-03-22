@@ -622,6 +622,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 }
 
+int getWifiSignalStrength() {
+  long rssi = WiFi.RSSI();
+  
+  if (rssi >= -50)      return 3;
+  else if (rssi >= -67) return 2;
+  else                  return 1;
+}
+
 void confWifi() {
   if (deviceName != "Unnamed") {
     String hostname = deviceName;

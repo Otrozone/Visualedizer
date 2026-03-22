@@ -72,6 +72,9 @@ void handleGetConf(AsyncWebServerRequest *request) {
   jsonDoc[NVM_IR_ENABLED] = irEnabled;
   jsonDoc[NVM_IR_UNRECOGNIZED_AS_ONOFF] = irUnrecognizedAsOnOff;
 
+  jsonDoc[WIFI_SIGNAL_STRENGTH] = getWifiSignalStrength();
+
+
   String jsonData;
   serializeJson(jsonDoc, jsonData);
 

@@ -267,20 +267,32 @@ void ctrlBtn1() {
 }
 
 void ctrlBtn2() {
-    // CHSV can be converted to CRGB using the .convert() method or assignment
+    CHSV chsvStart;
+    chsvStart.hue = 360;
+    chsvStart.value = 50;
+    chsvStart.saturation = 255;
+
+    CHSV chsvEnd;
+    chsvEnd.hue = 285;
+    chsvEnd.value = 50;
+    chsvEnd.saturation = 255;
+
+    ledStrips[0]->fillGradientHSV(chsvStart, chsvEnd);
+    lightState = true;
+
     CRGB color1;
     CRGB color2;
-    color1 = CHSV(128, 50, 50);
-    color2 = CHSV(255, 50, 50);
+    color1 = CHSV(360, 255, 50);
+    color2 = CHSV(285, 255, 50);
     ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
-    lightState = true;
+    lightState = true;    
 }
 
 void ctrlBtn3() {
     CRGB color1;
     CRGB color2;
-    color1 = CHSV(0, 50, 50);
-    color2 = CHSV(128, 50, 50);
+    color1 = CHSV(0, 255, 50);
+    color2 = CHSV(128, 255, 50);
     ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
     lightState = true;
 }
@@ -297,8 +309,8 @@ void ctrlBtn4() {
 void ctrlBtn5() {
     CRGB color1;
     CRGB color2;
-    color1 = CHSV(0, 50, 50);
-    color2 = CHSV(25, 50, 50);
+    color1 = CHSV(0, 255, 50);
+    color2 = CHSV(25, 255, 50);
     ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
     lightState = true;
 
@@ -307,8 +319,8 @@ void ctrlBtn5() {
 void ctrlBtn6() {
     CRGB color1;
     CRGB color2;
-    color1 = CHSV(140, 50, 50);
-    color2 = CHSV(225, 50, 50);
+    color1 = CHSV(140, 255, 50);
+    color2 = CHSV(225, 255, 50);
     ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
     lightState = true;
 }
@@ -316,8 +328,8 @@ void ctrlBtn6() {
 void ctrlBtn7() {
     CRGB color1;
     CRGB color2;
-    color1 = CHSV(205, 100, 100);
-    color2 = CHSV(180, 100, 100);
+    color1 = CHSV(205, 255, 100);
+    color2 = CHSV(180, 255, 100);
     ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
     lightState = true;
 }
@@ -325,8 +337,8 @@ void ctrlBtn7() {
 void ctrlBtn8() {
     CRGB color1;
     CRGB color2;
-    color1 = CHSV(145, 200, 200);
-    color2 = CHSV(320, 200, 200);
+    color1 = CHSV(145, 255, 200);
+    color2 = CHSV(320, 255, 200);
     ledStrips[0]->runEffectRunningGradient(color1, color2, 50, 0.03f);
     lightState = true;
 }
@@ -340,6 +352,9 @@ void ctrlBtn9() {
     lightState = true;
 }
 
+void ctrlMute() {
+    lightRgbColor(CRGB(5, 1, 0));
+}
 
 void handleCtrlSignal(String signal) {
     if (signal.length() > 0) {

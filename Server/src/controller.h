@@ -48,6 +48,7 @@ void ctrlOk();
 void ctrlMenu();
 void ctrlPlus();
 void ctrlMinus();
+void ctrlMute();
 
 void ctrlRed();
 void ctrlGreen();

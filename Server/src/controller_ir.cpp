@@ -58,6 +58,7 @@ const SignalCtrlEntry signalTable[] = {
   {IR_BTN_LEFT, ctrlMinus},
   {IR_BTN_OK, ctrlOk},
   {IR_BTN_MENU, ctrlMenu},
+  {IR_BTN_MUTE, ctrlMute},
 
   {IR_BTN_RED, ctrlRed},
   {IR_BTN_GREEN, ctrlGreen},
@@ -74,7 +75,6 @@ const SignalCtrlEntry signalTable[] = {
   {IR_BTN_7, ctrlBtn7},
   {IR_BTN_8, ctrlBtn8},
   {IR_BTN_9, ctrlBtn9}
- 
 };
 
 

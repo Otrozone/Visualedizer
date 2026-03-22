@@ -28,6 +28,7 @@
 #define NVM_ACTIVITY_TIMEOUT "timeout"
 #define NVM_IR_ENABLED "irEnabled"
 #define NVM_IR_UNRECOGNIZED_AS_ONOFF "irUnrecAsOnOff"
+#define WIFI_SIGNAL_STRENGTH "wifiSignalStrength"
 
 void initConf();
 void handleGetConf(AsyncWebServerRequest *request);

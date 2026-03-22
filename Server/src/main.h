@@ -51,4 +51,6 @@ extern bool irEnabled;
 
 float normalize(float x, float min, float max);
 
+int getWifiSignalStrength();
+
 #endif
