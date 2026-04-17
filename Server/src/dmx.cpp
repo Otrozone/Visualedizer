@@ -54,9 +54,16 @@ WiFiUDP udp;
       // Serial.printf("Universe index: %u\n", universeIdx);
 
       if (universeIdx == DVC_DMX_UNIVERSE) {
-        for (int i = 0; i < ledCount; i++) {
-          const int dmxChannelIdx = round(normalize(i, 0, ledCount - 1) * DMX_MAX_LED_COUNT_PER_UNIVERSE);
-          leds[i] = CRGB(packet.property_values[dmxChannelIdx * 3 + 1], packet.property_values[dmxChannelIdx * 3 + 2], packet.property_values[dmxChannelIdx * 3 + 3]);
+        for (int stripIdx = 0; stripIdx < DVC_STRIP_COUNT; stripIdx++) {
+          LedStripDvc* dvc = ledStrips[stripIdx];
+          if (dvc == nullptr) {
+            continue;
+          }
+
+          for (int i = 0; i < dvc->ledCount; i++) {
+            const int dmxChannelIdx = round(normalize(i, 0, dvc->ledCount - 1) * DMX_MAX_LED_COUNT_PER_UNIVERSE);
+            dvc->leds[i] = CRGB(packet.property_values[dmxChannelIdx * 3 + 1], packet.property_values[dmxChannelIdx * 3 + 2], packet.property_values[dmxChannelIdx * 3 + 3]);
+          }
         }
 
         // Serial.printf("Count: %d", packet.property_value_count);

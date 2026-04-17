@@ -9,10 +9,6 @@
 void initConf() {
   preferences.begin(NVM_NAMESPACE, false);
 
-  if (DVC_STRIP_COUNT == 1) {
-    ledCount = preferences.getUInt(NVM_LED_COUNT, DVC_NUM_LEDS_LIST[0]);
-  }
-
   wifiMode = static_cast<DeviceWifiModeType>(preferences.getUInt(NVM_WIFI_MODE));
   wifiSsid = preferences.getString(NVM_WIFI_SSID, WIFI_SSID);
   wifiPassword = preferences.getString(NVM_WIFI_PASSWORD, WIFI_PASSWORD);
@@ -46,7 +42,11 @@ void handleGetConf(AsyncWebServerRequest *request) {
   // Returns current configuration (not necessarily from NVM)
   JsonDocument jsonDoc;
 
-  jsonDoc[NVM_LED_COUNT] = ledCount;
+  JsonArray ledCounts = jsonDoc["ledCounts"].to<JsonArray>();
+  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
+    ledCounts.add(DVC_NUM_LEDS_LIST[i]);
+  }
+  jsonDoc[NVM_LED_COUNT] = DVC_NUM_LEDS_LIST[0];
 
   jsonDoc[NVM_WIFI_MODE] = static_cast<int>(wifiMode);
   jsonDoc[NVM_WIFI_SSID] = wifiSsid;
@@ -96,7 +96,6 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
     return;
   }
 
-  const int paramLedCount = jsonDoc[NVM_LED_COUNT].as<uint>();
   const int paramWifiMode = jsonDoc[NVM_WIFI_MODE].as<uint>();
   const char* paramWifiSsid = jsonDoc[NVM_WIFI_SSID].as<const char*>();
   const char* paramWifiPassword = jsonDoc[NVM_WIFI_PASSWORD].as<const char*>();
@@ -124,7 +123,6 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   const bool paramIrUnrecognizedAsOnOff = jsonDoc[NVM_IR_UNRECOGNIZED_AS_ONOFF].as<bool>();
 
   preferences.begin(NVM_NAMESPACE, false);
-  preferences.putUInt(NVM_LED_COUNT, paramLedCount);
 
   preferences.putUInt(NVM_WIFI_MODE, static_cast<int>(paramWifiMode));
   preferences.putString(NVM_WIFI_SSID, paramWifiSsid);

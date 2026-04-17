@@ -1,30 +1,11 @@
 #include "led.h"
 // #include "main.h"
 
-CRGB* leds = nullptr;
-
-uint16_t ledCount = 0;
-
 LedStripDvc* ledStrips[DVC_STRIP_COUNT] = {nullptr};
 
 void initLeds() {
-  // FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN, DVC_LED_COLOR_ORDER>(leds, DVC_NUM_LEDS);
-  
-  /*
-  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-    ledStrips[i] = new LedStripDvc(String("Strip_") + String(i + 1), DVC_NUM_LEDS_LIST[i]);
-    if (i == 0) {
-      leds = ledStrips[i]->leds;
-      ledCount = ledStrips[i]->ledCount;
-    }
-    // FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[i], DVC_LED_COLOR_ORDER>(ledStrips[i]->leds, ledStrips[i]->ledCount);
-  }
-  */
-
   // This is a workaround for the FastLED library limitation with multiple strips and dynamic pin assignments.
-  ledStrips[0] = new LedStripDvc(0, ledCount /*DVC_NUM_LEDS_LIST[0]*/ );
-  leds = ledStrips[0]->leds;
-  // ledCount = ledStrips[0]->ledCount;
+  ledStrips[0] = new LedStripDvc(0, DVC_NUM_LEDS_LIST[0]);
   FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[0], DVC_LED_COLOR_ORDER>(ledStrips[0]->leds, ledStrips[0]->ledCount);
 
   #if DVC_STRIP_COUNT > 1
@@ -46,38 +27,30 @@ void initLeds() {
   ledStrips[4] = new LedStripDvc(4, DVC_NUM_LEDS_LIST[4]);
   FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[4], DVC_LED_COLOR_ORDER>(ledStrips[4]->leds, ledStrips[4]->ledCount);
   #endif
-
-  // ledCount = DVC_NUM_LEDS;
-  // leds = new CRGB[ledCount];
-  // FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN, DVC_LED_COLOR_ORDER>(leds, ledCount);
-  
 }
 
-void circularShift() {
-  CRGB tempArray[ledCount];
-
-  for (int i = 0; i < ledCount; i++) {
-    tempArray[(i + DVC_OFFSET) % ledCount] = leds[i];
+static void circularShift(LedStripDvc* dvc) {
+  if (dvc == nullptr || dvc->ledCount == 0) {
+    return;
   }
 
-  for (int i = 0; i < ledCount; i++) {
-    leds[i] = tempArray[i];
+  CRGB tempArray[dvc->ledCount];
+
+  for (int i = 0; i < dvc->ledCount; i++) {
+    tempArray[(i + DVC_OFFSET) % dvc->ledCount] = dvc->leds[i];
+  }
+
+  for (int i = 0; i < dvc->ledCount; i++) {
+    dvc->leds[i] = tempArray[i];
   }
 }
 
 void FastLedShow() {
   if (DVC_OFFSET > 0) {
-    circularShift();
+    for (int i = 0; i < DVC_STRIP_COUNT; i++) {
+      circularShift(ledStrips[i]);
+    }
   }
 
   FastLED.show();
 }
-/*
-void serializeData(const LedStripConfig &data, String &output) {
-  StaticJsonDocument<128> doc;
-  doc["ledName"] = data.;
-  doc["ledType"] = data.humidity;
-  doc["ledCount"] = data.humidity;
-  serializeJson(doc, output);
-}
-*/

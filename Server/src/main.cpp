@@ -22,9 +22,6 @@
 
 Preferences preferences;
 
-// uint16_t ledCount = 0;
-// CRGB* leds = nullptr;
-
 AsyncWebServer server(80);
 
 WebSocketsServer webSocket = WebSocketsServer(81);
@@ -66,6 +63,17 @@ bool irEnabled = false;
 
 static unsigned long lastReconnectAttempt = 0;
 
+static int getTotalLedCount() {
+  int totalLedCount = 0;
+  forEachLedStrip([&](LedStripDvc& dvc) {
+    totalLedCount += dvc.ledCount;
+  });
+
+  return totalLedCount;
+}
+
+void handleOff(AsyncWebServerRequest* request);
+
 void updateActivity() {
   Serial.printf("Updating last activity (%d)\n", lastActivity);
   lastActivity = millis();
@@ -74,33 +82,6 @@ void updateActivity() {
     activityTimeoutRequested = true;
   }
 }
-
-/*
-void initLeds() {
-  leds = new CRGB[ledCount];
-
-  FastLED.addLeds<LED_TYPE, DATA_PIN, LED_COLOR_ORDER>(leds, ledCount);
-}
-
-void circularShift() {
-  CRGB tempArray[ledCount];
-
-  for (int i = 0; i < ledCount; i++) {
-    tempArray[(i + OFFSET) % ledCount] = leds[i];
-  }
-
-  for (int i = 0; i < ledCount; i++) {
-    leds[i] = tempArray[i];
-  }
-}
-
-void FastLedShow() {
-  if (OFFSET > 0) {
-    circularShift();
-  }
-
-  FastLED.show();
-}*/
 
 void processMessage(String message) {
   Serial.println("WebSockets message: " + message);
@@ -120,12 +101,13 @@ void processMessage(String message) {
 
       if (cmd.equals("off")) {
         terminateCurrTask();
-        fill_solid(leds, ledCount, CRGB::Black);
-        FastLedShow();
+        handleOff(nullptr);
       } else if (cmd.equals("solid-color")) {
         terminateCurrTask();
         CRGB color = htmlColor2Crgb(getQueryParameterValue(message, "color"));
-        fill_solid(leds, ledCount, color);
+        forEachLedStrip([&](LedStripDvc& dvc) {
+          fill_solid(dvc.leds, dvc.ledCount, color);
+        });
         FastLedShow();
       }
     }
@@ -181,17 +163,19 @@ void handleWol(AsyncWebServerRequest *request) {
 }
 
 void updateSection(int sectionCount, int sectionIdx, CRGB color) {
-  fill_solid(leds, ledCount, CRGB::Black);
+  forEachLedStrip([&](LedStripDvc& dvc) {
+    fill_solid(dvc.leds, dvc.ledCount, CRGB::Black);
 
-  int sectionLength = ledCount / sectionCount;
-  int sectionToLight = sectionIdx;
+    int sectionLength = dvc.ledCount / sectionCount;
+    int sectionToLight = sectionIdx;
 
-  int startIndex = sectionToLight * sectionLength;
-  int endIndex = startIndex + sectionLength;
+    int startIndex = sectionToLight * sectionLength;
+    int endIndex = startIndex + sectionLength;
 
-  for (int i = startIndex; i < endIndex; i++) {
-    leds[i] = color;
-  }
+    for (int i = startIndex; i < endIndex; i++) {
+      dvc.leds[i] = color;
+    }
+  });
 }
 
 void startTaskRunningRainbow(AsyncWebServerRequest *request) {
@@ -261,8 +245,6 @@ void startTaskStrobeRandom(AsyncWebServerRequest *request) {
 }*/
 
 void startTaskSolidColor(AsyncWebServerRequest *request) {
-  Serial.printf("Solid-color - Led count: %d\n", ledStrips[0]->ledCount);
-
   if (request->hasParam("color")) {
     // RGB
     // terminateCurrTask();
@@ -276,6 +258,8 @@ void startTaskSolidColor(AsyncWebServerRequest *request) {
       
       Serial.println("Solid color via ledStrips object.");
       for (int i = 0; i < DVC_STRIP_COUNT; i++) {
+        Serial.printf("Solid-color - Led strip %d count: %d\n", i, ledStrips[i]->ledCount);
+
         if (ledStrips[i] != nullptr) {
           Serial.printf("Filling strip idx %d with color (R:%d, G:%d, B:%d)\n", ledStrips[i]->ledIdx, color.r, color.g, color.b);
           ledStrips[i]->fillSolid(color);
@@ -284,8 +268,6 @@ void startTaskSolidColor(AsyncWebServerRequest *request) {
         }
       }
       
-      // Serial.println("Solid color command RGB");
-      // fill_solid(leds, ledCount, color);
     }
 
   } else if (request->hasParam("hue") && request->hasParam("saturation") && request->hasParam("value")) {
@@ -420,8 +402,6 @@ void startTaskGradient(AsyncWebServerRequest *request) {
       Serial.printf("Led strip %d is null\n", i);
     }
   }
-
-  // fill_gradient_HSV(leds, ledCount, chsvStart, chsvEnd, FORWARD_HUES );
 }
 
 void handleOff(AsyncWebServerRequest* request) {
@@ -602,10 +582,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 
   if (type == WStype_BIN) {
-    if (length == ledCount * 3) {
-      for (int i = 0; i < ledCount; i++) {
-        leds[i] = CRGB(payload[i * 3], payload[i * 3 + 1], payload[i * 3 + 2]);
-      }
+    const int totalLedCount = getTotalLedCount();
+    if (length == totalLedCount * 3) {
+      int payloadOffset = 0;
+      forEachLedStrip([&](LedStripDvc& dvc) {
+        for (int i = 0; i < dvc.ledCount; i++) {
+          dvc.leds[i] = CRGB(payload[payloadOffset], payload[payloadOffset + 1], payload[payloadOffset + 2]);
+          payloadOffset += 3;
+        }
+      });
       FastLedShow();
     } else {
       Serial.println("Incorrect data length");
@@ -617,7 +602,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 
   if (type == WStype_DISCONNECTED) {
-    fill_solid(leds, ledCount, CRGB(0, 0, 0));
+    forEachLedStrip([](LedStripDvc& dvc) {
+      fill_solid(dvc.leds, dvc.ledCount, CRGB(0, 0, 0));
+    });
     FastLedShow();
   }
 }
@@ -730,15 +717,19 @@ void initWebSockets() {
 
 void lightOn() {
   Serial.println("Turning light on");
-  fill_solid(leds, ledCount, CRGB::White);
+  forEachLedStrip([](LedStripDvc& dvc) {
+    fill_solid(dvc.leds, dvc.ledCount, CRGB::White);
+  });
   FastLedShow();
 }
 
 uint8_t getLedMaxBrightness() {
   uint8_t maxBrightness = 0;
-  for (int i = 0; i < ledCount; i++) {
-    maxBrightness = max(maxBrightness, max(leds[i].r, max(leds[i].g, leds[i].b)));
-  }
+  forEachLedStrip([&](LedStripDvc& dvc) {
+    for (int i = 0; i < dvc.ledCount; i++) {
+      maxBrightness = max(maxBrightness, max(dvc.leds[i].r, max(dvc.leds[i].g, dvc.leds[i].b)));
+    }
+  });
 
   return maxBrightness;
 }
