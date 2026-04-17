@@ -1,5 +1,6 @@
 #include "main.h"
 #include "controller.h"
+#include "common.h"
 #include "effects.h"
 
 unsigned long menuTimeout = 0;

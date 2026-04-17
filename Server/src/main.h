@@ -2,12 +2,11 @@
 #define MAIN_H
 
 #include <Arduino.h>
-#include <Preferences.h>
-#include <FastLED.h>
 #include <ESPAsyncWebServer.h>
+#include <FastLED.h>
+#include <Preferences.h>
 
 #include "led.h"
-#include "common.h"
 #include "devices.h"
 
 enum DeviceWifiModeType {
@@ -37,8 +36,12 @@ extern String bootColor;
 extern bool bootWol;
 extern String bootWolMac;
 
+extern unsigned long lastActivity;
 extern bool activityTimeoutEnabled;
 extern unsigned long activityTimeout;
+extern bool activityTimeoutRequested;
+extern unsigned long tmpActivityTimeout;
+extern int fadeOutDuration;
 
 extern bool webSockEnabled;
 extern bool dmxEnabled;

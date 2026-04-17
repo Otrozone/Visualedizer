@@ -1,5 +1,6 @@
 #include "led_strip_dvc.h"
 #include "effects.h"
+#include "led.h"
 
 // Implementation of LedStripDvc methods
 
@@ -161,27 +162,21 @@ void LedStripDvc::fillSolid(CRGB color) {
     terminateCurrTask();
 
     fill_solid(this->leds, this->ledCount, color);
-
-    // FastLED[this->ledIdx].showLeds();
-    FastLED.show();
+    FastLedShow();
 }
 
 void LedStripDvc::fillGradientHSV(CHSV chsvStart, CHSV chsvEnd) {
     terminateCurrTask();
 
     fill_gradient_HSV(this->leds, this->ledCount, chsvStart, chsvEnd, FORWARD_HUES);
-
-    // FastLED[this->ledIdx].showLeds();
-    FastLED.show();
+    FastLedShow();
 }
 
 void LedStripDvc::off() {
     terminateCurrTask();
 
     fill_solid(this->leds, this->ledCount, CRGB::Black);
-
-    // FastLED[this->ledIdx].showLeds();
-    FastLED.show();
+    FastLedShow();
 }
 
 LedStripDvc::~LedStripDvc() {

@@ -20,7 +20,7 @@
   // #define DVC_NUM_LEDS 30 // (93 + 44) * 2
 
   constexpr int DVC_NUM_LEDS_LIST[] = {30};
-  constexpr uint16_t DVC_DATA_PIN_LIST[] = {D2};
+  constexpr uint16_t DVC_DATA_PIN_LIST[] = {3};
   // constexpr int DVC_NUM_LEDS_LIST[] = {274};
   // constexpr uint16_t DVC_DATA_PIN_LIST[] = {3};
   #define DVC_STRIP_COUNT 1 //sizeof(DVC_NUM_LEDS_LIST) / sizeof(DVC_NUM_LEDS_LIST[0]);

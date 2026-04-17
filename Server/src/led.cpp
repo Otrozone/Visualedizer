@@ -1,9 +1,23 @@
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
 #include "led.h"
-// #include "main.h"
+
+namespace {
+SemaphoreHandle_t renderMutex = nullptr;
+}
 
 LedStripDvc* ledStrips[DVC_STRIP_COUNT] = {nullptr};
 
+void initLedRenderer() {
+  if (renderMutex == nullptr) {
+    renderMutex = xSemaphoreCreateMutex();
+  }
+}
+
 void initLeds() {
+  initLedRenderer();
+
   // This is a workaround for the FastLED library limitation with multiple strips and dynamic pin assignments.
   ledStrips[0] = new LedStripDvc(0, DVC_NUM_LEDS_LIST[0]);
   FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[0], DVC_LED_COLOR_ORDER>(ledStrips[0]->leds, ledStrips[0]->ledCount);
@@ -46,6 +60,12 @@ static void circularShift(LedStripDvc* dvc) {
 }
 
 void FastLedShow() {
+  initLedRenderer();
+
+  if (renderMutex != nullptr) {
+    xSemaphoreTake(renderMutex, portMAX_DELAY);
+  }
+
   if (DVC_OFFSET > 0) {
     for (int i = 0; i < DVC_STRIP_COUNT; i++) {
       circularShift(ledStrips[i]);
@@ -53,4 +73,8 @@ void FastLedShow() {
   }
 
   FastLED.show();
+
+  if (renderMutex != nullptr) {
+    xSemaphoreGive(renderMutex);
+  }
 }

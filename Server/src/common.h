@@ -1,7 +1,8 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include "main.h"
+#include <Arduino.h>
+#include <FastLED.h>
 
 String urlDecode(const String& input);
 String getQueryParameterValue(String url, String parameterName);

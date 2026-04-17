@@ -1,8 +1,6 @@
 #ifndef LED_H
 #define LED_H
 
-// #include "main.h"
-// #include <FastLED.h>
 #include "devices.h"
 #include "led_strip_dvc.h"
 
@@ -19,6 +17,7 @@ inline void forEachLedStrip(Func&& fn) {
 }
 
 void initLeds();
+void initLedRenderer();
 void FastLedShow();
 
 #endif

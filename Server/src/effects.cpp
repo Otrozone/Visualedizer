@@ -1,26 +1,5 @@
 #include "effects.h"
-
-volatile bool terminateTaskFlag = false;
-
-TaskHandle_t taskHandle;
-const uint32_t StackSize = 2048; // What is the good value for my operations?
-
-void terminateCurrTask() {
-  Serial.println("Terminating current task");
-  if (taskHandle != NULL) {
-    TaskHandle_t xCurrentTask = xTaskGetCurrentTaskHandle();
-    if (xCurrentTask == taskHandle) {
-      Serial.println("Delete task using handle...");
-      vTaskDelete(taskHandle);
-      taskHandle = NULL;
-    } else {
-      Serial.println("Delete task using flag...");
-      terminateTaskFlag = true;
-      delay(50);
-      terminateTaskFlag = false;
-    }
-  }
-}
+#include "led.h"
 
 void taskStrobe(void *pvParameters) {
   TaskStrobeParams *params = static_cast<TaskStrobeParams *>(pvParameters);
@@ -35,12 +14,12 @@ void taskStrobe(void *pvParameters) {
     }
 
     fill_solid(leds, ledCount, params->color);
-    FastLED.show();
+    FastLedShow();
     Serial.println("Delay1: " + String(params->delay1) + " -> " + String(pdMS_TO_TICKS(params->delay1)));
     vTaskDelay(pdMS_TO_TICKS(params->delay1));
 
     fill_solid(leds, ledCount, CRGB::Black);
-    FastLED.show();
+    FastLedShow();
     Serial.println("Delay2: " + String(params->delay2) + " -> " + String(pdMS_TO_TICKS(params->delay2)));
     vTaskDelay(pdMS_TO_TICKS(params->delay2));
   }
@@ -66,12 +45,12 @@ void taskStrobeRandom(void *pvParameters) {
     }
 
     fill_solid(leds, ledCount, params->color);
-    FastLED.show();
+    FastLedShow();
     int delay1 = random(1, 500);
     vTaskDelay(pdMS_TO_TICKS(delay1));
 
     fill_solid(leds, ledCount, CRGB::Black);
-    FastLED.show();
+    FastLedShow();
     int delay2 = random(1, 500);
     vTaskDelay(pdMS_TO_TICKS(delay2));
   }
@@ -98,7 +77,7 @@ void taskRunningRainbow(void *pvParameters) {
     }
 
     fill_rainbow(leds, ledCount, hue, params->delta);
-    FastLED.show();
+    FastLedShow();
     hue += params->step;
 
     vTaskDelay(pdMS_TO_TICKS(params->delay));
@@ -134,10 +113,7 @@ void taskRunningGradient(void *pvParameters) {
     if (shift > 1.0f)
       shift -= 1.0f; // wrap around
 
-    CRGB startColor = blend(params->color1, params->color2, (uint8_t)(shift * 255));
-    CRGB endColor = blend(params->color2, params->color1, (uint8_t)(shift * 255));
-
-    FastLED.show();
+    FastLedShow();
     vTaskDelay(pdMS_TO_TICKS(params->delay));
   }
 
@@ -195,13 +171,14 @@ void taskBlend(void *pvParameters) {
       uint8_t blendAmount = round(i * (255.0 / steps));
       leds[j] = blend(currentColor, targetColor, blendAmount);
     }
-    FastLED.show();
+    FastLedShow();
     vTaskDelay(pdMS_TO_TICKS(delay));
   }
 
   fill_solid(leds, ledCount, params->color);
-  FastLED.show();
+  FastLedShow();
 
+  delete params;
   dvc->taskHandle = nullptr;
   dvc->terminateTaskFlag = false;
 
@@ -227,14 +204,15 @@ void taskFadeIn(void *pvParameters) {
       leds[j] = params->color;
       leds[j].fadeLightBy(255 - round(i * ((float)255 / steps)));
     }
-    FastLED.show();
+    FastLedShow();
 
     vTaskDelay(pdMS_TO_TICKS(delay));
   }
 
   fill_solid(leds, ledCount, params->color);
-  FastLED.show();
+  FastLedShow();
 
+  delete params;
   dvc->taskHandle = nullptr;
   dvc->terminateTaskFlag = false;
 
@@ -271,12 +249,12 @@ void taskFadeOut(void *pvParameters) {
       leds[j].nscale8_video(brightness);
     }
 
-    FastLED.show();
+    FastLedShow();
     vTaskDelay(pdMS_TO_TICKS(delay));
   }
 
   fill_solid(leds, ledCount, CRGB::Black);
-  FastLED.show();
+  FastLedShow();
 
   delete params;
   dvc->taskHandle = nullptr;
@@ -306,12 +284,12 @@ void taskMid2Out(void *pvParameters) {
         leds[center - j] = params->color;
       }
     }
-    FastLED.show();
+    FastLedShow();
     vTaskDelay(pdMS_TO_TICKS(delay));
   }
 
   fill_solid(leds, ledCount, params->color);
-  FastLED.show();
+  FastLedShow();
 
   delete params;
   dvc->taskHandle = nullptr;
@@ -351,12 +329,12 @@ void taskOut2Mid(void *pvParameters) {
         }
       }
     }
-    FastLED.show();
+    FastLedShow();
     vTaskDelay(pdMS_TO_TICKS(delay));
   }
 
   fill_solid(leds, ledCount, CRGB::Black);
-  FastLED.show();
+  FastLedShow();
 
   delete params;
   dvc->taskHandle = nullptr;
