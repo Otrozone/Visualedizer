@@ -50,9 +50,9 @@ void handleGetConf(AsyncWebServerRequest *request) {
 
   jsonDoc[NVM_WIFI_MODE] = static_cast<int>(wifiMode);
   jsonDoc[NVM_WIFI_SSID] = wifiSsid;
-  jsonDoc[NVM_WIFI_PASSWORD] = wifiPassword;
+  jsonDoc[NVM_WIFI_PASSWORD_CONFIGURED] = wifiPassword.length() > 0;
   jsonDoc[NVM_WIFI_AP_SSID] = wifiApSsid;
-  jsonDoc[NVM_WIFI_AP_PASSWORD] = wifiApPassword;
+  jsonDoc[NVM_WIFI_AP_PASSWORD_CONFIGURED] = wifiApPassword.length() > 0;
 
   jsonDoc[NVM_BOOT_FADE_IN] = bootFadeIn;
   jsonDoc[NVM_BOOT_COLOR] = bootColor;
@@ -98,9 +98,7 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
 
   const int paramWifiMode = jsonDoc[NVM_WIFI_MODE].as<uint>();
   const char* paramWifiSsid = jsonDoc[NVM_WIFI_SSID].as<const char*>();
-  const char* paramWifiPassword = jsonDoc[NVM_WIFI_PASSWORD].as<const char*>();
   const char* paramWifiApSsid = jsonDoc[NVM_WIFI_AP_SSID].as<const char*>();
-  const char* paramWifiApPassword = jsonDoc[NVM_WIFI_AP_PASSWORD].as<const char*>();
 
   const bool paramBootFadeIn = jsonDoc[NVM_BOOT_FADE_IN].as<bool>();
   const char* paramBootColor = jsonDoc[NVM_BOOT_COLOR].as<const char*>();
@@ -127,8 +125,20 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   preferences.putUInt(NVM_WIFI_MODE, static_cast<int>(paramWifiMode));
   preferences.putString(NVM_WIFI_SSID, paramWifiSsid);
   preferences.putString(NVM_WIFI_AP_SSID, paramWifiApSsid);
-  preferences.putString(NVM_WIFI_AP_PASSWORD, paramWifiApPassword);
-  preferences.putString(NVM_WIFI_PASSWORD, paramWifiPassword);
+
+  if (jsonDoc[NVM_WIFI_PASSWORD].is<const char*>()) {
+    const char* paramWifiPassword = jsonDoc[NVM_WIFI_PASSWORD].as<const char*>();
+    if (paramWifiPassword != nullptr && strlen(paramWifiPassword) > 0) {
+      preferences.putString(NVM_WIFI_PASSWORD, paramWifiPassword);
+    }
+  }
+
+  if (jsonDoc[NVM_WIFI_AP_PASSWORD].is<const char*>()) {
+    const char* paramWifiApPassword = jsonDoc[NVM_WIFI_AP_PASSWORD].as<const char*>();
+    if (paramWifiApPassword != nullptr && strlen(paramWifiApPassword) > 0) {
+      preferences.putString(NVM_WIFI_AP_PASSWORD, paramWifiApPassword);
+    }
+  }
 
   preferences.putBool(NVM_BOOT_FADE_IN, paramBootFadeIn);
   preferences.putString(NVM_BOOT_COLOR, paramBootColor);

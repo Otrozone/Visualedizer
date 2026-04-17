@@ -355,9 +355,12 @@
                     <input type="text" id="wifiSsid" class="form-control" />
                     <label class="form-label" for="wifiSsid">WiFi SSID</label>
                   </div>
-                  <div class="form-outline mb-4" data-mdb-input-init>
+                  <div class="form-outline mb-2" data-mdb-input-init>
                     <input type="password" id="wifiPassword" class="form-control" />
                     <label class="form-label" for="wifiPassword">WiFi password</label>
+                  </div>
+                  <div class="form-text mb-4" id="wifiPasswordHint">
+                    Leave empty to keep the stored WiFi password.
                   </div>
 
                   <div class="form-outline mb-2" data-mdb-input-init>
@@ -367,6 +370,9 @@
                   <div class="form-outline" data-mdb-input-init>
                     <input type="password" id="wifiApPassword" class="form-control" />
                     <label class="form-label" for="wifiApPassword">WiFi AP password</label>
+                  </div>
+                  <div class="form-text" id="wifiApPasswordHint">
+                    Leave empty to keep the stored AP password.
                   </div>
                 </li>
 
@@ -552,6 +558,7 @@
     const contents = document.querySelectorAll('.content');
     const chbMain = document.getElementById('chbMain');
     const chbUseWebSockets = document.getElementById('chbUseWebSockets');
+    const passwordFieldIds = ['wifiPassword', 'wifiApPassword'];
 
     document.addEventListener("DOMContentLoaded", () => {
       getConf().then(config => {
@@ -601,6 +608,7 @@
     const confItem = document.querySelector('[data-content-id="conf"]');
     confItem.addEventListener('click', () => {
       getConf().then(config => {
+        updatePasswordHints(config);
         Object.keys(config).forEach((key) => {
           const val = config[key];
           const element = document.getElementById(key);
@@ -618,6 +626,15 @@
           var event = new Event('input', { bubbles: true });
           element.dispatchEvent(event);
         });
+
+        passwordFieldIds.forEach((fieldId) => {
+          const element = document.getElementById(fieldId);
+          if (element) {
+            element.value = '';
+            var event = new Event('input', { bubbles: true });
+            element.dispatchEvent(event);
+          }
+        });
       });
     });
 
@@ -626,6 +643,10 @@
       const confObj = {};
       const confInputs = document.querySelectorAll("#conf input, #conf select");
       confInputs.forEach((input) => {
+        if (passwordFieldIds.includes(input.id) && input.value.trim() === '') {
+          return;
+        }
+
         switch (input.getAttribute("type")) {
           case "checkbox":
             confObj[input.id] = input.checked;
@@ -647,6 +668,19 @@
         }, 10000);
       });
     });
+
+    function updatePasswordHints(config) {
+      const wifiPasswordHint = document.getElementById('wifiPasswordHint');
+      const wifiApPasswordHint = document.getElementById('wifiApPasswordHint');
+
+      wifiPasswordHint.textContent = config.wifiPasswordConfigured
+        ? 'Stored WiFi password exists. Leave empty to keep it unchanged.'
+        : 'No WiFi password stored. Enter one to save it.';
+
+      wifiApPasswordHint.textContent = config.wifiApPasswordConfigured
+        ? 'Stored AP password exists. Leave empty to keep it unchanged.'
+        : 'No AP password stored. Enter one to save it.';
+    }
 
     // Set default content
     const defaultItem = document.querySelector('[data-content-id="solid-color"]');
