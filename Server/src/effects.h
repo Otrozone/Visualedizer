@@ -33,6 +33,17 @@ struct TaskRunningGradientParams : public TaskBaseParams {
   float step; // 0.0 to 1.0
 };
 
+struct TaskGradientFillParams : public TaskBaseParams {
+  CHSV start;
+  CHSV end;
+};
+
+struct TaskSectionFillParams : public TaskBaseParams {
+  int sectionCount;
+  int sectionIdx;
+  CRGB color;
+};
+
 /*void taskStrobe(void *pvParameters);
 void taskStrobeRandom(void *pvParameters);
 void taskRunningRainbow(void *pvParameters);
@@ -47,6 +58,9 @@ void taskStrobeRandom(void *pvParameters);
 void taskRunningRainbow(void *pvParameters);
 void taskRunningGradient(void *pvParameters);
 void taskNoise(void *pvParameters);
+void taskFillSolid(void *pvParameters);
+void taskFillGradientHSV(void *pvParameters);
+void taskFillSection(void *pvParameters);
 void taskBlend(void *pvParameters);
 void taskFadeIn(void *pvParameters);
 void taskFadeOut(void *pvParameters);

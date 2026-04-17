@@ -26,15 +26,17 @@ int getTotalLedCount() {
 
 void updateSection(int sectionCount, int sectionIdx, CRGB color) {
   forEachLedStrip([&](LedStripDvc& dvc) {
-    fill_solid(dvc.leds, dvc.ledCount, CRGB::Black);
+    dvc.terminateCurrTask();
 
-    int sectionLength = dvc.ledCount / sectionCount;
-    int startIndex = sectionIdx * sectionLength;
-    int endIndex = startIndex + sectionLength;
+    TaskSectionFillParams *params = new TaskSectionFillParams;
+    params->ledStrip = &dvc;
+    params->sectionCount = sectionCount;
+    params->sectionIdx = sectionIdx;
+    params->color = color;
 
-    for (int i = startIndex; i < endIndex; i++) {
-      dvc.leds[i] = color;
-    }
+    dvc.terminateTaskFlag = false;
+
+    xTaskCreate(taskFillSection, "FillSectionTask", 2048, params, 10, &dvc.taskHandle);
   });
 }
 
@@ -84,7 +86,6 @@ void startTaskSolidColor(AsyncWebServerRequest* request) {
       int sectionCount = request->getParam("section-count", false, false)->value().toInt();
       int sectionIdx = request->getParam("section-index", false, false)->value().toInt();
       updateSection(sectionCount, sectionIdx, color);
-      FastLedShow();
       return;
     }
 
@@ -107,7 +108,6 @@ void startTaskSolidColor(AsyncWebServerRequest* request) {
       int sectionCount = request->getParam("section-count", false, false)->value().toInt();
       int sectionIdx = request->getParam("section-index", false, false)->value().toInt();
       updateSection(sectionCount, sectionIdx, color);
-      FastLedShow();
       return;
     }
 

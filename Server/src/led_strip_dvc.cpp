@@ -161,22 +161,31 @@ void LedStripDvc::runEffectOut2Mid(CRGB color, int duration) {
 void LedStripDvc::fillSolid(CRGB color) {
     terminateCurrTask();
 
-    fill_solid(this->leds, this->ledCount, color);
-    FastLedShow();
+    TaskColorAndDurationParams *params = new TaskColorAndDurationParams;
+    params->ledStrip = this;
+    params->color = color;
+    params->duration = 0;
+
+    terminateTaskFlag = false;
+
+    xTaskCreate(taskFillSolid, "FillSolidTask", StackSize, params, 10, &taskHandle);
 }
 
 void LedStripDvc::fillGradientHSV(CHSV chsvStart, CHSV chsvEnd) {
     terminateCurrTask();
 
-    fill_gradient_HSV(this->leds, this->ledCount, chsvStart, chsvEnd, FORWARD_HUES);
-    FastLedShow();
+    TaskGradientFillParams *params = new TaskGradientFillParams;
+    params->ledStrip = this;
+    params->start = chsvStart;
+    params->end = chsvEnd;
+
+    terminateTaskFlag = false;
+
+    xTaskCreate(taskFillGradientHSV, "FillGradientTask", StackSize, params, 10, &taskHandle);
 }
 
 void LedStripDvc::off() {
-    terminateCurrTask();
-
-    fill_solid(this->leds, this->ledCount, CRGB::Black);
-    FastLedShow();
+    fillSolid(CRGB::Black);
 }
 
 LedStripDvc::~LedStripDvc() {

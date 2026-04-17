@@ -152,6 +152,56 @@ void taskNoise(void *pvParameters) {
   vTaskDelete(nullptr);
 }
 
+void taskFillSolid(void *pvParameters) {
+  TaskColorAndDurationParams *params = static_cast<TaskColorAndDurationParams *>(pvParameters);
+
+  LedStripDvc *dvc = params->ledStrip;
+  fill_solid(dvc->leds, dvc->ledCount, params->color);
+  FastLedShow();
+
+  delete params;
+  dvc->taskHandle = nullptr;
+  dvc->terminateTaskFlag = false;
+  vTaskDelete(nullptr);
+}
+
+void taskFillGradientHSV(void *pvParameters) {
+  TaskGradientFillParams *params = static_cast<TaskGradientFillParams *>(pvParameters);
+
+  LedStripDvc *dvc = params->ledStrip;
+  fill_gradient_HSV(dvc->leds, dvc->ledCount, params->start, params->end, FORWARD_HUES);
+  FastLedShow();
+
+  delete params;
+  dvc->taskHandle = nullptr;
+  dvc->terminateTaskFlag = false;
+  vTaskDelete(nullptr);
+}
+
+void taskFillSection(void *pvParameters) {
+  TaskSectionFillParams *params = static_cast<TaskSectionFillParams *>(pvParameters);
+
+  LedStripDvc *dvc = params->ledStrip;
+  fill_solid(dvc->leds, dvc->ledCount, CRGB::Black);
+
+  if (params->sectionCount > 0) {
+    int sectionLength = dvc->ledCount / params->sectionCount;
+    int startIndex = params->sectionIdx * sectionLength;
+    int endIndex = startIndex + sectionLength;
+
+    for (int i = startIndex; i < endIndex && i < dvc->ledCount; i++) {
+      dvc->leds[i] = params->color;
+    }
+  }
+
+  FastLedShow();
+
+  delete params;
+  dvc->taskHandle = nullptr;
+  dvc->terminateTaskFlag = false;
+  vTaskDelete(nullptr);
+}
+
 void taskBlend(void *pvParameters) {
   TaskColorAndDurationParams *params = static_cast<TaskColorAndDurationParams *>(pvParameters);
 
