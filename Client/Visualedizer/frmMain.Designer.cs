@@ -102,15 +102,20 @@
             numStrobeX = new NumericUpDown();
             lblStrobeTrigger = new Label();
             panel1 = new Panel();
-            btnTerminate = new Button();
-            btnInitiate = new Button();
-            numLedCount = new NumericUpDown();
-            lblLedCount = new Label();
+            dgvDevices = new DataGridView();
+            colEnabled = new DataGridViewCheckBoxColumn();
+            colName = new DataGridViewTextBoxColumn();
+            colScene = new DataGridViewComboBoxColumn();
+            colHost = new DataGridViewTextBoxColumn();
+            colPort = new DataGridViewTextBoxColumn();
+            colLedCount = new DataGridViewTextBoxColumn();
+            colStatus = new DataGridViewTextBoxColumn();
+            btnRemoveDevice = new Button();
+            btnAddDevice = new Button();
+            lblDevices = new Label();
             lblRefreshRate = new Label();
             lblDelay = new Label();
             numDelay = new NumericUpDown();
-            textIpAddress = new TextBox();
-            lblHostname = new Label();
             colorBackground = new ColorDialog();
             timerRotate = new System.Windows.Forms.Timer(components);
             ((System.ComponentModel.ISupportInitialize)pictureBox).BeginInit();
@@ -142,14 +147,14 @@
             ((System.ComponentModel.ISupportInitialize)numStrobeY).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numStrobeX).BeginInit();
             panel1.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)numLedCount).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)dgvDevices).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numDelay).BeginInit();
             SuspendLayout();
             // 
             // progressBar
             // 
             progressBar.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            progressBar.Location = new Point(8, 539);
+            progressBar.Location = new Point(8, 411);
             progressBar.Name = "progressBar";
             progressBar.Size = new Size(785, 25);
             progressBar.Style = ProgressBarStyle.Continuous;
@@ -224,10 +229,10 @@
             tabControl.Controls.Add(tabPageAcSpectralAnalysis);
             tabControl.Controls.Add(tabPageOtherDevices);
             tabControl.Dock = DockStyle.Fill;
-            tabControl.Location = new Point(0, 112);
+            tabControl.Location = new Point(0, 240);
             tabControl.Name = "tabControl";
             tabControl.SelectedIndex = 0;
-            tabControl.Size = new Size(807, 602);
+            tabControl.Size = new Size(807, 474);
             tabControl.TabIndex = 11;
             tabControl.SelectedIndexChanged += tabControl_SelectedIndexChanged;
             // 
@@ -241,7 +246,7 @@
             tabPageBasicControl.Controls.Add(trackSaturationBasic);
             tabPageBasicControl.Location = new Point(4, 24);
             tabPageBasicControl.Name = "tabPageBasicControl";
-            tabPageBasicControl.Size = new Size(799, 574);
+            tabPageBasicControl.Size = new Size(799, 446);
             tabPageBasicControl.TabIndex = 3;
             tabPageBasicControl.Text = "Basic control";
             tabPageBasicControl.UseVisualStyleBackColor = true;
@@ -288,7 +293,7 @@
             label3.AutoSize = true;
             label3.Location = new Point(734, 19);
             label3.Name = "label3";
-            label3.Size = new Size(53, 15);
+            label3.Size = new Size(52, 15);
             label3.TabIndex = 27;
             label3.Text = "Max hue";
             // 
@@ -413,7 +418,7 @@
             tabPageAcVolume.Location = new Point(4, 24);
             tabPageAcVolume.Name = "tabPageAcVolume";
             tabPageAcVolume.Padding = new Padding(3);
-            tabPageAcVolume.Size = new Size(799, 574);
+            tabPageAcVolume.Size = new Size(799, 446);
             tabPageAcVolume.TabIndex = 0;
             tabPageAcVolume.Text = "Volume";
             tabPageAcVolume.UseVisualStyleBackColor = true;
@@ -490,6 +495,7 @@
             rbBrightness.TabStop = true;
             rbBrightness.Text = "Brightness";
             rbBrightness.UseVisualStyleBackColor = true;
+            rbBrightness.CheckedChanged += rbMode_CheckedChanged;
             // 
             // chbHueRevers
             // 
@@ -611,7 +617,7 @@
             lblHueMax.AutoSize = true;
             lblHueMax.Location = new Point(726, 224);
             lblHueMax.Name = "lblHueMax";
-            lblHueMax.Size = new Size(53, 15);
+            lblHueMax.Size = new Size(52, 15);
             lblHueMax.TabIndex = 13;
             lblHueMax.Text = "Max hue";
             // 
@@ -707,7 +713,7 @@
             // 
             lblPreview.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             lblPreview.AutoSize = true;
-            lblPreview.Location = new Point(8, 521);
+            lblPreview.Location = new Point(8, 393);
             lblPreview.Name = "lblPreview";
             lblPreview.Size = new Size(48, 15);
             lblPreview.TabIndex = 4;
@@ -820,7 +826,7 @@
             lblLaserColor.AutoSize = true;
             lblLaserColor.Location = new Point(17, 93);
             lblLaserColor.Name = "lblLaserColor";
-            lblLaserColor.Size = new Size(65, 15);
+            lblLaserColor.Size = new Size(64, 15);
             lblLaserColor.TabIndex = 10;
             lblLaserColor.Text = "Color [x, y]";
             // 
@@ -847,7 +853,7 @@
             lblLaserPattern.AutoSize = true;
             lblLaserPattern.Location = new Point(17, 64);
             lblLaserPattern.Name = "lblLaserPattern";
-            lblLaserPattern.Size = new Size(74, 15);
+            lblLaserPattern.Size = new Size(73, 15);
             lblLaserPattern.TabIndex = 7;
             lblLaserPattern.Text = "Pattern [x, y]";
             // 
@@ -919,66 +925,120 @@
             // 
             // panel1
             // 
-            panel1.Controls.Add(btnTerminate);
-            panel1.Controls.Add(btnInitiate);
-            panel1.Controls.Add(numLedCount);
-            panel1.Controls.Add(lblLedCount);
+            panel1.Controls.Add(dgvDevices);
+            panel1.Controls.Add(btnRemoveDevice);
+            panel1.Controls.Add(btnAddDevice);
+            panel1.Controls.Add(lblDevices);
             panel1.Controls.Add(lblRefreshRate);
             panel1.Controls.Add(lblDelay);
             panel1.Controls.Add(numDelay);
-            panel1.Controls.Add(textIpAddress);
-            panel1.Controls.Add(lblHostname);
             panel1.Dock = DockStyle.Top;
             panel1.Location = new Point(0, 0);
             panel1.Name = "panel1";
-            panel1.Size = new Size(807, 112);
+            panel1.Size = new Size(807, 240);
             panel1.TabIndex = 12;
             // 
-            // btnTerminate
+            // dgvDevices
             // 
-            btnTerminate.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnTerminate.Location = new Point(720, 40);
-            btnTerminate.Name = "btnTerminate";
-            btnTerminate.Size = new Size(75, 23);
-            btnTerminate.TabIndex = 8;
-            btnTerminate.Text = "Terminate";
-            btnTerminate.UseVisualStyleBackColor = true;
-            btnTerminate.Click += btnTerminate_Click;
+            dgvDevices.AllowUserToAddRows = false;
+            dgvDevices.AllowUserToDeleteRows = false;
+            dgvDevices.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            dgvDevices.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dgvDevices.Columns.AddRange(new DataGridViewColumn[] { colEnabled, colName, colScene, colHost, colPort, colLedCount, colStatus });
+            dgvDevices.Location = new Point(12, 97);
+            dgvDevices.Name = "dgvDevices";
+            dgvDevices.RowHeadersVisible = false;
+            dgvDevices.Size = new Size(783, 132);
+            dgvDevices.TabIndex = 12;
             // 
-            // btnInitiate
+            // colEnabled
             // 
-            btnInitiate.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnInitiate.Location = new Point(720, 11);
-            btnInitiate.Name = "btnInitiate";
-            btnInitiate.Size = new Size(75, 23);
-            btnInitiate.TabIndex = 7;
-            btnInitiate.Text = "Initiate";
-            btnInitiate.UseVisualStyleBackColor = true;
-            btnInitiate.Click += btnInitiate_Click;
+            colEnabled.DataPropertyName = "Enabled";
+            colEnabled.HeaderText = "Enabled";
+            colEnabled.Name = "colEnabled";
+            colEnabled.Width = 60;
             // 
-            // numLedCount
+            // colName
             // 
-            numLedCount.Location = new Point(149, 38);
-            numLedCount.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
-            numLedCount.Name = "numLedCount";
-            numLedCount.Size = new Size(60, 23);
-            numLedCount.TabIndex = 6;
-            numLedCount.Value = new decimal(new int[] { 218, 0, 0, 0 });
-            numLedCount.ValueChanged += numLedCount_ValueChanged;
+            colName.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            colName.DataPropertyName = "Name";
+            colName.FillWeight = 20F;
+            colName.HeaderText = "Name";
+            colName.Name = "colName";
             // 
-            // lblLedCount
+            // colScene
             // 
-            lblLedCount.AutoSize = true;
-            lblLedCount.Location = new Point(11, 40);
-            lblLedCount.Name = "lblLedCount";
-            lblLedCount.Size = new Size(60, 15);
-            lblLedCount.TabIndex = 5;
-            lblLedCount.Text = "Led count";
+            colScene.DataPropertyName = "Scene";
+            colScene.HeaderText = "Scene";
+            colScene.Name = "colScene";
+            colScene.Resizable = DataGridViewTriState.True;
+            colScene.SortMode = DataGridViewColumnSortMode.Automatic;
+            colScene.Width = 110;
+            // 
+            // colHost
+            // 
+            colHost.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            colHost.DataPropertyName = "Host";
+            colHost.FillWeight = 25F;
+            colHost.HeaderText = "Host";
+            colHost.Name = "colHost";
+            // 
+            // colPort
+            // 
+            colPort.DataPropertyName = "Port";
+            colPort.HeaderText = "Port";
+            colPort.Name = "colPort";
+            colPort.Width = 60;
+            // 
+            // colLedCount
+            // 
+            colLedCount.DataPropertyName = "LedCount";
+            colLedCount.HeaderText = "LEDs";
+            colLedCount.Name = "colLedCount";
+            colLedCount.Width = 60;
+            // 
+            // colStatus
+            // 
+            colStatus.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            colStatus.DataPropertyName = "Status";
+            colStatus.FillWeight = 20F;
+            colStatus.HeaderText = "Status";
+            colStatus.Name = "colStatus";
+            colStatus.ReadOnly = true;
+            // 
+            // btnRemoveDevice
+            // 
+            btnRemoveDevice.Location = new Point(106, 68);
+            btnRemoveDevice.Name = "btnRemoveDevice";
+            btnRemoveDevice.Size = new Size(108, 23);
+            btnRemoveDevice.TabIndex = 11;
+            btnRemoveDevice.Text = "Remove selected";
+            btnRemoveDevice.UseVisualStyleBackColor = true;
+            btnRemoveDevice.Click += btnRemoveDevice_Click;
+            // 
+            // btnAddDevice
+            // 
+            btnAddDevice.Location = new Point(12, 68);
+            btnAddDevice.Name = "btnAddDevice";
+            btnAddDevice.Size = new Size(88, 23);
+            btnAddDevice.TabIndex = 10;
+            btnAddDevice.Text = "Add device";
+            btnAddDevice.UseVisualStyleBackColor = true;
+            btnAddDevice.Click += btnAddDevice_Click;
+            // 
+            // lblDevices
+            // 
+            lblDevices.AutoSize = true;
+            lblDevices.Location = new Point(12, 47);
+            lblDevices.Name = "lblDevices";
+            lblDevices.Size = new Size(47, 15);
+            lblDevices.TabIndex = 9;
+            lblDevices.Text = "Devices";
             // 
             // lblRefreshRate
             // 
             lblRefreshRate.AutoSize = true;
-            lblRefreshRate.Location = new Point(216, 69);
+            lblRefreshRate.Location = new Point(160, 16);
             lblRefreshRate.Name = "lblRefreshRate";
             lblRefreshRate.Size = new Size(38, 15);
             lblRefreshRate.TabIndex = 4;
@@ -987,7 +1047,7 @@
             // lblDelay
             // 
             lblDelay.AutoSize = true;
-            lblDelay.Location = new Point(12, 69);
+            lblDelay.Location = new Point(12, 14);
             lblDelay.Name = "lblDelay";
             lblDelay.Size = new Size(63, 15);
             lblDelay.TabIndex = 3;
@@ -995,30 +1055,12 @@
             // 
             // numDelay
             // 
-            numDelay.Location = new Point(150, 67);
+            numDelay.Location = new Point(92, 12);
             numDelay.Name = "numDelay";
             numDelay.Size = new Size(60, 23);
             numDelay.TabIndex = 2;
             numDelay.Value = new decimal(new int[] { 20, 0, 0, 0 });
             numDelay.ValueChanged += numDelay_ValueChanged;
-            // 
-            // textIpAddress
-            // 
-            textIpAddress.Location = new Point(149, 9);
-            textIpAddress.Name = "textIpAddress";
-            textIpAddress.Size = new Size(132, 23);
-            textIpAddress.TabIndex = 1;
-            textIpAddress.Text = "10.0.1.11";
-            textIpAddress.TextChanged += textIpAddress_TextChanged;
-            // 
-            // lblHostname
-            // 
-            lblHostname.AutoSize = true;
-            lblHostname.Location = new Point(11, 12);
-            lblHostname.Name = "lblHostname";
-            lblHostname.Size = new Size(132, 15);
-            lblHostname.TabIndex = 0;
-            lblHostname.Text = "Hostname or IP address";
             // 
             // timerRotate
             // 
@@ -1076,7 +1118,7 @@
             ((System.ComponentModel.ISupportInitialize)numStrobeX).EndInit();
             panel1.ResumeLayout(false);
             panel1.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)numLedCount).EndInit();
+            ((System.ComponentModel.ISupportInitialize)dgvDevices).EndInit();
             ((System.ComponentModel.ISupportInitialize)numDelay).EndInit();
             ResumeLayout(false);
             PerformLayout();
@@ -1096,15 +1138,20 @@
         private TabPage tabPageAcSpectralAnalysis;
         private TabPage tabPageScreenCapture;
         private Panel panel1;
+        private DataGridView dgvDevices;
+        private DataGridViewCheckBoxColumn colEnabled;
+        private DataGridViewTextBoxColumn colName;
+        private DataGridViewComboBoxColumn colScene;
+        private DataGridViewTextBoxColumn colHost;
+        private DataGridViewTextBoxColumn colPort;
+        private DataGridViewTextBoxColumn colLedCount;
+        private DataGridViewTextBoxColumn colStatus;
+        private Button btnRemoveDevice;
+        private Button btnAddDevice;
+        private Label lblDevices;
         private NumericUpDown numDelay;
-        private TextBox textIpAddress;
-        private Label lblHostname;
         private Label lblRefreshRate;
         private Label lblDelay;
-        private NumericUpDown numLedCount;
-        private Label lblLedCount;
-        private Button btnInitiate;
-        private Button btnTerminate;
         private Label lblPreview;
         private Label lblScreenRowCapturePreview;
         private CheckBox chbShowGuide;

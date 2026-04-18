@@ -1,34 +1,39 @@
 using NAudio.CoreAudioApi;
-using System.Threading;
-using System.Windows.Forms;
+using System.ComponentModel;
 using Visualedizer;
 using static Ledqualizer.AcVolume;
 using static Ledqualizer.ScreenCapture;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
-// https://github.com/naudio/NAudio
 
 namespace Ledqualizer
 {
     public partial class FrmMain : Form
     {
-        private Task taskMain;
-        private CancellationTokenSource ctsMain;
+        private sealed class DeviceRunEntry
+        {
+            public DeviceConfig Config { get; }
+            public RunController Controller { get; }
 
-        private Task taskScreenDraw;
-        private CancellationTokenSource ctsScreenDraw;
+            public DeviceRunEntry(DeviceConfig config, RunController controller)
+            {
+                Config = config;
+                Controller = controller;
+            }
+        }
 
-        private LedSync ledSync;
+        private readonly AppConfig appConfig = new();
+        private readonly BindingList<DeviceGridRow> deviceRows = new();
+        private readonly Dictionary<string, DeviceRunEntry> deviceRuns = new();
+        private readonly List<Color> previewColors = new();
 
-        private bool isDragging = false;
-        private int scrollValue = 0;
+        private bool isLoading;
+        private bool suppressTabRestart;
+        private bool reconcileInProgress;
+        private bool reconcileRequested;
+        private int rotateIdx;
+        private RadioButton[] rotateModeRadios = Array.Empty<RadioButton>();
+        private string? selectedAudioDeviceId;
         private AcVolume.AudioCaptureVolumeMode audioCaptureVolumeMode;
-
-        Config config = new Config();
-
-        private int count = 0;
-
-        private int rotateIdx = 0;
-        RadioButton[] rotateModeRadios;
+        private FormOverlay? frmOverlay;
 
         public class FormOverlay : Form
         {
@@ -42,205 +47,499 @@ namespace Ledqualizer
                 Location = rectangle.Location;
                 Size = rectangle.Size;
 
-                // Draw the red rectangle
                 Paint += (sender, e) =>
                 {
-                    using (Pen redPen = new Pen(Color.Red, 1))
-                    {
-                        e.Graphics.DrawRectangle(redPen, new Rectangle(0, 17, Width - 1, 3));
-                    }
+                    using Pen redPen = new Pen(Color.Red, 1);
+                    e.Graphics.DrawRectangle(redPen, new Rectangle(0, 17, Width - 1, 3));
                 };
             }
         }
-        private FormOverlay frmOverlay;
 
         public FrmMain()
         {
             InitializeComponent();
+            ConfigureDevicePanel();
+            pictureBox.Paint += PictureBox_Paint;
+            cbAudioDevices.SelectedIndexChanged += CbAudioDevices_SelectedIndexChanged;
         }
 
-        private void InitConfFrmFields()
+        private void ConfigureDevicePanel()
         {
-            textIpAddress.Text = config.ipAddress;
-            numLedCount.Value = config.ledCount;
-            numDelay.Value = config.delay;
+            dgvDevices.AutoGenerateColumns = false;
+            dgvDevices.RowHeadersVisible = false;
+            dgvDevices.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            dgvDevices.MultiSelect = true;
+            dgvDevices.DataSource = deviceRows;
+            dgvDevices.CurrentCellDirtyStateChanged += dgvDevices_CurrentCellDirtyStateChanged;
+            dgvDevices.CellValidating += dgvDevices_CellValidating;
+            dgvDevices.DataError += dgvDevices_DataError;
+            dgvDevices.CellValueChanged += dgvDevices_CellValueChanged;
 
-            numScreenRow.Value = config.screenCaptureRow;
-
-            numStrobeX.Value = config.strobeTriggerX;
-            numStrobeY.Value = config.strobeTriggerY;
-
-            numLaserTriggerX.Value = config.laserTriggerX;
-            numLaserTriggerY.Value = config.laserTriggerY;
-            numLaserPatternX.Value = config.laserPatternX;
-            numLaserPatternY.Value = config.laserPatternY;
-            numLaserColorX.Value = config.laserColorX;
-            numLaserColorY.Value = config.laserColorY;
+            if (dgvDevices.Columns[nameof(colScene)] is DataGridViewComboBoxColumn sceneColumn)
+            {
+                sceneColumn.DataSource = Enum.GetValues(typeof(SceneKind));
+            }
         }
 
-        private void frmMain_Load(object sender, EventArgs e)
+        private async void frmMain_Load(object sender, EventArgs e)
         {
+            isLoading = true;
+
             hsbScreenRowSelector.Maximum = ScreenCapture.GetScreenHeight();
             numScreenRow.Maximum = hsbScreenRowSelector.Maximum;
+            rotateModeRadios = new[] { rbModeColorPush, rbModeEndToStart, rbModeMidToOut, rbModeMidToOutPoint, rbModeStartToEnd };
+            audioCaptureVolumeMode = AcVolume.AudioCaptureVolumeMode.ModeStartToEnd;
+
+            tabControl.TabPages.Remove(tabPageAcSpectralAnalysis);
+
+            appConfig.LoadFromIni();
+            ApplyConfigToUi();
+
+            if (tabControl.SelectedTab == tabPageAcVolume)
+            {
+                LoadAudioDevices();
+            }
+
             CountHz();
+            isLoading = false;
 
-            rotateModeRadios = new RadioButton[] { rbModeColorPush, rbModeEndToStart, rbModeMidToOut, rbModeMidToOutPoint, rbModeStartToEnd };
-
-            tabControl.TabPages.Remove(tabPageAcSpectralAnalysis); // Not yet fully implemented
-
-            config.LoadFromIni();
-            InitConfFrmFields();
+            await ReconcileDeviceRunsAsync();
         }
 
-        private async void btnCaptureStart_Click(object sender, EventArgs e)
+        private void ApplyConfigToUi()
         {
-        }
+            numDelay.Value = Math.Max(numDelay.Minimum, Math.Min(numDelay.Maximum, (decimal)appConfig.Delay));
+            numScreenRow.Value = Math.Max(numScreenRow.Minimum, Math.Min(numScreenRow.Maximum, (decimal)appConfig.ScreenCaptureRow));
+            trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, (int)Math.Round(appConfig.Brightness * 100)));
+            trackBarNormalizationLevel.Value = Math.Max(trackBarNormalizationLevel.Minimum, Math.Min(trackBarNormalizationLevel.Maximum, (int)Math.Round(appConfig.NormalizationLevel * 10)));
 
-        private void btnScreenCapture_Click(object sender, EventArgs e)
-        {
+            numStrobeX.Value = appConfig.StrobeTriggerX;
+            numStrobeY.Value = appConfig.StrobeTriggerY;
+            numLaserTriggerX.Value = appConfig.LaserTriggerX;
+            numLaserTriggerY.Value = appConfig.LaserTriggerY;
+            numLaserPatternX.Value = appConfig.LaserPatternX;
+            numLaserPatternY.Value = appConfig.LaserPatternY;
+            numLaserColorX.Value = appConfig.LaserColorX;
+            numLaserColorY.Value = appConfig.LaserColorY;
 
-            /// screenCaptureCts = new CancellationTokenSource();
-            // screenCaptureTask = Task.Run(() => ScreenCapture.Capture(screenCaptureCts.Token, ledCount, pictureBox, (int)numScreenRow.Value));
-        }
-
-
-        private async void DrawRectangle(int y)
-        {
-            /*ctsScreenDraw.Cancel();
-            ctsScreenDraw = new CancellationTokenSource();
-            await ScreenDrawing.DrawRect(ctsScreenDraw.Token);*/
-        }
-
-        private async void hsbScreenRowSelector_Scroll(object sender, ScrollEventArgs e)
-        {
-            numScreenRow.Value = hsbScreenRowSelector.Value;
-
-            if (frmOverlay != null)
+            deviceRows.Clear();
+            foreach (DeviceConfig device in appConfig.Devices)
             {
-                frmOverlay.Location = new Point(0, (int)numScreenRow.Value);
+                deviceRows.Add(DeviceGridRow.FromDeviceConfig(device));
+            }
+        }
+
+        private void SyncConfigFromUi()
+        {
+            appConfig.Delay = (int)numDelay.Value;
+            appConfig.ScreenCaptureRow = (int)numScreenRow.Value;
+            appConfig.NormalizationLevel = trackBarNormalizationLevel.Value / 10.0f;
+            appConfig.Brightness = trackBarBrightness.Value / (float)Math.Max(trackBarBrightness.Maximum, 1);
+
+            appConfig.StrobeTriggerX = (int)numStrobeX.Value;
+            appConfig.StrobeTriggerY = (int)numStrobeY.Value;
+            appConfig.LaserTriggerX = (int)numLaserTriggerX.Value;
+            appConfig.LaserTriggerY = (int)numLaserTriggerY.Value;
+            appConfig.LaserPatternX = (int)numLaserPatternX.Value;
+            appConfig.LaserPatternY = (int)numLaserPatternY.Value;
+            appConfig.LaserColorX = (int)numLaserColorX.Value;
+            appConfig.LaserColorY = (int)numLaserColorY.Value;
+
+            appConfig.Devices = deviceRows.Select(row => row.ToDeviceConfig()).ToList();
+        }
+
+        private async Task ReconcileDeviceRunsAsync()
+        {
+            if (isLoading)
+            {
+                return;
             }
 
-            /*
-            if (e.Type == ScrollEventType.ThumbTrack)
+            if (reconcileInProgress)
             {
-                int y = hsbScreenRowSelector.Value;
-                ScreenDrawing.left = 1;
-                ScreenDrawing.right = ScreenCapture.GetScreenWidth() - 1;
-                ScreenDrawing.top = y - 1;
-                ScreenDrawing.bottom = y + 1;
+                reconcileRequested = true;
+                return;
+            }
 
-                if (taskScreenDraw == null)
+            reconcileInProgress = true;
+
+            try
+            {
+                do
                 {
-                    count++;
-                    statLblConnection.Text = count.ToString();
+                    reconcileRequested = false;
 
-                    ctsScreenDraw = new CancellationTokenSource();
-                    taskScreenDraw = Task.Run(() => ScreenDrawing.DrawLine(ctsScreenDraw.Token));
+                    Dictionary<string, DeviceConfig> desiredDevices = deviceRows
+                        .Where(row => row.Enabled && IsValidDeviceRow(row))
+                        .Select(row => row.ToDeviceConfig())
+                        .ToDictionary(device => device.Id, device => device);
+
+                    List<string> activeIds = deviceRuns.Keys.ToList();
+                    foreach (string deviceId in activeIds)
+                    {
+                        if (!desiredDevices.TryGetValue(deviceId, out DeviceConfig? desiredConfig))
+                        {
+                            await StopDeviceRunAsync(deviceId);
+                            continue;
+                        }
+
+                        DeviceRunEntry current = deviceRuns[deviceId];
+                        if (RequiresRestart(current.Config, desiredConfig))
+                        {
+                            await StopDeviceRunAsync(deviceId);
+                            await StartDeviceRunAsync(desiredConfig);
+                        }
+                    }
+
+                    foreach (DeviceConfig desiredConfig in desiredDevices.Values)
+                    {
+                        if (!deviceRuns.ContainsKey(desiredConfig.Id))
+                        {
+                            await StartDeviceRunAsync(desiredConfig);
+                        }
+                    }
+
+                    UpdateConnectionSummary();
                 }
-            } 
-            else if (e.Type == ScrollEventType.EndScroll)
+                while (reconcileRequested);
+            }
+            finally
             {
-                if (ctsScreenDraw != null)
+                reconcileInProgress = false;
+            }
+        }
+
+        private async Task StartDeviceRunAsync(DeviceConfig config)
+        {
+            var controller = new RunController();
+            controller.DeviceStatusChanged += RunController_DeviceStatusChanged;
+            deviceRuns[config.Id] = new DeviceRunEntry(config, controller);
+
+            await controller.StartAsync(new[] { config }, CreateSceneRunner(config.Scene));
+        }
+
+        private async Task StopDeviceRunAsync(string deviceId)
+        {
+            if (!deviceRuns.TryGetValue(deviceId, out DeviceRunEntry? entry))
+            {
+                return;
+            }
+
+            deviceRuns.Remove(deviceId);
+            entry.Controller.DeviceStatusChanged -= RunController_DeviceStatusChanged;
+            await entry.Controller.StopAsync();
+        }
+
+        private async Task StopAllDeviceRunsAsync()
+        {
+            List<string> deviceIds = deviceRuns.Keys.ToList();
+            foreach (string deviceId in deviceIds)
+            {
+                await StopDeviceRunAsync(deviceId);
+            }
+        }
+
+        private static bool RequiresRestart(DeviceConfig current, DeviceConfig desired)
+        {
+            return !string.Equals(current.Host, desired.Host, StringComparison.OrdinalIgnoreCase)
+                || current.Port != desired.Port
+                || current.LedCount != desired.LedCount
+                || current.Scene != desired.Scene;
+        }
+
+        private ISceneRunner CreateSceneRunner(SceneKind scene)
+        {
+            return scene switch
+            {
+                SceneKind.Volume => new VolumeSceneRunner(
+                    GetVolumeSceneSettings,
+                    () => selectedAudioDeviceId,
+                    UpdateProgress,
+                    UpdateRate),
+                SceneKind.ScreenCapture => new ScreenCaptureSceneRunner(GetScreenCaptureSceneSettings, UpdatePreview),
+                SceneKind.OtherDevices => new OtherDevicesSceneRunner(GetOtherDevicesSceneSettings),
+                _ => new BasicSceneRunner(GetBasicSceneSettings),
+            };
+        }
+
+        private BasicSceneSettings GetBasicSceneSettings()
+        {
+            return ReadUi(() => new BasicSceneSettings
+            {
+                Solid = rbSolid.Checked,
+                SolidHue = ucHueSolid.Hue,
+                SolidMinHue = ucHueSolid.MinVal,
+                SolidMaxHue = ucHueSolid.MaxVal,
+                SaturationValue = trackSaturationBasic.Value,
+                SaturationMinimum = trackSaturationBasic.Minimum,
+                SaturationMaximum = trackSaturationBasic.Maximum,
+                BrightnessValue = trackBrightnessBasic.Value,
+                BrightnessMaximum = trackBrightnessBasic.Maximum,
+                GradientHueMin = ucHueMinMaxGradient.HueMin,
+                GradientHueMax = ucHueMinMaxGradient.HueMax,
+                Delay = (int)numDelay.Value
+            });
+        }
+
+        private VolumeSceneSettings GetVolumeSceneSettings()
+        {
+            return ReadUi(() => new VolumeSceneSettings
+            {
+                Mode = audioCaptureVolumeMode,
+                Delay = (int)numDelay.Value,
+                BrightnessValue = trackBarBrightness.Value,
+                BrightnessMaximum = trackBarBrightness.Maximum,
+                NormalizationValue = trackBarNormalizationLevel.Value,
+                Reverse = chbRevers.Checked,
+                HueReverse = chbHueRevers.Checked,
+                White = chbWhite.Checked,
+                BackgroundWhite = chbBgWhite.Checked,
+                BackgroundBrightnessValue = trackBarBgBrightness.Value,
+                BackgroundHue = ucHueBg.Hue,
+                HueMin = ucHueMinMax.HueMin,
+                HueMax = ucHueMinMax.HueMax
+            });
+        }
+
+        private ScreenCaptureSceneSettings GetScreenCaptureSceneSettings()
+        {
+            return ReadUi(() => new ScreenCaptureSceneSettings
+            {
+                Delay = (int)numDelay.Value,
+                CaptureY = (int)numScreenRow.Value,
+                Reverse = chbReverse.Checked
+            });
+        }
+
+        private OtherDevicesSceneSettings GetOtherDevicesSceneSettings()
+        {
+            return ReadUi(() => new OtherDevicesSceneSettings
+            {
+                Delay = (int)numDelay.Value,
+                StrobeTriggerX = (int)numStrobeX.Value,
+                StrobeTriggerY = (int)numStrobeY.Value,
+                LaserTriggerX = (int)numLaserTriggerX.Value,
+                LaserTriggerY = (int)numLaserTriggerY.Value,
+                LaserPatternX = (int)numLaserPatternX.Value,
+                LaserPatternY = (int)numLaserPatternY.Value,
+                LaserColorX = (int)numLaserColorX.Value,
+                LaserColorY = (int)numLaserColorY.Value
+            });
+        }
+
+        private void UpdatePreview(IReadOnlyList<Color> colors)
+        {
+            SafeUi(() =>
+            {
+                previewColors.Clear();
+                previewColors.AddRange(colors);
+                pictureBox.Invalidate();
+            });
+        }
+
+        private void UpdateProgress(int value)
+        {
+            SafeUi(() => progressBar.Value = Math.Max(progressBar.Minimum, Math.Min(progressBar.Maximum, value)));
+        }
+
+        private void UpdateRate(string text)
+        {
+            SafeUi(() => statusStrip.Items[0].Text = text);
+        }
+
+        private void PictureBox_Paint(object? sender, PaintEventArgs e)
+        {
+            if (previewColors.Count == 0 || sender is not PictureBox previewBox)
+            {
+                return;
+            }
+
+            int pictureBoxWidth = previewBox.Width;
+            int segmentCount = previewColors.Count;
+            int segmentWidth = Math.Max(pictureBoxWidth / segmentCount, 1);
+
+            for (int i = 0; i < segmentCount; i++)
+            {
+                using Brush brush = new SolidBrush(previewColors[i]);
+                int x = i * segmentWidth;
+                int width = i == segmentCount - 1 ? pictureBoxWidth - (i * segmentWidth) : segmentWidth;
+                e.Graphics.FillRectangle(brush, x, 0, width, previewBox.Height);
+            }
+        }
+
+        private void RunController_DeviceStatusChanged(string deviceId, ConnectionState state, string? detail)
+        {
+            SafeUi(() =>
+            {
+                DeviceGridRow? row = deviceRows.FirstOrDefault(item => item.Id == deviceId);
+                if (row == null)
                 {
-                    ctsScreenDraw.Cancel();
+                    return;
                 }
-                if (taskScreenDraw != null)
+
+                row.Status = state switch
                 {
-                }
-            }
-            
-            if (taskScreenDraw == null)
-            {
-                int y = hsbScreenRowSelector.Value;
-                ScreenDrawing.left = 1;
-                ScreenDrawing.right = ScreenCapture.GetScreenWidth() - 1;
-                ScreenDrawing.top = y - 1;
-                ScreenDrawing.bottom = y + 1;
-            }*/
+                    ConnectionState.Connecting => "Connecting",
+                    ConnectionState.Connected => "Connected",
+                    ConnectionState.Faulted => string.IsNullOrWhiteSpace(detail) ? "Offline" : $"Offline: {detail}",
+                    _ => "Disconnected"
+                };
+
+                dgvDevices.Refresh();
+                UpdateConnectionSummary();
+            });
         }
 
-        /* private Config GetConfig()
+        private void UpdateConnectionSummary()
         {
-            config.delay = (int)numDelay.Value;
-            config.ledCount = (int)numLedCount.Value;
-            config.ipAddress = textIpAddress.Text;
-            config.brightness = (float)trackBarBrightness.Value / trackBarBrightness.Maximum;
-            config.normalizationLevel = (float)trackBarNormalizationLevel.Value;
+            int connectedCount = deviceRows.Count(item => item.Status == "Connected");
+            int enabledCount = deviceRows.Count(item => item.Enabled && IsValidDeviceRow(item));
+            int offlineCount = deviceRows.Count(item => item.Enabled && item.Status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase));
 
-            return config;
-        }*/
-
-        private async void btnInitiate_Click(object sender, EventArgs e)
-        {
-            // GetConfig();
-            ctsMain = new CancellationTokenSource();
-
-            // LedSync ledSync = LedSync.GetInstance(config);
-            LedSync ledSync = new LedSync(config);
-            await ledSync.ConnectAsync();
-
-            if (tabControl.SelectedTab == tabPageBasicControl)
+            if (enabledCount == 0)
             {
-                Basic basic = new Basic(this, ledSync);
-                await basic.BasicOperations(ctsMain.Token);
+                statLblConnection.Text = "No enabled devices";
+                return;
             }
-            else if (tabControl.SelectedTab == tabPageAcVolume)
-            {
-                // AudioCaptureVolume
-                AcVolume audioCaptureVolume = new AcVolume(this, ledSync, audioCaptureVolumeMode);
 
-                var selectedDeviceItem = cbAudioDevices.SelectedItem as DeviceDescriptor;
-                var selectedDevice = selectedDeviceItem?.Device;
-                if (selectedDevice != null)
+            statLblConnection.Text = $"{connectedCount}/{enabledCount} online";
+            if (offlineCount > 0)
+            {
+                statLblConnection.Text += $" ({offlineCount} offline)";
+            }
+        }
+
+        private void LoadAudioDevices()
+        {
+            suppressTabRestart = true;
+            try
+            {
+                AcVolume.LoadAudioDevicesToComboBox(cbAudioDevices);
+                selectedAudioDeviceId = (cbAudioDevices.SelectedItem as DeviceDescriptor)?.DeviceId;
+            }
+            finally
+            {
+                suppressTabRestart = false;
+            }
+        }
+
+        private void CbAudioDevices_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            selectedAudioDeviceId = (cbAudioDevices.SelectedItem as DeviceDescriptor)?.DeviceId;
+        }
+
+        private async void btnAddDevice_Click(object? sender, EventArgs e)
+        {
+            int deviceNumber = deviceRows.Count + 1;
+            deviceRows.Add(new DeviceGridRow
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Enabled = false,
+                Name = $"Device {deviceNumber}",
+                Host = "127.0.0.1",
+                Port = 81,
+                LedCount = 218,
+                Scene = GetCurrentSceneKind(),
+                Status = "Disconnected"
+            });
+
+            await ReconcileDeviceRunsAsync();
+        }
+
+        private async void btnRemoveDevice_Click(object? sender, EventArgs e)
+        {
+            var rowsToRemove = dgvDevices.SelectedRows
+                .Cast<DataGridViewRow>()
+                .Select(row => row.DataBoundItem as DeviceGridRow)
+                .Where(row => row != null)
+                .ToList();
+
+            foreach (DeviceGridRow? row in rowsToRemove)
+            {
+                if (row != null)
                 {
-                    audioCaptureVolume.audioDevice = selectedDevice;
+                    deviceRows.Remove(row);
                 }
-                cbAudioDevices.SelectedIndexChanged += audioCaptureVolume.CbAudioDevices_SelectedIndexChanged;
-
-                await audioCaptureVolume.CaptureAudioAsync(ctsMain.Token);
-            }
-            else if (tabControl.SelectedTab == tabPageScreenCapture)
-            {
-                ScreenCapture screenCapture = new ScreenCapture(ledSync, pictureBox, numScreenRow, chbReverse);
-                await screenCapture.Capture(ctsMain.Token);
-            }
-            else if (tabControl.SelectedTab == tabPageAcSpectralAnalysis)
-            {
-                AcSpectralAnalysis audioCaptureEqualizer = new AcSpectralAnalysis(ledSync);
-                await audioCaptureEqualizer.Capture(ctsMain.Token);
-            }
-            else if (tabControl.SelectedTab == tabPageOtherDevices)
-            {
-                ScreenCaptureOtherDevices screenCaptureOtherDevices =
-                    new ScreenCaptureOtherDevices(ledSync);
-                await screenCaptureOtherDevices.Capture(ctsMain.Token);
             }
 
-            await ledSync.DisconnectAsync();
+            await ReconcileDeviceRunsAsync();
         }
 
-        private void btnTerminate_Click(object sender, EventArgs e)
+        private bool IsValidDeviceRow(DeviceGridRow row)
         {
-            if (ctsMain != null)
+            return !string.IsNullOrWhiteSpace(row.Name)
+                && !string.IsNullOrWhiteSpace(row.Host)
+                && row.Port > 0
+                && row.Port <= 65535
+                && row.LedCount > 0;
+        }
+
+        private void dgvDevices_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
+        {
+            if (dgvDevices.IsCurrentCellDirty)
             {
-                ctsMain.Cancel();
+                dgvDevices.CommitEdit(DataGridViewDataErrorContexts.Commit);
             }
         }
 
-        public void ShowOverlayForm(int y)
+        private async void dgvDevices_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
-            Rectangle captureArea = new Rectangle(0, y - 18, GetScreenWidth() - 1, 3);
-            frmOverlay = new FormOverlay(captureArea);
-            frmOverlay.Show();
+            if (isLoading || e.RowIndex < 0)
+            {
+                return;
+            }
+
+            await ReconcileDeviceRunsAsync();
         }
 
-        public void CloseOverlayForm()
+        private void dgvDevices_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
         {
-            if (frmOverlay != null)
+            string propertyName = dgvDevices.Columns[e.ColumnIndex].DataPropertyName;
+            string formattedValue = e.FormattedValue?.ToString() ?? string.Empty;
+
+            if (propertyName == nameof(DeviceGridRow.Name) || propertyName == nameof(DeviceGridRow.Host))
             {
-                frmOverlay.Close();
-                frmOverlay.Dispose();
-                frmOverlay = null;
+                if (string.IsNullOrWhiteSpace(formattedValue))
+                {
+                    e.Cancel = true;
+                    dgvDevices.Rows[e.RowIndex].ErrorText = $"{propertyName} is required.";
+                }
+            }
+
+            if (propertyName == nameof(DeviceGridRow.Port))
+            {
+                if (!int.TryParse(formattedValue, out int port) || port <= 0 || port > 65535)
+                {
+                    e.Cancel = true;
+                    dgvDevices.Rows[e.RowIndex].ErrorText = "Port must be between 1 and 65535.";
+                }
+            }
+
+            if (propertyName == nameof(DeviceGridRow.LedCount))
+            {
+                if (!int.TryParse(formattedValue, out int ledCount) || ledCount <= 0)
+                {
+                    e.Cancel = true;
+                    dgvDevices.Rows[e.RowIndex].ErrorText = "LED count must be greater than zero.";
+                }
+            }
+
+            if (!e.Cancel)
+            {
+                dgvDevices.Rows[e.RowIndex].ErrorText = string.Empty;
+            }
+        }
+
+        private void dgvDevices_DataError(object? sender, DataGridViewDataErrorEventArgs e)
+        {
+            e.ThrowException = false;
+        }
+
+        private void CountHz()
+        {
+            if (numDelay.Value > 0)
+            {
+                lblRefreshRate.Text = (1000m / numDelay.Value).ToString("F1") + " Hz";
             }
         }
 
@@ -256,17 +555,43 @@ namespace Ledqualizer
             }
         }
 
-        private void CountHz()
+        public void ShowOverlayForm(int y)
         {
-            if (numDelay.Value > 0)
+            Rectangle captureArea = new Rectangle(0, y - 18, GetScreenWidth() - 1, 3);
+            frmOverlay = new FormOverlay(captureArea);
+            frmOverlay.Show();
+        }
+
+        public void CloseOverlayForm()
+        {
+            if (frmOverlay == null)
             {
-                lblRefreshRate.Text = (1000 / numDelay.Value).ToString("F1") + " Hz";
+                return;
+            }
+
+            frmOverlay.Close();
+            frmOverlay.Dispose();
+            frmOverlay = null;
+        }
+
+        private void hsbScreenRowSelector_Scroll(object sender, ScrollEventArgs e)
+        {
+            numScreenRow.Value = hsbScreenRowSelector.Value;
+
+            if (frmOverlay != null)
+            {
+                frmOverlay.Location = new Point(0, (int)numScreenRow.Value);
             }
         }
 
         private void numDelay_ValueChanged(object sender, EventArgs e)
         {
-            config.delay = (int)numDelay.Value;
+            if (isLoading)
+            {
+                return;
+            }
+
+            appConfig.Delay = (int)numDelay.Value;
             CountHz();
         }
 
@@ -292,24 +617,10 @@ namespace Ledqualizer
             {
                 audioCaptureVolumeMode = AcVolume.AudioCaptureVolumeMode.ModeMidToOut_Point;
             }
-        }
-
-        private void trackBarBrightness_Scroll(object sender, EventArgs e)
-        {
-            // config = GetConfig();
-        }
-
-        private void pnlBackgroundColor_Click(object sender, EventArgs e)
-        {
-            ColorDialog colorDialog = new ColorDialog();
-
-            colorDialog.AllowFullOpen = true;
-            colorDialog.AnyColor = true;
-
-            /*if (colorDialog.ShowDialog() == DialogResult.OK)
+            if (rbBrightness.Checked)
             {
-                pnlBackgroundColor.BackColor = colorDialog.Color;
-            }*/
+                audioCaptureVolumeMode = AcVolume.AudioCaptureVolumeMode.ModeBrightness;
+            }
         }
 
         private void chbWhite_CheckedChanged(object sender, EventArgs e)
@@ -333,104 +644,185 @@ namespace Ledqualizer
             {
                 rotateIdx = 0;
             }
+
             rotateModeRadios[rotateIdx].Checked = true;
             rotateIdx++;
         }
 
-        private void trackBarNormalizationLevel_Scroll(object sender, EventArgs e)
-        {
-            // config = GetConfig();
-        }
-
-        private void FrmMain_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            config.SaveToIni();
-        }
-
-        private void textIpAddress_TextChanged(object sender, EventArgs e)
-        {
-            config.ipAddress = textIpAddress.Text;
-        }
-
-        private void numLedCount_ValueChanged(object sender, EventArgs e)
-        {
-            config.ledCount = (int)numLedCount.Value;
-        }
-
-        private void numScreenRow_ValueChanged(object sender, EventArgs e)
-        {
-            config.screenCaptureRow = (int)numScreenRow.Value;
-        }
-
         private void tabControl_SelectedIndexChanged(object sender, EventArgs e)
         {
-            btnTerminate_Click(sender, e);
+            if (suppressTabRestart)
+            {
+                return;
+            }
 
             if (tabControl.SelectedTab == tabPageAcVolume)
             {
-                AcVolume.LoadAudioDevicesToComboBox(cbAudioDevices);
+                LoadAudioDevices();
             }
-
-            btnInitiate_Click(sender, e);
         }
 
         private void rbBasic_CheckedChanged(object sender, EventArgs e)
         {
             RadioButton[] radioButtonGroup = { rbSolid, rbGradient };
 
-            if (sender is RadioButton changedRadioButton)
+            if (sender is not RadioButton changedRadioButton || !changedRadioButton.Checked)
             {
-                if (changedRadioButton == null || !changedRadioButton.Checked)
-                    return;
+                return;
+            }
 
-                foreach (var radioButton in radioButtonGroup)
+            foreach (RadioButton radioButton in radioButtonGroup)
+            {
+                if (radioButton != changedRadioButton)
                 {
-                    if (radioButton != changedRadioButton)
-                    {
-                        radioButton.Checked = false;
-                    }
+                    radioButton.Checked = false;
                 }
+            }
+        }
+
+        private void FrmMain_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            StopAllDeviceRunsAsync().GetAwaiter().GetResult();
+            SyncConfigFromUi();
+            appConfig.SaveToIni();
+        }
+
+        private void numScreenRow_ValueChanged(object sender, EventArgs e)
+        {
+            if (!isLoading)
+            {
+                appConfig.ScreenCaptureRow = (int)numScreenRow.Value;
             }
         }
 
         private void numStrobeX_ValueChanged(object sender, EventArgs e)
         {
-            config.strobeTriggerX = (int)numStrobeX.Value;
+            if (!isLoading)
+            {
+                appConfig.StrobeTriggerX = (int)numStrobeX.Value;
+            }
         }
 
         private void numStrobeY_ValueChanged(object sender, EventArgs e)
         {
-            config.strobeTriggerY = (int)numStrobeY.Value;
+            if (!isLoading)
+            {
+                appConfig.StrobeTriggerY = (int)numStrobeY.Value;
+            }
         }
 
         private void numLaserTriggerX_ValueChanged(object sender, EventArgs e)
         {
-            config.laserTriggerX = (int)numLaserTriggerX.Value;
+            if (!isLoading)
+            {
+                appConfig.LaserTriggerX = (int)numLaserTriggerX.Value;
+            }
         }
 
         private void numLaserTriggerY_ValueChanged(object sender, EventArgs e)
         {
-            config.laserTriggerY = (int)numLaserTriggerY.Value;
+            if (!isLoading)
+            {
+                appConfig.LaserTriggerY = (int)numLaserTriggerY.Value;
+            }
         }
 
         private void numLaserPatternX_ValueChanged(object sender, EventArgs e)
         {
-            config.laserPatternX = (int)numLaserPatternX.Value;
+            if (!isLoading)
+            {
+                appConfig.LaserPatternX = (int)numLaserPatternX.Value;
+            }
         }
 
         private void numLaserPatternY_ValueChanged(object sender, EventArgs e)
         {
-            config.laserPatternY = (int)numLaserPatternY.Value;
+            if (!isLoading)
+            {
+                appConfig.LaserPatternY = (int)numLaserPatternY.Value;
+            }
         }
 
         private void numLaserColorX_ValueChanged(object sender, EventArgs e)
         {
-            config.laserColorX = (int)numLaserColorX.Value;
+            if (!isLoading)
+            {
+                appConfig.LaserColorX = (int)numLaserColorX.Value;
+            }
         }
 
         private void numLaserColorY_ValueChanged(object sender, EventArgs e)
         {
-            config.laserColorY = (int)numLaserColorY.Value;
+            if (!isLoading)
+            {
+                appConfig.LaserColorY = (int)numLaserColorY.Value;
+            }
+        }
+
+        private SceneKind GetCurrentSceneKind()
+        {
+            if (tabControl.SelectedTab == tabPageAcVolume)
+            {
+                return SceneKind.Volume;
+            }
+
+            if (tabControl.SelectedTab == tabPageScreenCapture)
+            {
+                return SceneKind.ScreenCapture;
+            }
+
+            if (tabControl.SelectedTab == tabPageOtherDevices)
+            {
+                return SceneKind.OtherDevices;
+            }
+
+            return SceneKind.Basic;
+        }
+
+        private void textIpAddress_TextChanged(object sender, EventArgs e)
+        {
+        }
+
+        private void numLedCount_ValueChanged(object sender, EventArgs e)
+        {
+        }
+
+        private void trackBarBrightness_Scroll(object sender, EventArgs e)
+        {
+        }
+
+        private void trackBarNormalizationLevel_Scroll(object sender, EventArgs e)
+        {
+        }
+
+        private void pnlBackgroundColor_Click(object sender, EventArgs e)
+        {
+        }
+
+        private T ReadUi<T>(Func<T> action)
+        {
+            if (InvokeRequired)
+            {
+                return (T)Invoke(action);
+            }
+
+            return action();
+        }
+
+        private void SafeUi(Action action)
+        {
+            if (IsDisposed || Disposing)
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(action);
+                return;
+            }
+
+            action();
         }
     }
 }

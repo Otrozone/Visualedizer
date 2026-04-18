@@ -29,8 +29,9 @@ namespace Ledqualizer
 
         public class DeviceDescriptor
         {
-            public MMDevice Device { get; set; }
-            public string Text { get; set; }
+            public MMDevice? Device { get; set; }
+            public string DeviceId { get; set; } = string.Empty;
+            public string Text { get; set; } = string.Empty;
         }
 
         /*private static AudioCaptureVolume instance;
@@ -263,6 +264,7 @@ namespace Ledqualizer
                 var item = new DeviceDescriptor
                 {
                     Device = device,
+                    DeviceId = device.ID,
                     Text = device.FriendlyName
                 };
 
