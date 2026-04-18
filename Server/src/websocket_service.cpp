@@ -42,9 +42,8 @@ void webSocketEvent(uint8_t clientNum, WStype_t type, uint8_t* payload, size_t l
 
   if (type == WStype_DISCONNECTED) {
     forEachLedStrip([](LedStripDvc& dvc) {
-      fill_solid(dvc.leds, dvc.ledCount, CRGB::Black);
+      dvc.off();
     });
-    FastLedShow();
   }
 }
 }  // namespace

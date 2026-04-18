@@ -2,6 +2,7 @@
 #include <freertos/semphr.h>
 
 #include "led.h"
+#include "render_service.h"
 
 namespace {
 SemaphoreHandle_t renderMutex = nullptr;
@@ -41,6 +42,8 @@ void initLeds() {
   ledStrips[4] = new LedStripDvc(4, DVC_NUM_LEDS_LIST[4]);
   FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[4], DVC_LED_COLOR_ORDER>(ledStrips[4]->leds, ledStrips[4]->ledCount);
   #endif
+
+  initRenderService();
 }
 
 static void circularShift(LedStripDvc* dvc) {

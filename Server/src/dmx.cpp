@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include "main.h"
 #include "dmx.h"
+#include "render_service.h"
 // #include <FastLED.h>
 
 const uint8_t DMX_MAX_UNIVERSE_COUNT = 255;
@@ -54,6 +55,14 @@ WiFiUDP udp;
       // Serial.printf("Universe index: %u\n", universeIdx);
 
       if (universeIdx == DVC_DMX_UNIVERSE) {
+        int totalLedCount = 0;
+        forEachLedStrip([&](LedStripDvc& dvc) {
+          totalLedCount += dvc.ledCount;
+        });
+
+        uint8_t* payload = new uint8_t[totalLedCount * 3];
+        int payloadOffset = 0;
+
         for (int stripIdx = 0; stripIdx < DVC_STRIP_COUNT; stripIdx++) {
           LedStripDvc* dvc = ledStrips[stripIdx];
           if (dvc == nullptr) {
@@ -62,13 +71,14 @@ WiFiUDP udp;
 
           for (int i = 0; i < dvc->ledCount; i++) {
             const int dmxChannelIdx = round(normalize(i, 0, dvc->ledCount - 1) * DMX_MAX_LED_COUNT_PER_UNIVERSE);
-            dvc->leds[i] = CRGB(packet.property_values[dmxChannelIdx * 3 + 1], packet.property_values[dmxChannelIdx * 3 + 2], packet.property_values[dmxChannelIdx * 3 + 3]);
+            payload[payloadOffset++] = packet.property_values[dmxChannelIdx * 3 + 1];
+            payload[payloadOffset++] = packet.property_values[dmxChannelIdx * 3 + 2];
+            payload[payloadOffset++] = packet.property_values[dmxChannelIdx * 3 + 3];
           }
         }
 
-        // Serial.printf("Count: %d", packet.property_value_count);
-
-        FastLedShow();
+        requestApplyBinaryFrame(payload, totalLedCount * 3);
+        delete[] payload;
 
         Serial.printf("Universe %u / %u Channels | Packet#: %u / Errors: %u / CH1: %u\n",
             htons(packet.universe),                 // The Universe for this packet

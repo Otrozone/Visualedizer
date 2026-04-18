@@ -2,6 +2,7 @@
 #include "controller.h"
 #include "common.h"
 #include "effects.h"
+#include "render_service.h"
 
 unsigned long menuTimeout = 0;
 
@@ -98,7 +99,6 @@ void drawOptionSegment(ControllerOption ctrlOpt) {
     Serial.println("HSV: " + String(hueVal) + " " + String(satVal) + " " + String(valVal));
 
     forEachLedStrip([&](LedStripDvc& dvc) {
-        CRGB* leds = dvc.leds;
         const int ledCount = dvc.ledCount;
         int segmentStart = 0;
         int segmentEnd = 0;
@@ -123,10 +123,7 @@ void drawOptionSegment(ControllerOption ctrlOpt) {
         Serial.println("Segment start: " + String(segmentStart));
         Serial.println("Segment end: " + String(segmentEnd));
 
-        fill_solid(leds, ledCount, CRGB::Black);
-        for (int i = segmentStart; i < segmentEnd; i++) {
-            leds[i] = CHSV(hueVal, satVal, valVal);
-        }
+        requestFillRangeHSV(dvc.ledIdx, segmentStart, segmentEnd, CHSV(hueVal, satVal, valVal));
     });
 }
 
@@ -146,8 +143,6 @@ void drawOption() {
         Serial.println("Value: " + String(controllerConfig.value.value));
         break;
     }
-
-    FastLedShow();
 }
 
 void enterOptions() {

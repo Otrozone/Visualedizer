@@ -4,10 +4,10 @@
 
 #include "common.h"
 #include "controller.h"
-#include "effects.h"
 #include "led.h"
 #include "led_strip_dvc.h"
 #include "main.h"
+#include "render_service.h"
 #include "runtime_service.h"
 
 namespace {
@@ -26,17 +26,7 @@ int getTotalLedCount() {
 
 void updateSection(int sectionCount, int sectionIdx, CRGB color) {
   forEachLedStrip([&](LedStripDvc& dvc) {
-    dvc.terminateCurrTask();
-
-    TaskSectionFillParams *params = new TaskSectionFillParams;
-    params->ledStrip = &dvc;
-    params->sectionCount = sectionCount;
-    params->sectionIdx = sectionIdx;
-    params->color = color;
-
-    dvc.terminateTaskFlag = false;
-
-    xTaskCreate(taskFillSection, "FillSectionTask", 2048, params, 10, &dvc.taskHandle);
+    requestFillSection(dvc.ledIdx, sectionCount, sectionIdx, color);
   });
 }
 
@@ -321,15 +311,7 @@ void processWebSocketBinary(uint8_t* payload, size_t length) {
     return;
   }
 
-  int payloadOffset = 0;
-  forEachLedStrip([&](LedStripDvc& dvc) {
-    dvc.terminateCurrTask();
-    for (int i = 0; i < dvc.ledCount; i++) {
-      dvc.leds[i] = CRGB(payload[payloadOffset], payload[payloadOffset + 1], payload[payloadOffset + 2]);
-      payloadOffset += 3;
-    }
-  });
-  FastLedShow();
+  requestApplyBinaryFrame(payload, length);
 }
 
 void echoWebSocketMessage(WebSocketsServer& webSocket, uint8_t clientNum, const String& message) {

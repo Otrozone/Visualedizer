@@ -1,6 +1,7 @@
 #include "led_strip_dvc.h"
 #include "effects.h"
 #include "led.h"
+#include "render_service.h"
 
 // Implementation of LedStripDvc methods
 
@@ -12,180 +13,60 @@ LedStripDvc::LedStripDvc(int idx, uint16_t count)
 }
 
 void LedStripDvc::terminateCurrTask() {
-    Serial.println("Requesting task termination");
-    if (taskHandle != nullptr) {
-        Serial.println("Terminating task");
-        terminateTaskFlag = true;
-
-        // Wait for task to really die
-        while (taskHandle != nullptr) {
-            vTaskDelay(5);
-        }
-
-        Serial.println("Task terminated");
-    }
+    requestAbortRender(ledIdx);
 }
 
 
 void LedStripDvc::runEffectStrobe(CRGB color, int delay1, int delay2) {
-    terminateCurrTask();
-
-    TaskStrobeParams *params = new TaskStrobeParams;
-    params->ledStrip = this;
-    params->color = color;
-    params->delay1 = delay1;
-    params->delay2 = delay2;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskStrobe, "StrobeTask", StackSize, params, 10, &taskHandle);
+    requestEffectStrobe(ledIdx, color, delay1, delay2);
 }
 
 void LedStripDvc::runEffectStrobeRandom(CRGB color) {
-    terminateCurrTask();
-
-    TaskStrobeParams *params = new TaskStrobeParams;
-    params->ledStrip = this;
-    params->color = color;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskStrobeRandom, "StrobeRandomTask", StackSize, params, 10, &taskHandle);
+    requestEffectStrobeRandom(ledIdx, color);
 }
 
 void LedStripDvc::runEffectRunningRainbow(int delay, int step, int delta) {
-    terminateCurrTask();
-
-    TaskRunningRainbowParams *params = new TaskRunningRainbowParams;
-    params->ledStrip = this;
-    params->delay = delay;
-    params->step = step;
-    params->delta = delta;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskRunningRainbow, "RunningRainbowTask", StackSize, params, 10, &taskHandle);
+    requestEffectRunningRainbow(ledIdx, delay, step, delta);
 }
 
 void LedStripDvc::runEffectRunningGradient(CRGB color1, CRGB color2, int delay, float step) {
-    terminateCurrTask();
-
-    TaskRunningGradientParams *params = new TaskRunningGradientParams;
-    params->ledStrip = this;
-    params->delay = delay;
-    params->step = step;
-    params->color1 = color1;
-    params->color2 = color2;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskRunningGradient, "RunningGradientTask", StackSize, params, 10, &taskHandle);
+    requestEffectRunningGradient(ledIdx, color1, color2, delay, step);
 }
 
 void LedStripDvc::runEffectNoise() {
-    terminateCurrTask();
-
-    TaskBaseParams *params = new TaskBaseParams;
-    params->ledStrip = this;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskNoise, "NoiseTask", StackSize, params, 10, &taskHandle);
+    requestEffectNoise(ledIdx);
 }
 
 void LedStripDvc::runEffectBlend(CRGB color, int duration) {
-    terminateCurrTask();
-
-    TaskColorAndDurationParams *params = new TaskColorAndDurationParams;
-    params->ledStrip = this;
-    params->duration = duration;
-    params->color = color;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskBlend, "BlendTask", StackSize, params, 10, &taskHandle);
+    requestEffectBlend(ledIdx, color, duration);
 }
 
 void LedStripDvc::runEffectFadeIn(CRGB color, int duration) {
-    terminateCurrTask();
-
-    TaskColorAndDurationParams *params = new TaskColorAndDurationParams;
-    params->ledStrip = this;
-    params->duration = duration;
-    params->color = color;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskFadeIn, "FadeInTask", StackSize, params, 10, &taskHandle);
+    requestEffectFadeIn(ledIdx, color, duration);
 }
 
 void LedStripDvc::runEffectFadeOut(int duration) {
-    terminateCurrTask();
-
-    TaskColorAndDurationParams *params = new TaskColorAndDurationParams;
-    params->ledStrip = this;
-    params->duration = duration;
-    params->color = CRGB::Black;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskFadeOut, "FadeOutTask", StackSize, params, 10, &taskHandle);
+    requestEffectFadeOut(ledIdx, duration);
 }
 
 void LedStripDvc::runEffectMid2Out(CRGB color, int duration) {
-    terminateCurrTask();
-
-    TaskColorAndDurationParams *params = new TaskColorAndDurationParams;
-    params->ledStrip = this;
-    params->duration = duration;
-    params->color = color;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskMid2Out, "CurrentLedTask", StackSize, params, 10, &taskHandle);
+    requestEffectMid2Out(ledIdx, color, duration);
 }
 
 void LedStripDvc::runEffectOut2Mid(CRGB color, int duration) {
-    terminateCurrTask();
-
-    TaskColorAndDurationParams *params = new TaskColorAndDurationParams;
-    params->ledStrip = this;
-    params->duration = duration;
-    params->color = color;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskOut2Mid, "CurrentLedTask", StackSize, params, 10, &taskHandle);
+    requestEffectOut2Mid(ledIdx, color, duration);
 }
 
 void LedStripDvc::fillSolid(CRGB color) {
-    terminateCurrTask();
-
-    TaskColorAndDurationParams *params = new TaskColorAndDurationParams;
-    params->ledStrip = this;
-    params->color = color;
-    params->duration = 0;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskFillSolid, "FillSolidTask", StackSize, params, 10, &taskHandle);
+    requestFillSolid(ledIdx, color);
 }
 
 void LedStripDvc::fillGradientHSV(CHSV chsvStart, CHSV chsvEnd) {
-    terminateCurrTask();
-
-    TaskGradientFillParams *params = new TaskGradientFillParams;
-    params->ledStrip = this;
-    params->start = chsvStart;
-    params->end = chsvEnd;
-
-    terminateTaskFlag = false;
-
-    xTaskCreate(taskFillGradientHSV, "FillGradientTask", StackSize, params, 10, &taskHandle);
+    requestFillGradientHSV(ledIdx, chsvStart, chsvEnd);
 }
 
 void LedStripDvc::off() {
-    fillSolid(CRGB::Black);
+    requestOff(ledIdx);
 }
 
 LedStripDvc::~LedStripDvc() {
