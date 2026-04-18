@@ -5,6 +5,7 @@
 #include "led_strip_dvc.h"
 #include "main.h"
 #include "network_service.h"
+#include "render_service.h"
 
 void updateActivity() {
   Serial.printf("Updating last activity (%d)\n", lastActivity);
@@ -20,7 +21,7 @@ static void startBootFadeIn() {
   CRGB warmWhite = htmlColor2Crgb(bootColor);
   forEachLedStrip([&](LedStripDvc& dvc) {
     Serial.printf("Starting fade-in effect on strip %d\n", dvc.ledIdx);
-    dvc.runEffectFadeIn(warmWhite, 3000);
+    requestEffectFadeIn(dvc.ledIdx, warmWhite, 3000);
   });
 }
 
@@ -54,6 +55,6 @@ void checkActivityTimeout() {
 
   forEachLedStrip([&](LedStripDvc& dvc) {
     Serial.printf("Running fade-out effect on strip %d\n", dvc.ledIdx);
-    dvc.runEffectFadeOut(fadeOutDuration);
+    requestEffectFadeOut(dvc.ledIdx, fadeOutDuration);
   });
 }

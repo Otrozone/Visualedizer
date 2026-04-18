@@ -5,6 +5,7 @@
 #include "command_service.h"
 #include "led.h"
 #include "main.h"
+#include "render_service.h"
 
 namespace {
 WebSocketsServer webSocket = WebSocketsServer(81);
@@ -42,7 +43,7 @@ void webSocketEvent(uint8_t clientNum, WStype_t type, uint8_t* payload, size_t l
 
   if (type == WStype_DISCONNECTED) {
     forEachLedStrip([](LedStripDvc& dvc) {
-      dvc.off();
+      requestOff(dvc.ledIdx);
     });
   }
 }

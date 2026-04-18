@@ -1,6 +1,7 @@
 #include "command_service.h"
 
 #include <algorithm>
+#include <functional>
 
 #include "common.h"
 #include "controller.h"
@@ -24,9 +25,20 @@ int getTotalLedCount() {
   return totalLedCount;
 }
 
-void updateSection(int sectionCount, int sectionIdx, CRGB color) {
+void forEachRequestedStrip(AsyncWebServerRequest* request, const std::function<void(int)>& fn) {
+  if (request != nullptr && request->hasParam("stripIdx", false, false)) {
+    fn(request->getParam("stripIdx", false, false)->value().toInt());
+    return;
+  }
+
   forEachLedStrip([&](LedStripDvc& dvc) {
-    requestFillSection(dvc.ledIdx, sectionCount, sectionIdx, color);
+    fn(dvc.ledIdx);
+  });
+}
+
+void updateSection(AsyncWebServerRequest* request, int sectionCount, int sectionIdx, CRGB color) {
+  forEachRequestedStrip(request, [&](int stripIdx) {
+    requestFillSection(stripIdx, sectionCount, sectionIdx, color);
   });
 }
 
@@ -35,9 +47,9 @@ void startTaskRunningRainbow(AsyncWebServerRequest* request) {
   int step = request->getParam("step", false, false)->value().toInt();
   int delta = request->getParam("delta", false, false)->value().toInt();
 
-  forEachLedStrip([&](LedStripDvc& dvc) {
-    Serial.printf("Starting running rainbow effect on strip %d\n", dvc.ledIdx);
-    dvc.runEffectRunningRainbow(delay, step, delta);
+  forEachRequestedStrip(request, [&](int stripIdx) {
+    Serial.printf("Starting running rainbow effect on strip %d\n", stripIdx);
+    requestEffectRunningRainbow(stripIdx, delay, step, delta);
   });
 }
 
@@ -49,22 +61,22 @@ void startTaskStrobe(AsyncWebServerRequest* request) {
   if (request->hasParam("stripIdx", false, false)) {
     int stripIdx = request->getParam("stripIdx", false, false)->value().toInt();
     Serial.printf("Starting strobe effect on strip %d\n", stripIdx);
-    ledStrips[stripIdx]->runEffectStrobe(color, delay1, delay2);
+    requestEffectStrobe(stripIdx, color, delay1, delay2);
     return;
   }
 
   Serial.println("Starting strobe effect on all strips");
   forEachLedStrip([&](LedStripDvc& dvc) {
-    dvc.runEffectStrobe(color, delay1, delay2);
+    requestEffectStrobe(dvc.ledIdx, color, delay1, delay2);
   });
 }
 
 void startTaskStrobeRandom(AsyncWebServerRequest* request) {
   CRGB color = htmlColor2Crgb(request->getParam("color", false, false)->value());
 
-  forEachLedStrip([&](LedStripDvc& dvc) {
-    Serial.printf("Starting strobe random effect on strip %d\n", dvc.ledIdx);
-    dvc.runEffectStrobeRandom(color);
+  forEachRequestedStrip(request, [&](int stripIdx) {
+    Serial.printf("Starting strobe random effect on strip %d\n", stripIdx);
+    requestEffectStrobeRandom(stripIdx, color);
   });
 }
 
@@ -75,15 +87,15 @@ void startTaskSolidColor(AsyncWebServerRequest* request) {
     if (request->hasParam("section-count") && request->hasParam("section-index")) {
       int sectionCount = request->getParam("section-count", false, false)->value().toInt();
       int sectionIdx = request->getParam("section-index", false, false)->value().toInt();
-      updateSection(sectionCount, sectionIdx, color);
+      updateSection(request, sectionCount, sectionIdx, color);
       return;
     }
 
     Serial.println("Solid color via ledStrips object.");
-    forEachLedStrip([&](LedStripDvc& dvc) {
+    forEachRequestedStrip(request, [&](int stripIdx) {
       Serial.printf("Filling strip idx %d with color (R:%d, G:%d, B:%d)\n",
-          dvc.ledIdx, color.r, color.g, color.b);
-      dvc.fillSolid(color);
+          stripIdx, color.r, color.g, color.b);
+      requestFillSolid(stripIdx, color);
     });
     return;
   }
@@ -97,18 +109,18 @@ void startTaskSolidColor(AsyncWebServerRequest* request) {
     if (request->hasParam("section-count") && request->hasParam("section-index")) {
       int sectionCount = request->getParam("section-count", false, false)->value().toInt();
       int sectionIdx = request->getParam("section-index", false, false)->value().toInt();
-      updateSection(sectionCount, sectionIdx, color);
+      updateSection(request, sectionCount, sectionIdx, color);
       return;
     }
 
     if (request->hasParam("stripIdx", false, false)) {
       int stripIdx = request->getParam("stripIdx", false, false)->value().toInt();
-      ledStrips[stripIdx]->fillSolid(color);
+      requestFillSolid(stripIdx, color);
       return;
     }
 
     forEachLedStrip([&](LedStripDvc& dvc) {
-      dvc.fillSolid(color);
+      requestFillSolid(dvc.ledIdx, color);
     });
     return;
   }
@@ -133,9 +145,9 @@ void startTaskFadeIn(AsyncWebServerRequest* request) {
     return;
   }
 
-  forEachLedStrip([&](LedStripDvc& dvc) {
-    Serial.printf("Starting fade-in effect on strip %d\n", dvc.ledIdx);
-    dvc.runEffectFadeIn(color, duration);
+  forEachRequestedStrip(request, [&](int stripIdx) {
+    Serial.printf("Starting fade-in effect on strip %d\n", stripIdx);
+    requestEffectFadeIn(stripIdx, color, duration);
   });
 }
 
@@ -146,9 +158,9 @@ void startTaskFadeOut(AsyncWebServerRequest* request) {
   }
 
   int duration = request->getParam("duration", false, false)->value().toInt();
-  forEachLedStrip([&](LedStripDvc& dvc) {
-    Serial.printf("Starting fade-out effect on strip %d\n", dvc.ledIdx);
-    dvc.runEffectFadeOut(duration);
+  forEachRequestedStrip(request, [&](int stripIdx) {
+    Serial.printf("Starting fade-out effect on strip %d\n", stripIdx);
+    requestEffectFadeOut(stripIdx, duration);
   });
 }
 
@@ -169,9 +181,9 @@ void startTaskBlend(AsyncWebServerRequest* request) {
     return;
   }
 
-  forEachLedStrip([&](LedStripDvc& dvc) {
-    Serial.printf("Starting blend effect on strip %d\n", dvc.ledIdx);
-    dvc.runEffectBlend(color, duration);
+  forEachRequestedStrip(request, [&](int stripIdx) {
+    Serial.printf("Starting blend effect on strip %d\n", stripIdx);
+    requestEffectBlend(stripIdx, color, duration);
   });
 }
 
@@ -190,15 +202,15 @@ void startTaskGradient(AsyncWebServerRequest* request) {
   chsvEnd.value = mapRange(brightness, 0, 100, 0, 255);
   chsvEnd.saturation = 255;
 
-  forEachLedStrip([&](LedStripDvc& dvc) {
-    Serial.printf("Starting gradient effect on strip %d\n", dvc.ledIdx);
-    dvc.fillGradientHSV(chsvStart, chsvEnd);
+  forEachRequestedStrip(request, [&](int stripIdx) {
+    Serial.printf("Starting gradient effect on strip %d\n", stripIdx);
+    requestFillGradientHSV(stripIdx, chsvStart, chsvEnd);
   });
 }
 
 void handleOff(AsyncWebServerRequest* request) {
-  forEachLedStrip([&](LedStripDvc& dvc) {
-    dvc.off();
+  forEachRequestedStrip(request, [&](int stripIdx) {
+    requestOff(stripIdx);
   });
 }
 
@@ -208,8 +220,8 @@ void handleNoise(AsyncWebServerRequest* request) {
 
 void handleAbort(AsyncWebServerRequest* request) {
   (void)request;
-  forEachLedStrip([&](LedStripDvc& dvc) {
-    dvc.terminateCurrTask();
+  forEachRequestedStrip(request, [&](int stripIdx) {
+    requestAbortRender(stripIdx);
   });
 }
 
@@ -299,7 +311,7 @@ void processWebSocketMessage(const String& message) {
   } else if (cmd.equals("solid-color")) {
     CRGB color = htmlColor2Crgb(getQueryParameterValue(message, "color"));
     forEachLedStrip([&](LedStripDvc& dvc) {
-      dvc.fillSolid(color);
+      requestFillSolid(dvc.ledIdx, color);
     });
   }
 }

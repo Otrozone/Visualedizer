@@ -1,7 +1,6 @@
 #include "main.h"
 #include "controller.h"
 #include "common.h"
-#include "effects.h"
 #include "render_service.h"
 
 unsigned long menuTimeout = 0;
@@ -23,7 +22,7 @@ void lightRgbColor(CRGB color) {
     int duration = 1000; // milliseconds
 
     forEachLedStrip([&](LedStripDvc& dvc) {
-        dvc.runEffectBlend(color, duration);
+        requestEffectBlend(dvc.ledIdx, color, duration);
     });
 
     lightState = true;
@@ -44,7 +43,7 @@ void ctrlLightOff() {
     Serial.println("Light off");
 
     forEachLedStrip([](LedStripDvc& dvc) {
-        dvc.runEffectFadeOut(1000);
+        requestEffectFadeOut(dvc.ledIdx, 1000);
     });
 
     lightState = false;
@@ -150,7 +149,7 @@ void enterOptions() {
     operationMode = MODE_MENU_HUE;
 
     forEachLedStrip([](LedStripDvc& dvc) {
-        dvc.runEffectMid2Out(CRGB::White, 1000);
+        requestEffectMid2Out(dvc.ledIdx, CRGB::White, 1000);
     });
     delay(1000);
 
@@ -162,7 +161,7 @@ void finishOptions() {
     operationMode = MODE_MENU_INACTIVE;
 
     forEachLedStrip([](LedStripDvc& dvc) {
-        dvc.runEffectOut2Mid(CRGB::White, 1000);
+        requestEffectOut2Mid(dvc.ledIdx, CRGB::White, 1000);
     });
     delay(1000);
 
@@ -274,7 +273,7 @@ void ctrlBtn0() {
 
 void ctrlBtn1() {
     forEachLedStrip([](LedStripDvc& dvc) {
-        dvc.runEffectRunningRainbow(50, 4, 7);
+        requestEffectRunningRainbow(dvc.ledIdx, 50, 4, 7);
     });
     lightState = true;
 }
@@ -296,8 +295,8 @@ void ctrlBtn2() {
     color2 = CHSV(hueDegreesToFastLed(285), 255, 50);
 
     forEachLedStrip([&](LedStripDvc& dvc) {
-        dvc.fillGradientHSV(chsvStart, chsvEnd);
-        dvc.runEffectRunningGradient(color1, color2, 50, 0.03f);
+        requestFillGradientHSV(dvc.ledIdx, chsvStart, chsvEnd);
+        requestEffectRunningGradient(dvc.ledIdx, color1, color2, 50, 0.03f);
     });
     lightState = true;
 }
@@ -308,7 +307,7 @@ void ctrlBtn3() {
     color1 = CHSV(hueDegreesToFastLed(0), 255, 50);
     color2 = CHSV(hueDegreesToFastLed(128), 255, 50);
     forEachLedStrip([&](LedStripDvc& dvc) {
-        dvc.runEffectRunningGradient(color1, color2, 50, 0.03f);
+        requestEffectRunningGradient(dvc.ledIdx, color1, color2, 50, 0.03f);
     });
     lightState = true;
 }
@@ -319,7 +318,7 @@ void ctrlBtn4() {
     color1 = CHSV(hueDegreesToFastLed(128), 200, 200);
     color2 = CHSV(hueDegreesToFastLed(255), 200, 200);
     forEachLedStrip([&](LedStripDvc& dvc) {
-        dvc.runEffectRunningGradient(color1, color2, 50, 0.03f);
+        requestEffectRunningGradient(dvc.ledIdx, color1, color2, 50, 0.03f);
     });
     lightState = true;
 }
@@ -330,7 +329,7 @@ void ctrlBtn5() {
     color1 = CHSV(hueDegreesToFastLed(0), 255, 50);
     color2 = CHSV(hueDegreesToFastLed(25), 255, 50);
     forEachLedStrip([&](LedStripDvc& dvc) {
-        dvc.runEffectRunningGradient(color1, color2, 50, 0.03f);
+        requestEffectRunningGradient(dvc.ledIdx, color1, color2, 50, 0.03f);
     });
     lightState = true;
 
@@ -342,7 +341,7 @@ void ctrlBtn6() {
     color1 = CHSV(hueDegreesToFastLed(140), 255, 50);
     color2 = CHSV(hueDegreesToFastLed(225), 255, 50);
     forEachLedStrip([&](LedStripDvc& dvc) {
-        dvc.runEffectRunningGradient(color1, color2, 50, 0.03f);
+        requestEffectRunningGradient(dvc.ledIdx, color1, color2, 50, 0.03f);
     });
     lightState = true;
 }
@@ -353,7 +352,7 @@ void ctrlBtn7() {
     color1 = CHSV(hueDegreesToFastLed(205), 255, 100);
     color2 = CHSV(hueDegreesToFastLed(180), 255, 100);
     forEachLedStrip([&](LedStripDvc& dvc) {
-        dvc.runEffectRunningGradient(color1, color2, 50, 0.03f);
+        requestEffectRunningGradient(dvc.ledIdx, color1, color2, 50, 0.03f);
     });
     lightState = true;
 }
@@ -364,7 +363,7 @@ void ctrlBtn8() {
     color1 = CHSV(hueDegreesToFastLed(145), 255, 200);
     color2 = CHSV(hueDegreesToFastLed(320), 255, 200);
     forEachLedStrip([&](LedStripDvc& dvc) {
-        dvc.runEffectRunningGradient(color1, color2, 50, 0.03f);
+        requestEffectRunningGradient(dvc.ledIdx, color1, color2, 50, 0.03f);
     });
     lightState = true;
 }
@@ -375,7 +374,7 @@ void ctrlBtn9() {
     color1 = CHSV(hueDegreesToFastLed(128), 180, 180);
     color2 = CHSV(hueDegreesToFastLed(255), 180, 180);
     forEachLedStrip([&](LedStripDvc& dvc) {
-        dvc.runEffectRunningGradient(color1, color2, 50, 0.03f);
+        requestEffectRunningGradient(dvc.ledIdx, color1, color2, 50, 0.03f);
     });
     lightState = true;
 }
