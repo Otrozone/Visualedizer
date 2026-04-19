@@ -43,6 +43,7 @@
             trackBarHue.Name = "trackBarHue";
             trackBarHue.Size = new Size(300, 45);
             trackBarHue.TabIndex = 0;
+            trackBarHue.ValueChanged += trackBarHue_ValueChanged;
             // 
             // pictureHue
             // 

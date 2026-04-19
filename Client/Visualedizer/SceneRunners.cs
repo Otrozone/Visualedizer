@@ -3,19 +3,22 @@ using System.Diagnostics;
 
 namespace Ledqualizer
 {
-    internal sealed class BasicSceneSettings
+    internal sealed class SolidColorSceneSettings
     {
-        public bool Solid { get; set; }
-        public double SolidHue { get; set; }
-        public double SolidMinHue { get; set; }
-        public double SolidMaxHue { get; set; }
+        public double Hue { get; set; }
+        public double MinHue { get; set; }
+        public double MaxHue { get; set; } = 360;
         public int SaturationValue { get; set; }
-        public int SaturationMinimum { get; set; }
-        public int SaturationMaximum { get; set; }
         public int BrightnessValue { get; set; }
-        public int BrightnessMaximum { get; set; }
-        public double GradientHueMin { get; set; }
-        public double GradientHueMax { get; set; }
+        public int Delay { get; set; }
+    }
+
+    internal sealed class GradientSceneSettings
+    {
+        public double HueMin { get; set; }
+        public double HueMax { get; set; } = 360;
+        public int SaturationValue { get; set; }
+        public int BrightnessValue { get; set; }
         public int Delay { get; set; }
     }
 
@@ -24,7 +27,7 @@ namespace Ledqualizer
         public AcVolume.AudioCaptureVolumeMode Mode { get; set; }
         public int Delay { get; set; }
         public int BrightnessValue { get; set; }
-        public int BrightnessMaximum { get; set; }
+        public int BrightnessMaximum { get; set; } = 100;
         public int NormalizationValue { get; set; }
         public bool Reverse { get; set; }
         public bool HueReverse { get; set; }
@@ -68,11 +71,11 @@ namespace Ledqualizer
         public int LaserColorY { get; set; }
     }
 
-    internal sealed class BasicSceneRunner : ISceneRunner
+    internal sealed class SolidColorSceneRunner : ISceneRunner
     {
-        private readonly Func<BasicSceneSettings> settingsProvider;
+        private readonly Func<SolidColorSceneSettings> settingsProvider;
 
-        public BasicSceneRunner(Func<BasicSceneSettings> settingsProvider)
+        public SolidColorSceneRunner(Func<SolidColorSceneSettings> settingsProvider)
         {
             this.settingsProvider = settingsProvider;
         }
@@ -81,13 +84,11 @@ namespace Ledqualizer
         {
             while (!token.IsCancellationRequested)
             {
-                BasicSceneSettings settings = settingsProvider();
+                SolidColorSceneSettings settings = settingsProvider();
                 bool anySent = false;
-
                 foreach (DeviceTarget device in devices)
                 {
-                    byte[] frame = BuildFrame(device.Config.LedCount, settings);
-                    anySent |= await device.Session.SendFrameAsync(frame, token).ConfigureAwait(false);
+                    anySent |= await device.Session.SendFrameAsync(BuildFrame(device.Config.LedCount, settings), token).ConfigureAwait(false);
                 }
 
                 if (!anySent)
@@ -99,34 +100,64 @@ namespace Ledqualizer
             }
         }
 
-        private static byte[] BuildFrame(int ledCount, BasicSceneSettings settings)
+        private static byte[] BuildFrame(int ledCount, SolidColorSceneSettings settings)
         {
             byte[] ledConfigArray = new byte[ledCount * 3];
+            double hue = Common.MapValue(settings.Hue, 0, 360, settings.MinHue, settings.MaxHue);
+            double saturation = settings.SaturationValue / 100.0;
+            double brightness = settings.BrightnessValue / 100.0;
+            Color rgbColor = Common.HSVToRGB(hue, saturation, brightness);
 
-            if (settings.Solid)
-            {
-                double hue = Common.MapValue(settings.SolidHue, 0, 360, settings.SolidMinHue, settings.SolidMaxHue);
-                double saturation = Common.MapValue(settings.SaturationValue, settings.SaturationMinimum, settings.SaturationMaximum, 0, 1.0);
-                double brightness = (double)settings.BrightnessValue / settings.BrightnessMaximum;
-                Color rgbColor = Common.HSVToRGB(hue, saturation, brightness);
-
-                for (int i = 0; i < ledCount; i++)
-                {
-                    int idx = i * 3;
-                    ledConfigArray[idx] = rgbColor.R;
-                    ledConfigArray[idx + 1] = rgbColor.G;
-                    ledConfigArray[idx + 2] = rgbColor.B;
-                }
-
-                return ledConfigArray;
-            }
-
-            double gradientSaturation = Common.MapValue(settings.SaturationValue, settings.SaturationMinimum, settings.SaturationMaximum, 0, 1.0);
-            double gradientBrightness = (double)settings.BrightnessValue / settings.BrightnessMaximum;
             for (int i = 0; i < ledCount; i++)
             {
-                double hue = Common.MapValue(i, 0, ledCount, settings.GradientHueMin, settings.GradientHueMax);
-                Color rgbColor = Common.HSVToRGB(hue, gradientSaturation, gradientBrightness);
+                int idx = i * 3;
+                ledConfigArray[idx] = rgbColor.R;
+                ledConfigArray[idx + 1] = rgbColor.G;
+                ledConfigArray[idx + 2] = rgbColor.B;
+            }
+
+            return ledConfigArray;
+        }
+    }
+
+    internal sealed class GradientSceneRunner : ISceneRunner
+    {
+        private readonly Func<GradientSceneSettings> settingsProvider;
+
+        public GradientSceneRunner(Func<GradientSceneSettings> settingsProvider)
+        {
+            this.settingsProvider = settingsProvider;
+        }
+
+        public async Task RunAsync(IReadOnlyList<DeviceTarget> devices, CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                GradientSceneSettings settings = settingsProvider();
+                bool anySent = false;
+                foreach (DeviceTarget device in devices)
+                {
+                    anySent |= await device.Session.SendFrameAsync(BuildFrame(device.Config.LedCount, settings), token).ConfigureAwait(false);
+                }
+
+                if (!anySent)
+                {
+                    return;
+                }
+
+                await Task.Delay(Math.Max(settings.Delay, 1), token).ConfigureAwait(false);
+            }
+        }
+
+        private static byte[] BuildFrame(int ledCount, GradientSceneSettings settings)
+        {
+            byte[] ledConfigArray = new byte[ledCount * 3];
+            double saturation = settings.SaturationValue / 100.0;
+            double brightness = settings.BrightnessValue / 100.0;
+            for (int i = 0; i < ledCount; i++)
+            {
+                double hue = Common.MapValue(i, 0, Math.Max(ledCount, 1), settings.HueMin, settings.HueMax);
+                Color rgbColor = Common.HSVToRGB(hue, saturation, brightness);
                 int idx = i * 3;
                 ledConfigArray[idx] = rgbColor.R;
                 ledConfigArray[idx + 1] = rgbColor.G;
@@ -163,17 +194,13 @@ namespace Ledqualizer
             while (!token.IsCancellationRequested)
             {
                 VolumeSceneSettings settings = settingsProvider();
-                string? requestedDeviceId = audioDeviceIdProvider();
-                float volume = ReadVolume(requestedDeviceId);
-                int percentVolume = (int)Math.Round(volume * 100);
+                float volume = ReadVolume(audioDeviceIdProvider());
+                progressReporter((int)Math.Round(volume * 100));
 
-                progressReporter(percentVolume);
                 bool anySent = false;
-
                 foreach (DeviceTarget device in devices)
                 {
-                    byte[] frame = AudioReactiveFrameBuilder.BuildFrame(device.Config.LedCount, volume, settings);
-                    anySent |= await device.Session.SendFrameAsync(frame, token).ConfigureAwait(false);
+                    anySent |= await device.Session.SendFrameAsync(AudioReactiveFrameBuilder.BuildFrame(device.Config.LedCount, volume, settings), token).ConfigureAwait(false);
                 }
 
                 if (!anySent)
@@ -255,7 +282,6 @@ namespace Ledqualizer
             {
                 SpectralSceneSettings settings = settingsProvider();
                 string? requestedDeviceId = audioDeviceIdProvider();
-
                 if (!string.Equals(activeDeviceId, requestedDeviceId, StringComparison.Ordinal))
                 {
                     spectralAnalysis.Start(requestedDeviceId);
@@ -274,8 +300,7 @@ namespace Ledqualizer
                 bool anySent = false;
                 foreach (DeviceTarget device in devices)
                 {
-                    byte[] frame = AudioReactiveFrameBuilder.BuildFrame(device.Config.LedCount, strength, settings);
-                    anySent |= await device.Session.SendFrameAsync(frame, token).ConfigureAwait(false);
+                    anySent |= await device.Session.SendFrameAsync(AudioReactiveFrameBuilder.BuildFrame(device.Config.LedCount, strength, settings), token).ConfigureAwait(false);
                 }
 
                 if (!anySent)
@@ -342,7 +367,7 @@ namespace Ledqualizer
                 {
                     double hue = 360 * ((float)i / ledCount);
                     hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                    Color rgbColor = Common.HSVToRGB(hue, 1.0, (double)settings.BrightnessValue / settings.BrightnessMaximum);
+                    Color rgbColor = Common.HSVToRGB(hue, 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                     ledConfigArray[idx] = rgbColor.R;
                     ledConfigArray[idx + 1] = rgbColor.G;
                     ledConfigArray[idx + 2] = rgbColor.B;
@@ -356,14 +381,14 @@ namespace Ledqualizer
 
         private static void ComputeColorsEndToStart(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
-            for (int i = ledCount - 1; i > 0; i--)
+            for (int i = ledCount - 1; i >= 0; i--)
             {
                 int idx = i * 3;
                 if (i > Math.Round(ledCount * (1 - vol)))
                 {
                     double hue = 360 - (360 * ((float)i / ledCount));
                     hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                    Color rgbColor = Common.HSVToRGB(hue, 1.0, (double)settings.BrightnessValue / settings.BrightnessMaximum);
+                    Color rgbColor = Common.HSVToRGB(hue, 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                     ledConfigArray[idx] = rgbColor.R;
                     ledConfigArray[idx + 1] = rgbColor.G;
                     ledConfigArray[idx + 2] = rgbColor.B;
@@ -383,12 +408,11 @@ namespace Ledqualizer
                 int idx = i * 3;
                 int distance = Math.Abs(i - center);
                 float distanceFactor = center == 0 ? 0 : (float)distance / center;
-
                 if (vol > distanceFactor)
                 {
                     double hue = 360 * (settings.HueReverse ? 1 - distanceFactor : distanceFactor);
                     hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                    Color rgbColor = Common.HSVToRGB(hue, settings.White ? 0 : 1.0, (double)settings.BrightnessValue / settings.BrightnessMaximum);
+                    Color rgbColor = Common.HSVToRGB(hue, settings.White ? 0 : 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                     ledConfigArray[idx] = rgbColor.R;
                     ledConfigArray[idx + 1] = rgbColor.G;
                     ledConfigArray[idx + 2] = rgbColor.B;
@@ -404,18 +428,16 @@ namespace Ledqualizer
         {
             int center = ledCount / 2;
             const int pointSize = 10;
-
             for (int i = 0; i < ledCount; i++)
             {
                 int idx = i * 3;
                 int distance = Math.Abs(i - center);
                 float distanceFactor = center == 0 ? 0 : (float)distance / center;
-
                 if (Math.Round(vol * center) > distance - pointSize && Math.Round(vol * center) < distance + pointSize)
                 {
                     double hue = 360 * (settings.HueReverse ? 1 - distanceFactor : distanceFactor);
                     hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                    Color rgbColor = Common.HSVToRGB(hue, 1.0, (double)settings.BrightnessValue / settings.BrightnessMaximum);
+                    Color rgbColor = Common.HSVToRGB(hue, 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                     ledConfigArray[idx] = rgbColor.R;
                     ledConfigArray[idx + 1] = rgbColor.G;
                     ledConfigArray[idx + 2] = rgbColor.B;
@@ -430,15 +452,13 @@ namespace Ledqualizer
         private static void ComputeColorsColorPush(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             int center = ledCount / 2;
-
             for (int i = 0; i < ledCount; i++)
             {
                 int idx = i * 3;
                 int distance = Math.Abs(i - center);
                 float distanceFactor = center == 0 ? 0 : (float)distance / center;
                 float adjustedVol = vol * (1.0f - distanceFactor);
-
-                Color rgbColor = Common.HSVToRGB(360 * adjustedVol, 1.0, (double)settings.BrightnessValue / settings.BrightnessMaximum);
+                Color rgbColor = Common.HSVToRGB(360 * adjustedVol, 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                 ledConfigArray[idx] = rgbColor.R;
                 ledConfigArray[idx + 1] = rgbColor.G;
                 ledConfigArray[idx + 2] = rgbColor.B;
@@ -448,17 +468,15 @@ namespace Ledqualizer
         private static void ComputeColorsBrightness(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             int center = ledCount / 2;
-
             for (int i = 0; i < ledCount; i++)
             {
                 int idx = i * 3;
                 int distance = Math.Abs(i - center);
                 float distanceFactor = center == 0 ? 0 : (float)distance / center;
                 float adjustedVol = vol * (1.0f - distanceFactor);
-
                 double hue = 360 * (settings.HueReverse ? 1 - distanceFactor : distanceFactor);
                 hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                Color rgbColor = Common.HSVToRGB(hue, 1.0, adjustedVol * ((double)settings.BrightnessValue / settings.BrightnessMaximum));
+                Color rgbColor = Common.HSVToRGB(hue, 1.0, adjustedVol * (settings.BrightnessValue / (double)settings.BrightnessMaximum));
                 ledConfigArray[idx] = rgbColor.R;
                 ledConfigArray[idx + 1] = rgbColor.G;
                 ledConfigArray[idx + 2] = rgbColor.B;
@@ -503,7 +521,7 @@ namespace Ledqualizer
                 ScreenCaptureSceneSettings settings = settingsProvider();
                 graphics.CopyFromScreen(0, settings.CaptureY, 0, 0, new Size(screenWidth, 1));
 
-                var pixelColors = new List<Color>(screenWidth);
+                List<Color> pixelColors = new(screenWidth);
                 for (int x = 0; x < screenWidth; x++)
                 {
                     pixelColors.Add(screenCapture.GetPixel(x, 0));
@@ -540,8 +558,7 @@ namespace Ledqualizer
         private static List<Color> ReducePixels(List<Color> pixelColors, int ledCount, int screenWidth)
         {
             var reducedPixelColors = new List<Color>(ledCount);
-            int segmentSize = Math.Max(screenWidth / ledCount, 1);
-
+            int segmentSize = Math.Max(screenWidth / Math.Max(ledCount, 1), 1);
             for (int i = 0; i < ledCount; i++)
             {
                 int startIndex = i * segmentSize;
@@ -551,7 +568,7 @@ namespace Ledqualizer
                     continue;
                 }
 
-                int endIndex = Math.Min(((i + 1) * segmentSize), pixelColors.Count) - 1;
+                int endIndex = Math.Min((i + 1) * segmentSize, pixelColors.Count) - 1;
                 reducedPixelColors.Add(CalculateAverageColor(pixelColors.GetRange(startIndex, endIndex - startIndex + 1)));
             }
 
@@ -563,7 +580,6 @@ namespace Ledqualizer
             int totalRed = 0;
             int totalGreen = 0;
             int totalBlue = 0;
-
             foreach (Color color in colors)
             {
                 totalRed += color.R;
@@ -605,10 +621,8 @@ namespace Ledqualizer
 
             while (!token.IsCancellationRequested)
             {
-                OtherDevicesSceneSettings settings = settingsProvider();
-                byte[] data = BuildFrame(screenCapture, graphics, settings);
+                byte[] data = BuildFrame(screenCapture, graphics, settingsProvider());
                 bool anySent = false;
-
                 foreach (DeviceTarget device in devices)
                 {
                     anySent |= await device.Session.SendFrameAsync(data, token).ConfigureAwait(false);
@@ -619,7 +633,7 @@ namespace Ledqualizer
                     return;
                 }
 
-                await Task.Delay(Math.Max(settings.Delay, 1), token).ConfigureAwait(false);
+                await Task.Delay(Math.Max(settingsProvider().Delay, 1), token).ConfigureAwait(false);
             }
         }
 

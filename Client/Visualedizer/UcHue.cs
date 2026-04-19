@@ -13,6 +13,8 @@ namespace Visualedizer
 {
     public partial class UcHue : UserControl
     {
+        public event EventHandler? ValueChanged;
+
         public UcHue()
         {
             InitializeComponent();
@@ -68,6 +70,11 @@ namespace Visualedizer
         public int getHueVal()
         {
             return trackBarHue.Value;
+        }
+
+        private void trackBarHue_ValueChanged(object sender, EventArgs e)
+        {
+            ValueChanged?.Invoke(this, e);
         }
     }
 }

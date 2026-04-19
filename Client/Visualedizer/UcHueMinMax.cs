@@ -12,6 +12,8 @@ namespace Visualedizer
 {
     public partial class UcHueMinMax : UserControl
     {
+        public event EventHandler? ValueChanged;
+
         public UcHueMinMax()
         {
             InitializeComponent();
@@ -34,6 +36,8 @@ namespace Visualedizer
             {
                 trackBarHueMin.Value = Math.Max(trackBarHueMax.Value - 1, trackBarHueMax.Minimum);
             }
+
+            ValueChanged?.Invoke(this, e);
         }
 
         private void trackBarHueMin_ValueChanged(object sender, EventArgs e)
@@ -42,6 +46,8 @@ namespace Visualedizer
             {
                 trackBarHueMax.Value = Math.Min(trackBarHueMin.Value + 1, trackBarHueMin.Maximum);
             }
+
+            ValueChanged?.Invoke(this, e);
         }
 
         [Browsable(true)]
