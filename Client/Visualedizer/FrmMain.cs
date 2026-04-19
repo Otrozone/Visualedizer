@@ -45,6 +45,8 @@ namespace Ledqualizer
         private bool isLoading;
         private bool reconcileInProgress;
         private bool reconcileRequested;
+        private bool closingInProgress;
+        private bool shutdownCompleted;
         private bool syncingAudioDeviceSelection;
         private string? selectedAudioDeviceId;
         private OtherDevicesForm? otherDevicesForm;
@@ -245,7 +247,7 @@ namespace Ledqualizer
                 do
                 {
                     reconcileRequested = false;
-                    await RefreshMetadataForEnabledDevicesAsync().ConfigureAwait(false);
+                    await RefreshMetadataForEnabledDevicesAsync();
                     UpdateInvalidDeviceStatuses();
 
                     Dictionary<string, DeviceConfig> desiredDevices = deviceRows
@@ -1177,17 +1179,40 @@ namespace Ledqualizer
             }
         }
 
-        private void FrmMain_FormClosing(object sender, FormClosingEventArgs e)
+        private async void FrmMain_FormClosing(object sender, FormClosingEventArgs e)
         {
+            if (shutdownCompleted)
+            {
+                return;
+            }
+
+            if (closingInProgress)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            e.Cancel = true;
+            closingInProgress = true;
+
             CloseOverlayForm();
             if (otherDevicesForm != null && !otherDevicesForm.IsDisposed)
             {
                 otherDevicesForm.Close();
             }
 
-            StopAllDeviceRunsAsync().GetAwaiter().GetResult();
-            SyncConfigFromUi();
-            appConfig.SaveToIni();
+            try
+            {
+                await StopAllDeviceRunsAsync();
+                SyncConfigFromUi();
+                appConfig.SaveToIni();
+                shutdownCompleted = true;
+                Close();
+            }
+            finally
+            {
+                closingInProgress = false;
+            }
         }
 
         private T ReadUi<T>(Func<T> action)
