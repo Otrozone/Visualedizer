@@ -43,7 +43,8 @@ extern bool activityTimeoutRequested;
 extern unsigned long tmpActivityTimeout;
 extern int fadeOutDuration;
 
-extern bool webSockEnabled;
+extern bool webUiUseWebSockets;
+extern bool turnOffOnLeave;
 extern bool dmxEnabled;
 extern bool dmxUnicast;
 extern uint16_t dmxUniverse;

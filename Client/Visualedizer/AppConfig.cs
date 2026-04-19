@@ -134,6 +134,7 @@ namespace Ledqualizer
                 data[sectionName]["host"] = device.Host;
                 data[sectionName]["port"] = device.Port.ToString(CultureInfo.InvariantCulture);
                 data[sectionName]["ledCount"] = device.LedCount.ToString(CultureInfo.InvariantCulture);
+                data[sectionName]["stripCount"] = device.StripCount.ToString(CultureInfo.InvariantCulture);
                 data[sectionName]["enabled"] = device.Enabled.ToString(CultureInfo.InvariantCulture);
                 data[sectionName]["assignedSceneId"] = device.AssignedSceneId;
             }
@@ -251,7 +252,8 @@ namespace Ledqualizer
             string host = section.Keys["host"];
             int port = ParseInt(section.Keys["port"], 81);
             int ledCount = ParseInt(section.Keys["ledCount"], 0);
-            if (string.IsNullOrWhiteSpace(host) || port <= 0 || ledCount <= 0)
+            int stripCount = ParseInt(section.Keys["stripCount"], 0);
+            if (string.IsNullOrWhiteSpace(host) || port <= 0)
             {
                 return null;
             }
@@ -269,6 +271,7 @@ namespace Ledqualizer
                 Host = host,
                 Port = port,
                 LedCount = ledCount,
+                StripCount = stripCount,
                 Enabled = ParseBool(section.Keys["enabled"], true),
                 AssignedSceneId = assignedSceneId
             };
@@ -291,6 +294,7 @@ namespace Ledqualizer
                 Host = host,
                 Port = port,
                 LedCount = ledCount,
+                StripCount = ledCount > 0 ? 1 : 0,
                 Enabled = true,
                 AssignedSceneId = GetOrCreateLegacyScene(LegacySceneKind.Basic, legacySceneMap, data)
             };
@@ -371,7 +375,8 @@ namespace Ledqualizer
                     Name = "Device 1",
                     Host = "127.0.0.1",
                     Port = 81,
-                    LedCount = 218,
+                    LedCount = 0,
+                    StripCount = 0,
                     Enabled = true,
                     AssignedSceneId = Scenes[0].Id
                 });

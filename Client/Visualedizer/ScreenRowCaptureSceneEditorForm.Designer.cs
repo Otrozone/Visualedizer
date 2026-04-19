@@ -1,6 +1,6 @@
 namespace Ledqualizer
 {
-    partial class ScreenRowCaptureSceneEditorForm
+    public partial class ScreenRowCaptureSceneEditorForm
     {
         private System.ComponentModel.IContainer components = null;
         private Label lblScreenRow;
@@ -41,7 +41,7 @@ namespace Ledqualizer
             // lblScreenRow
             // 
             lblScreenRow.AutoSize = true;
-            lblScreenRow.Location = new Point(16, 18);
+            lblScreenRow.Location = new Point(12, 12);
             lblScreenRow.Name = "lblScreenRow";
             lblScreenRow.Size = new Size(65, 15);
             lblScreenRow.TabIndex = 0;
@@ -49,7 +49,7 @@ namespace Ledqualizer
             // 
             // numScreenRow
             // 
-            numScreenRow.Location = new Point(16, 36);
+            numScreenRow.Location = new Point(12, 28);
             numScreenRow.Name = "numScreenRow";
             numScreenRow.ReadOnly = true;
             numScreenRow.Size = new Size(72, 23);
@@ -61,9 +61,9 @@ namespace Ledqualizer
             pnlScreenRowSelector.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             pnlScreenRowSelector.BorderStyle = BorderStyle.FixedSingle;
             pnlScreenRowSelector.Controls.Add(hsbScreenRowSelector);
-            pnlScreenRowSelector.Location = new Point(94, 36);
+            pnlScreenRowSelector.Location = new Point(90, 28);
             pnlScreenRowSelector.Name = "pnlScreenRowSelector";
-            pnlScreenRowSelector.Size = new Size(542, 24);
+            pnlScreenRowSelector.Size = new Size(548, 22);
             pnlScreenRowSelector.TabIndex = 2;
             // 
             // hsbScreenRowSelector
@@ -78,7 +78,7 @@ namespace Ledqualizer
             // chbShowGuide
             // 
             chbShowGuide.AutoSize = true;
-            chbShowGuide.Location = new Point(16, 78);
+            chbShowGuide.Location = new Point(12, 62);
             chbShowGuide.Name = "chbShowGuide";
             chbShowGuide.Size = new Size(115, 19);
             chbShowGuide.TabIndex = 3;
@@ -89,7 +89,7 @@ namespace Ledqualizer
             // chbReverse
             // 
             chbReverse.AutoSize = true;
-            chbReverse.Location = new Point(153, 78);
+            chbReverse.Location = new Point(145, 62);
             chbReverse.Name = "chbReverse";
             chbReverse.Size = new Size(105, 19);
             chbReverse.TabIndex = 4;
@@ -100,7 +100,7 @@ namespace Ledqualizer
             // lblPreview
             // 
             lblPreview.AutoSize = true;
-            lblPreview.Location = new Point(16, 121);
+            lblPreview.Location = new Point(12, 92);
             lblPreview.Name = "lblPreview";
             lblPreview.Size = new Size(45, 15);
             lblPreview.TabIndex = 5;
@@ -110,9 +110,9 @@ namespace Ledqualizer
             // 
             pictureBoxPreview.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             pictureBoxPreview.BorderStyle = BorderStyle.FixedSingle;
-            pictureBoxPreview.Location = new Point(16, 139);
+            pictureBoxPreview.Location = new Point(12, 108);
             pictureBoxPreview.Name = "pictureBoxPreview";
-            pictureBoxPreview.Size = new Size(620, 28);
+            pictureBoxPreview.Size = new Size(626, 24);
             pictureBoxPreview.TabIndex = 6;
             pictureBoxPreview.TabStop = false;
             // 
@@ -120,7 +120,7 @@ namespace Ledqualizer
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(654, 419);
+            ClientSize = new Size(654, 150);
             Controls.Add(pictureBoxPreview);
             Controls.Add(lblPreview);
             Controls.Add(chbReverse);

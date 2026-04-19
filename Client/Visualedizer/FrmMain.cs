@@ -37,8 +37,10 @@ namespace Ledqualizer
         private readonly BindingSource sceneLookupBindingSource = new();
         private readonly BindingSource sceneGridBindingSource = new();
         private readonly Dictionary<string, DeviceRunEntry> deviceRuns = new();
-        private readonly Dictionary<SceneType, SceneEditorFormBase> sceneEditors = new();
+        private readonly Dictionary<SceneType, Form> sceneEditors = new();
         private readonly List<SceneTypeOption> sceneTypeOptions = Enum.GetValues<SceneType>().Select(type => new SceneTypeOption(type)).ToList();
+        private readonly DeviceMetadataService deviceMetadataService = new();
+        private readonly Dictionary<string, Task> metadataRefreshTasks = new();
 
         private bool isLoading;
         private bool reconcileInProgress;
@@ -100,7 +102,7 @@ namespace Ledqualizer
             sceneEditors[SceneType.ScreenRowCapture] = screenRowEditor;
             sceneEditors[SceneType.SpectralAnalysis] = spectralEditor;
 
-            foreach (SceneEditorFormBase editor in sceneEditors.Values)
+            foreach (Form editor in sceneEditors.Values)
             {
                 editor.Visible = false;
                 panelSceneEditorHost.Controls.Add(editor);
@@ -116,6 +118,7 @@ namespace Ledqualizer
             dgvDevices.DataSource = deviceRows;
             dgvDevices.CurrentCellDirtyStateChanged += dgvDevices_CurrentCellDirtyStateChanged;
             dgvDevices.CellValueChanged += dgvDevices_CellValueChanged;
+            dgvDevices.CellEndEdit += dgvDevices_CellEndEdit;
             dgvDevices.CellValidating += dgvDevices_CellValidating;
             dgvDevices.DataError += dgvDevices_DataError;
 
@@ -136,6 +139,7 @@ namespace Ledqualizer
             dgvScenes.DataSource = sceneGridBindingSource;
             dgvScenes.CurrentCellDirtyStateChanged += dgvScenes_CurrentCellDirtyStateChanged;
             dgvScenes.CellValueChanged += dgvScenes_CellValueChanged;
+            dgvScenes.CellEndEdit += dgvScenes_CellEndEdit;
             dgvScenes.CellValidating += dgvScenes_CellValidating;
             dgvScenes.DataError += dgvScenes_DataError;
             dgvScenes.SelectionChanged += dgvScenes_SelectionChanged;
@@ -241,10 +245,11 @@ namespace Ledqualizer
                 do
                 {
                     reconcileRequested = false;
+                    await RefreshMetadataForEnabledDevicesAsync().ConfigureAwait(false);
                     UpdateInvalidDeviceStatuses();
 
                     Dictionary<string, DeviceConfig> desiredDevices = deviceRows
-                        .Where(row => row.Enabled && IsValidDeviceRow(row) && FindSceneById(row.AssignedSceneId) != null)
+                        .Where(row => row.Enabled && IsValidDeviceRow(row) && row.LedCount > 0 && FindSceneById(row.AssignedSceneId) != null)
                         .Select(row => row.ToDeviceConfig())
                         .ToDictionary(device => device.Id, device => device);
 
@@ -300,6 +305,12 @@ namespace Ledqualizer
                     continue;
                 }
 
+                if (row.LedCount <= 0)
+                {
+                    row.Status = "Metadata unavailable";
+                    continue;
+                }
+
                 if (FindSceneById(row.AssignedSceneId) == null)
                 {
                     row.Status = "Scene missing";
@@ -319,6 +330,11 @@ namespace Ledqualizer
 
         private async Task StartDeviceRunAsync(DeviceConfig config, SceneType sceneType)
         {
+            if (config.LedCount <= 0)
+            {
+                return;
+            }
+
             RunController controller = new();
             controller.DeviceStatusChanged += RunController_DeviceStatusChanged;
             deviceRuns[config.Id] = new DeviceRunEntry(config, sceneType, controller);
@@ -498,11 +514,16 @@ namespace Ledqualizer
                 dgvDevices.Refresh();
                 UpdateConnectionSummary();
             });
+
+            if (state == ConnectionState.Connected)
+            {
+                _ = RefreshMetadataForDeviceAsync(deviceId, force: true);
+            }
         }
 
         private void UpdateConnectionSummary()
         {
-            int enabledCount = deviceRows.Count(item => item.Enabled && IsValidDeviceRow(item) && FindSceneById(item.AssignedSceneId) != null);
+            int enabledCount = deviceRows.Count(item => item.Enabled && IsValidDeviceRow(item) && item.LedCount > 0 && FindSceneById(item.AssignedSceneId) != null);
             int connectedCount = deviceRows.Count(item => item.Status == "Connected");
             int offlineCount = deviceRows.Count(item => item.Enabled && item.Status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase));
 
@@ -521,7 +542,7 @@ namespace Ledqualizer
 
         private void dgvDevices_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
         {
-            if (dgvDevices.IsCurrentCellDirty)
+            if (dgvDevices.IsCurrentCellDirty && IsImmediateCommitCell(dgvDevices))
             {
                 dgvDevices.CommitEdit(DataGridViewDataErrorContexts.Commit);
             }
@@ -529,9 +550,40 @@ namespace Ledqualizer
 
         private async void dgvDevices_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
-            if (isLoading || e.RowIndex < 0)
+            if (!ShouldHandleValueChangedImmediately(dgvDevices, e))
             {
                 return;
+            }
+
+            await HandleDeviceCellChangedAsync(e.RowIndex, e.ColumnIndex);
+        }
+
+        private async void dgvDevices_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (IsImmediateCommitColumn(dgvDevices, e.ColumnIndex))
+            {
+                return;
+            }
+
+            await HandleDeviceCellChangedAsync(e.RowIndex, e.ColumnIndex);
+        }
+
+        private async Task HandleDeviceCellChangedAsync(int rowIndex, int columnIndex)
+        {
+            if (isLoading || rowIndex < 0 || columnIndex < 0)
+            {
+                return;
+            }
+
+            string propertyName = dgvDevices.Columns[columnIndex].DataPropertyName;
+            if (dgvDevices.Rows[rowIndex].DataBoundItem is DeviceGridRow row
+                && (propertyName == nameof(DeviceGridRow.Host) || propertyName == nameof(DeviceGridRow.Port)))
+            {
+                row.Name = "Device";
+                row.StripCount = 0;
+                row.LedCount = 0;
+                row.Status = row.Enabled ? "Pending metadata" : "Disconnected";
+                dgvDevices.Refresh();
             }
 
             await ReconcileDeviceRunsAsync();
@@ -542,7 +594,7 @@ namespace Ledqualizer
             string propertyName = dgvDevices.Columns[e.ColumnIndex].DataPropertyName;
             string formattedValue = e.FormattedValue?.ToString() ?? string.Empty;
 
-            if (propertyName == nameof(DeviceGridRow.Name) || propertyName == nameof(DeviceGridRow.Host))
+            if (propertyName == nameof(DeviceGridRow.Host))
             {
                 if (string.IsNullOrWhiteSpace(formattedValue))
                 {
@@ -560,15 +612,6 @@ namespace Ledqualizer
                 }
             }
 
-            if (propertyName == nameof(DeviceGridRow.LedCount))
-            {
-                if (!int.TryParse(formattedValue, out int ledCount) || ledCount <= 0)
-                {
-                    e.Cancel = true;
-                    dgvDevices.Rows[e.RowIndex].ErrorText = "LED count must be greater than zero.";
-                }
-            }
-
             if (!e.Cancel)
             {
                 dgvDevices.Rows[e.RowIndex].ErrorText = string.Empty;
@@ -582,7 +625,7 @@ namespace Ledqualizer
 
         private void dgvScenes_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
         {
-            if (dgvScenes.IsCurrentCellDirty)
+            if (dgvScenes.IsCurrentCellDirty && IsImmediateCommitCell(dgvScenes))
             {
                 dgvScenes.CommitEdit(DataGridViewDataErrorContexts.Commit);
             }
@@ -590,12 +633,32 @@ namespace Ledqualizer
 
         private async void dgvScenes_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
-            if (isLoading || e.RowIndex < 0)
+            if (!ShouldHandleValueChangedImmediately(dgvScenes, e))
             {
                 return;
             }
 
-            SceneGridRow? row = dgvScenes.Rows[e.RowIndex].DataBoundItem as SceneGridRow;
+            await HandleSceneCellChangedAsync(e.RowIndex);
+        }
+
+        private async void dgvScenes_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (IsImmediateCommitColumn(dgvScenes, e.ColumnIndex))
+            {
+                return;
+            }
+
+            await HandleSceneCellChangedAsync(e.RowIndex);
+        }
+
+        private async Task HandleSceneCellChangedAsync(int rowIndex)
+        {
+            if (isLoading || rowIndex < 0)
+            {
+                return;
+            }
+
+            SceneGridRow? row = dgvScenes.Rows[rowIndex].DataBoundItem as SceneGridRow;
             if (row == null)
             {
                 return;
@@ -626,6 +689,28 @@ namespace Ledqualizer
             {
                 await ReconcileDeviceRunsAsync();
             }
+        }
+
+        private static bool IsImmediateCommitCell(DataGridView grid)
+        {
+            DataGridViewCell? cell = grid.CurrentCell;
+            return cell is DataGridViewCheckBoxCell or DataGridViewComboBoxCell;
+        }
+
+        private static bool IsImmediateCommitColumn(DataGridView grid, int columnIndex)
+        {
+            if (columnIndex < 0 || columnIndex >= grid.Columns.Count)
+            {
+                return false;
+            }
+
+            DataGridViewColumn column = grid.Columns[columnIndex];
+            return column is DataGridViewCheckBoxColumn or DataGridViewComboBoxColumn;
+        }
+
+        private static bool ShouldHandleValueChangedImmediately(DataGridView grid, DataGridViewCellEventArgs e)
+        {
+            return e.RowIndex >= 0 && IsImmediateCommitColumn(grid, e.ColumnIndex);
         }
 
         private void dgvScenes_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
@@ -659,12 +744,12 @@ namespace Ledqualizer
             SceneConfig? scene = GetSelectedSceneConfig();
             lblEditorTitle.Text = scene == null ? "Scene Settings" : $"{scene.Name} Settings";
 
-            foreach (SceneEditorFormBase editor in sceneEditors.Values)
+            foreach (Form editor in sceneEditors.Values)
             {
                 editor.Visible = false;
             }
 
-            if (scene == null || !sceneEditors.TryGetValue(scene.Type, out SceneEditorFormBase? editorToShow))
+            if (scene == null || !sceneEditors.TryGetValue(scene.Type, out Form? editorToShow))
             {
                 CloseOverlayForm();
                 return;
@@ -672,7 +757,7 @@ namespace Ledqualizer
 
             editorToShow.Visible = true;
             editorToShow.BringToFront();
-            editorToShow.LoadScene(scene);
+            ((ISceneEditorForm)editorToShow).LoadScene(scene);
 
             if (scene.Type == SceneType.ScreenRowCapture)
             {
@@ -718,10 +803,11 @@ namespace Ledqualizer
             {
                 Id = Guid.NewGuid().ToString("N"),
                 Enabled = false,
-                Name = $"Device {deviceNumber}",
+                Name = "Device",
                 Host = "127.0.0.1",
                 Port = 81,
-                LedCount = 218,
+                LedCount = 0,
+                StripCount = 0,
                 AssignedSceneId = defaultSceneId,
                 Status = "Disconnected"
             });
@@ -958,11 +1044,9 @@ namespace Ledqualizer
 
         private bool IsValidDeviceRow(DeviceGridRow row)
         {
-            return !string.IsNullOrWhiteSpace(row.Name)
-                && !string.IsNullOrWhiteSpace(row.Host)
+            return !string.IsNullOrWhiteSpace(row.Host)
                 && row.Port > 0
-                && row.Port <= 65535
-                && row.LedCount > 0;
+                && row.Port <= 65535;
         }
 
         private void CountHz()
@@ -977,6 +1061,120 @@ namespace Ledqualizer
         {
             appConfig.Delay = (int)numDelay.Value;
             CountHz();
+        }
+
+        private async Task RefreshMetadataForEnabledDevicesAsync()
+        {
+            List<DeviceGridRow> rows = deviceRows
+                .Where(row => row.Enabled && IsValidDeviceRow(row) && row.LedCount <= 0)
+                .ToList();
+
+            foreach (DeviceGridRow row in rows)
+            {
+                try
+                {
+                    await RefreshMetadataForRowAsync(row, force: false).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // The row status is updated in the refresh helper.
+                }
+            }
+        }
+
+        private Task RefreshMetadataForDeviceAsync(string deviceId, bool force)
+        {
+            lock (metadataRefreshTasks)
+            {
+                if (!force && metadataRefreshTasks.TryGetValue(deviceId, out Task? existingTask))
+                {
+                    return existingTask;
+                }
+            }
+
+            DeviceGridRow? row = ReadUi(() => deviceRows.FirstOrDefault(item => item.Id == deviceId));
+            if (row == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            Task refreshTask = RefreshMetadataForRowAsync(row, force);
+            lock (metadataRefreshTasks)
+            {
+                metadataRefreshTasks[deviceId] = refreshTask;
+            }
+
+            return refreshTask.ContinueWith(task =>
+            {
+                lock (metadataRefreshTasks)
+                {
+                    metadataRefreshTasks.Remove(deviceId);
+                }
+            }, TaskScheduler.Default);
+        }
+
+        private async Task RefreshMetadataForRowAsync(DeviceGridRow row, bool force)
+        {
+            if (!force && row.LedCount > 0)
+            {
+                return;
+            }
+
+            SafeUi(() =>
+            {
+                if (row.Enabled)
+                {
+                    row.Status = "Loading metadata";
+                    dgvDevices.Refresh();
+                }
+            });
+
+            try
+            {
+                DeviceMetadata metadata = await deviceMetadataService.FetchAsync(row.Host, row.Port, CancellationToken.None).ConfigureAwait(false);
+                bool requiresRestart = false;
+
+                SafeUi(() =>
+                {
+                    requiresRestart = row.LedCount > 0 && (row.LedCount != metadata.TotalLedCount || row.StripCount != metadata.StripCount);
+                    row.Name = metadata.Name;
+                    row.LedCount = metadata.TotalLedCount;
+                    row.StripCount = metadata.StripCount;
+
+                    DeviceConfig? config = appConfig.Devices.FirstOrDefault(device => device.Id == row.Id);
+                    if (config != null)
+                    {
+                        config.Name = metadata.Name;
+                        config.LedCount = metadata.TotalLedCount;
+                        config.StripCount = metadata.StripCount;
+                    }
+
+                    if (!row.Enabled)
+                    {
+                        row.Status = "Disconnected";
+                    }
+
+                    dgvDevices.Refresh();
+                });
+
+                if (requiresRestart && ReadUi(() => deviceRuns.ContainsKey(row.Id)))
+                {
+                    await ReadUi(() => ReconcileDeviceRunsAsync()).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                SafeUi(() =>
+                {
+                    if (row.Enabled && row.LedCount <= 0)
+                    {
+                        row.Status = "Metadata unavailable";
+                        dgvDevices.Refresh();
+                    }
+                });
+
+                throw;
+            }
         }
 
         private void FrmMain_FormClosing(object sender, FormClosingEventArgs e)

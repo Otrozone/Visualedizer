@@ -1,17 +1,17 @@
 namespace Ledqualizer
 {
-    internal interface ISceneEditorForm
+    public interface ISceneEditorForm
     {
         SceneType SceneType { get; }
         event EventHandler? SceneChanged;
         void LoadScene(SceneConfig scene);
     }
 
-    internal abstract class SceneEditorFormBase : Form, ISceneEditorForm
+    public class SceneEditorFormBase : Form, ISceneEditorForm
     {
         private bool isLoading;
 
-        public abstract SceneType SceneType { get; }
+        public virtual SceneType SceneType => SceneType.SolidColor;
 
         protected SceneConfig? CurrentScene { get; private set; }
 
@@ -48,6 +48,8 @@ namespace Ledqualizer
             }
         }
 
-        protected abstract void OnLoadScene(SceneConfig scene);
+        protected virtual void OnLoadScene(SceneConfig scene)
+        {
+        }
     }
 }

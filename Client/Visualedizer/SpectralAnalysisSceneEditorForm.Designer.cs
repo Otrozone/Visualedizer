@@ -1,6 +1,6 @@
 namespace Ledqualizer
 {
-    partial class SpectralAnalysisSceneEditorForm
+    public partial class SpectralAnalysisSceneEditorForm
     {
         private System.ComponentModel.IContainer components = null;
         private Label lblAudioDevice;
@@ -97,7 +97,7 @@ namespace Ledqualizer
             // lblAudioDevice
             // 
             lblAudioDevice.AutoSize = true;
-            lblAudioDevice.Location = new Point(16, 16);
+            lblAudioDevice.Location = new Point(12, 10);
             lblAudioDevice.Name = "lblAudioDevice";
             lblAudioDevice.Size = new Size(76, 15);
             lblAudioDevice.TabIndex = 0;
@@ -107,9 +107,9 @@ namespace Ledqualizer
             // 
             cbAudioDevices.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             cbAudioDevices.DropDownStyle = ComboBoxStyle.DropDownList;
-            cbAudioDevices.Location = new Point(16, 34);
+            cbAudioDevices.Location = new Point(12, 26);
             cbAudioDevices.Name = "cbAudioDevices";
-            cbAudioDevices.Size = new Size(620, 23);
+            cbAudioDevices.Size = new Size(626, 23);
             cbAudioDevices.TabIndex = 1;
             cbAudioDevices.SelectedIndexChanged += cbAudioDevices_SelectedIndexChanged;
             // 
@@ -121,9 +121,9 @@ namespace Ledqualizer
             gbModes.Controls.Add(rbModeMidToOut);
             gbModes.Controls.Add(rbModeEndToStart);
             gbModes.Controls.Add(rbModeStartToEnd);
-            gbModes.Location = new Point(16, 72);
+            gbModes.Location = new Point(12, 58);
             gbModes.Name = "gbModes";
-            gbModes.Size = new Size(620, 72);
+            gbModes.Size = new Size(626, 58);
             gbModes.TabIndex = 2;
             gbModes.TabStop = false;
             gbModes.Text = "Response mode";
@@ -131,7 +131,7 @@ namespace Ledqualizer
             // rbBrightness
             // 
             rbBrightness.AutoSize = true;
-            rbBrightness.Location = new Point(510, 31);
+            rbBrightness.Location = new Point(520, 24);
             rbBrightness.Name = "rbBrightness";
             rbBrightness.Size = new Size(79, 19);
             rbBrightness.TabIndex = 5;
@@ -143,7 +143,7 @@ namespace Ledqualizer
             // rbModeColorPush
             // 
             rbModeColorPush.AutoSize = true;
-            rbModeColorPush.Location = new Point(414, 31);
+            rbModeColorPush.Location = new Point(420, 24);
             rbModeColorPush.Name = "rbModeColorPush";
             rbModeColorPush.Size = new Size(79, 19);
             rbModeColorPush.TabIndex = 4;
@@ -155,7 +155,7 @@ namespace Ledqualizer
             // rbModeMidToOutPoint
             // 
             rbModeMidToOutPoint.AutoSize = true;
-            rbModeMidToOutPoint.Location = new Point(308, 31);
+            rbModeMidToOutPoint.Location = new Point(314, 24);
             rbModeMidToOutPoint.Name = "rbModeMidToOutPoint";
             rbModeMidToOutPoint.Size = new Size(89, 19);
             rbModeMidToOutPoint.TabIndex = 3;
@@ -167,7 +167,7 @@ namespace Ledqualizer
             // rbModeMidToOut
             // 
             rbModeMidToOut.AutoSize = true;
-            rbModeMidToOut.Location = new Point(213, 31);
+            rbModeMidToOut.Location = new Point(216, 24);
             rbModeMidToOut.Name = "rbModeMidToOut";
             rbModeMidToOut.Size = new Size(78, 19);
             rbModeMidToOut.TabIndex = 2;
@@ -179,7 +179,7 @@ namespace Ledqualizer
             // rbModeEndToStart
             // 
             rbModeEndToStart.AutoSize = true;
-            rbModeEndToStart.Location = new Point(112, 31);
+            rbModeEndToStart.Location = new Point(114, 24);
             rbModeEndToStart.Name = "rbModeEndToStart";
             rbModeEndToStart.Size = new Size(84, 19);
             rbModeEndToStart.TabIndex = 1;
@@ -191,7 +191,7 @@ namespace Ledqualizer
             // rbModeStartToEnd
             // 
             rbModeStartToEnd.AutoSize = true;
-            rbModeStartToEnd.Location = new Point(12, 31);
+            rbModeStartToEnd.Location = new Point(12, 24);
             rbModeStartToEnd.Name = "rbModeStartToEnd";
             rbModeStartToEnd.Size = new Size(81, 19);
             rbModeStartToEnd.TabIndex = 0;
@@ -203,7 +203,7 @@ namespace Ledqualizer
             // lblBrightness
             // 
             lblBrightness.AutoSize = true;
-            lblBrightness.Location = new Point(16, 159);
+            lblBrightness.Location = new Point(12, 124);
             lblBrightness.Name = "lblBrightness";
             lblBrightness.Size = new Size(62, 15);
             lblBrightness.TabIndex = 3;
@@ -212,10 +212,10 @@ namespace Ledqualizer
             // trackBarBrightness
             // 
             trackBarBrightness.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarBrightness.Location = new Point(16, 177);
+            trackBarBrightness.Location = new Point(12, 140);
             trackBarBrightness.Maximum = 100;
             trackBarBrightness.Name = "trackBarBrightness";
-            trackBarBrightness.Size = new Size(620, 45);
+            trackBarBrightness.Size = new Size(626, 36);
             trackBarBrightness.TabIndex = 4;
             trackBarBrightness.Value = 100;
             trackBarBrightness.ValueChanged += ControlValueChanged;
@@ -223,7 +223,7 @@ namespace Ledqualizer
             // lblNormalization
             // 
             lblNormalization.AutoSize = true;
-            lblNormalization.Location = new Point(16, 218);
+            lblNormalization.Location = new Point(12, 176);
             lblNormalization.Name = "lblNormalization";
             lblNormalization.Size = new Size(114, 15);
             lblNormalization.TabIndex = 5;
@@ -232,11 +232,11 @@ namespace Ledqualizer
             // trackBarNormalizationLevel
             // 
             trackBarNormalizationLevel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarNormalizationLevel.Location = new Point(16, 236);
+            trackBarNormalizationLevel.Location = new Point(12, 192);
             trackBarNormalizationLevel.Maximum = 30;
             trackBarNormalizationLevel.Minimum = 1;
             trackBarNormalizationLevel.Name = "trackBarNormalizationLevel";
-            trackBarNormalizationLevel.Size = new Size(620, 45);
+            trackBarNormalizationLevel.Size = new Size(626, 36);
             trackBarNormalizationLevel.TabIndex = 6;
             trackBarNormalizationLevel.Value = 10;
             trackBarNormalizationLevel.ValueChanged += ControlValueChanged;
@@ -244,7 +244,7 @@ namespace Ledqualizer
             // lblHueRange
             // 
             lblHueRange.AutoSize = true;
-            lblHueRange.Location = new Point(16, 277);
+            lblHueRange.Location = new Point(12, 228);
             lblHueRange.Name = "lblHueRange";
             lblHueRange.Size = new Size(59, 15);
             lblHueRange.TabIndex = 7;
@@ -255,15 +255,15 @@ namespace Ledqualizer
             ucHueMinMax.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             ucHueMinMax.HueMax = 360;
             ucHueMinMax.HueMin = 0;
-            ucHueMinMax.Location = new Point(16, 295);
+            ucHueMinMax.Location = new Point(12, 244);
             ucHueMinMax.Name = "ucHueMinMax";
-            ucHueMinMax.Size = new Size(620, 59);
+            ucHueMinMax.Size = new Size(626, 52);
             ucHueMinMax.TabIndex = 8;
             // 
             // chbReverse
             // 
             chbReverse.AutoSize = true;
-            chbReverse.Location = new Point(16, 360);
+            chbReverse.Location = new Point(12, 300);
             chbReverse.Name = "chbReverse";
             chbReverse.Size = new Size(105, 19);
             chbReverse.TabIndex = 9;
@@ -274,7 +274,7 @@ namespace Ledqualizer
             // chbHueReverse
             // 
             chbHueReverse.AutoSize = true;
-            chbHueReverse.Location = new Point(141, 360);
+            chbHueReverse.Location = new Point(130, 300);
             chbHueReverse.Name = "chbHueReverse";
             chbHueReverse.Size = new Size(90, 19);
             chbHueReverse.TabIndex = 10;
@@ -285,7 +285,7 @@ namespace Ledqualizer
             // chbWhite
             // 
             chbWhite.AutoSize = true;
-            chbWhite.Location = new Point(251, 360);
+            chbWhite.Location = new Point(238, 300);
             chbWhite.Name = "chbWhite";
             chbWhite.Size = new Size(95, 19);
             chbWhite.TabIndex = 11;
@@ -300,9 +300,9 @@ namespace Ledqualizer
             gbBackground.Controls.Add(ucHueBg);
             gbBackground.Controls.Add(lblBgBrightness);
             gbBackground.Controls.Add(trackBarBgBrightness);
-            gbBackground.Location = new Point(16, 392);
+            gbBackground.Location = new Point(12, 326);
             gbBackground.Name = "gbBackground";
-            gbBackground.Size = new Size(620, 152);
+            gbBackground.Size = new Size(626, 118);
             gbBackground.TabIndex = 12;
             gbBackground.TabStop = false;
             gbBackground.Text = "Background";
@@ -310,7 +310,7 @@ namespace Ledqualizer
             // chbBgWhite
             // 
             chbBgWhite.AutoSize = true;
-            chbBgWhite.Location = new Point(16, 111);
+            chbBgWhite.Location = new Point(12, 86);
             chbBgWhite.Name = "chbBgWhite";
             chbBgWhite.Size = new Size(102, 19);
             chbBgWhite.TabIndex = 4;
@@ -321,7 +321,7 @@ namespace Ledqualizer
             // lblBgHue
             // 
             lblBgHue.AutoSize = true;
-            lblBgHue.Location = new Point(16, 22);
+            lblBgHue.Location = new Point(12, 18);
             lblBgHue.Name = "lblBgHue";
             lblBgHue.Size = new Size(29, 15);
             lblBgHue.TabIndex = 0;
@@ -331,17 +331,17 @@ namespace Ledqualizer
             // 
             ucHueBg.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             ucHueBg.Hue = 0;
-            ucHueBg.Location = new Point(16, 40);
+            ucHueBg.Location = new Point(12, 30);
             ucHueBg.MaxVal = 360;
             ucHueBg.MinVal = 0;
             ucHueBg.Name = "ucHueBg";
-            ucHueBg.Size = new Size(586, 45);
+            ucHueBg.Size = new Size(598, 42);
             ucHueBg.TabIndex = 1;
             // 
             // lblBgBrightness
             // 
             lblBgBrightness.AutoSize = true;
-            lblBgBrightness.Location = new Point(140, 112);
+            lblBgBrightness.Location = new Point(128, 87);
             lblBgBrightness.Name = "lblBgBrightness";
             lblBgBrightness.Size = new Size(62, 15);
             lblBgBrightness.TabIndex = 2;
@@ -350,17 +350,17 @@ namespace Ledqualizer
             // trackBarBgBrightness
             // 
             trackBarBgBrightness.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarBgBrightness.Location = new Point(208, 100);
+            trackBarBgBrightness.Location = new Point(194, 76);
             trackBarBgBrightness.Maximum = 100;
             trackBarBgBrightness.Name = "trackBarBgBrightness";
-            trackBarBgBrightness.Size = new Size(394, 45);
+            trackBarBgBrightness.Size = new Size(416, 36);
             trackBarBgBrightness.TabIndex = 3;
             trackBarBgBrightness.ValueChanged += ControlValueChanged;
             // 
             // lblFrequencyLow
             // 
             lblFrequencyLow.AutoSize = true;
-            lblFrequencyLow.Location = new Point(16, 560);
+            lblFrequencyLow.Location = new Point(12, 450);
             lblFrequencyLow.Name = "lblFrequencyLow";
             lblFrequencyLow.Size = new Size(102, 15);
             lblFrequencyLow.TabIndex = 13;
@@ -369,11 +369,11 @@ namespace Ledqualizer
             // trackBarFrequencyLow
             // 
             trackBarFrequencyLow.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarFrequencyLow.Location = new Point(16, 578);
+            trackBarFrequencyLow.Location = new Point(12, 466);
             trackBarFrequencyLow.Maximum = 20000;
             trackBarFrequencyLow.Minimum = 20;
             trackBarFrequencyLow.Name = "trackBarFrequencyLow";
-            trackBarFrequencyLow.Size = new Size(620, 45);
+            trackBarFrequencyLow.Size = new Size(626, 36);
             trackBarFrequencyLow.TabIndex = 14;
             trackBarFrequencyLow.TickFrequency = 1000;
             trackBarFrequencyLow.Value = 60;
@@ -382,7 +382,7 @@ namespace Ledqualizer
             // lblFrequencyHigh
             // 
             lblFrequencyHigh.AutoSize = true;
-            lblFrequencyHigh.Location = new Point(16, 619);
+            lblFrequencyHigh.Location = new Point(12, 502);
             lblFrequencyHigh.Name = "lblFrequencyHigh";
             lblFrequencyHigh.Size = new Size(105, 15);
             lblFrequencyHigh.TabIndex = 15;
@@ -391,11 +391,11 @@ namespace Ledqualizer
             // trackBarFrequencyHigh
             // 
             trackBarFrequencyHigh.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarFrequencyHigh.Location = new Point(16, 637);
+            trackBarFrequencyHigh.Location = new Point(12, 518);
             trackBarFrequencyHigh.Maximum = 20000;
             trackBarFrequencyHigh.Minimum = 20;
             trackBarFrequencyHigh.Name = "trackBarFrequencyHigh";
-            trackBarFrequencyHigh.Size = new Size(620, 45);
+            trackBarFrequencyHigh.Size = new Size(626, 36);
             trackBarFrequencyHigh.TabIndex = 16;
             trackBarFrequencyHigh.TickFrequency = 1000;
             trackBarFrequencyHigh.Value = 250;
@@ -404,7 +404,7 @@ namespace Ledqualizer
             // lblLevelLow
             // 
             lblLevelLow.AutoSize = true;
-            lblLevelLow.Location = new Point(16, 678);
+            lblLevelLow.Location = new Point(12, 554);
             lblLevelLow.Name = "lblLevelLow";
             lblLevelLow.Size = new Size(76, 15);
             lblLevelLow.TabIndex = 17;
@@ -413,11 +413,11 @@ namespace Ledqualizer
             // trackBarLevelLow
             // 
             trackBarLevelLow.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarLevelLow.Location = new Point(16, 696);
+            trackBarLevelLow.Location = new Point(12, 570);
             trackBarLevelLow.Maximum = 0;
             trackBarLevelLow.Minimum = -90;
             trackBarLevelLow.Name = "trackBarLevelLow";
-            trackBarLevelLow.Size = new Size(620, 45);
+            trackBarLevelLow.Size = new Size(626, 36);
             trackBarLevelLow.TabIndex = 18;
             trackBarLevelLow.TickFrequency = 10;
             trackBarLevelLow.Value = -60;
@@ -426,7 +426,7 @@ namespace Ledqualizer
             // lblLevelHigh
             // 
             lblLevelHigh.AutoSize = true;
-            lblLevelHigh.Location = new Point(16, 737);
+            lblLevelHigh.Location = new Point(12, 606);
             lblLevelHigh.Name = "lblLevelHigh";
             lblLevelHigh.Size = new Size(79, 15);
             lblLevelHigh.TabIndex = 19;
@@ -435,11 +435,11 @@ namespace Ledqualizer
             // trackBarLevelHigh
             // 
             trackBarLevelHigh.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarLevelHigh.Location = new Point(16, 755);
+            trackBarLevelHigh.Location = new Point(12, 622);
             trackBarLevelHigh.Maximum = 0;
             trackBarLevelHigh.Minimum = -90;
             trackBarLevelHigh.Name = "trackBarLevelHigh";
-            trackBarLevelHigh.Size = new Size(620, 45);
+            trackBarLevelHigh.Size = new Size(626, 36);
             trackBarLevelHigh.TabIndex = 20;
             trackBarLevelHigh.TickFrequency = 10;
             trackBarLevelHigh.Value = -20;
@@ -448,9 +448,9 @@ namespace Ledqualizer
             // progressBar
             // 
             progressBar.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            progressBar.Location = new Point(16, 807);
+            progressBar.Location = new Point(12, 664);
             progressBar.Name = "progressBar";
-            progressBar.Size = new Size(620, 20);
+            progressBar.Size = new Size(626, 16);
             progressBar.TabIndex = 21;
             // 
             // SpectralAnalysisSceneEditorForm
@@ -458,7 +458,7 @@ namespace Ledqualizer
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             AutoScroll = true;
-            ClientSize = new Size(654, 842);
+            ClientSize = new Size(654, 700);
             Controls.Add(progressBar);
             Controls.Add(trackBarLevelHigh);
             Controls.Add(lblLevelHigh);

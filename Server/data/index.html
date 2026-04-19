@@ -193,13 +193,6 @@
 
         <ul class="navbar-nav ms-auto d-flex flex-row align-items-center">
           <li class="nav-item me-3 me-lg-0">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" role="switch" id="chbUseWebSockets" />
-              <label class="form-check-label" for="chbUseWebSockets">Use web sockets</label>
-            </div>
-          </li>
-
-          <li class="nav-item me-3 me-lg-0">
             <!-- Wifi signal strength -->
             <!-- Excellent (full) -->
             <svg id="wifiSignal3" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-wifi" viewBox="0 0 16 16">
@@ -332,12 +325,37 @@
 
               <ul class="list-group list-group-light">
                 <li class="list-group-item px-3">
-                  <div class="form-outline" data-mdb-input-init>
-                    <input type="number" id="ledCount" class="form-control" />
-                    <label class="form-label" for="ssid">Led count</label>
+                  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <div>
+                      <h5 class="mb-1">LED strips</h5>
+                      <div class="form-text">
+                        Active strips are defined here. Removing a row disables that strip slot.
+                      </div>
+                    </div>
+                    <button id="btnAddStrip" type="button" class="btn btn-secondary btn-sm" data-mdb-ripple-init>
+                      Add strip
+                    </button>
                   </div>
-                  <div id="textDetail" class="form-text">
-                    Number of leds connected to this device.
+
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-2">
+                      <thead>
+                        <tr>
+                          <th scope="col">Strip</th>
+                          <th scope="col">LED count</th>
+                          <th scope="col">Data pin</th>
+                          <th scope="col"></th>
+                        </tr>
+                      </thead>
+                      <tbody id="stripTableBody">
+                        <tr id="stripEmptyState">
+                          <td colspan="4" class="text-muted">No active strips configured.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="form-text">
+                    Data pins are fixed by the firmware build and shown here for reference.
                   </div>
                 </li>
 
@@ -441,13 +459,22 @@
 
                 <li class="list-group-item px-3">
                   <div class="form-check">
-                    <input class="form-check-input" type="checkbox" value="" id="webSockEnabled" checked>
-                    <label class="form-check-label" for="webSockEnabled">
-                      Web sockets enabled
+                    <input class="form-check-input" type="checkbox" value="" id="webUiUseWebSockets" checked>
+                    <label class="form-check-label" for="webUiUseWebSockets">
+                      Use WebSockets from web UI
                     </label>
                   </div>
                   <div class="form-text">
-                    Support of the websockets.
+                    If enabled, the web page prefers WebSockets for live control and falls back to HTTP if needed.
+                  </div>
+                  <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" value="" id="turnOffOnLeave">
+                    <label class="form-check-label" for="turnOffOnLeave">
+                      Turn off on page leave
+                    </label>
+                  </div>
+                  <div class="form-text">
+                    Turn the lights off when the browser tab is closed.
                   </div>                      
                 </li>
                 <li class="list-group-item px-3">
@@ -557,11 +584,23 @@
     const menuItems = document.querySelectorAll('*[data-content-id]');
     const contents = document.querySelectorAll('.content');
     const chbMain = document.getElementById('chbMain');
-    const chbUseWebSockets = document.getElementById('chbUseWebSockets');
     const passwordFieldIds = ['wifiPassword', 'wifiApPassword'];
+    const stripTableBody = document.getElementById('stripTableBody');
+    const btnAddStrip = document.getElementById('btnAddStrip');
+    const chbUseWebSockets = document.getElementById('webUiUseWebSockets');
+    const chbTurnOffOnLeave = document.getElementById('turnOffOnLeave');
+    let availableStripSlots = [];
+    let runtimeConfig = {
+      webUiUseWebSockets: false,
+      turnOffOnLeave: false
+    };
+    let socket = null;
+    let socketReady = false;
+    let leaveOffSent = false;
 
     document.addEventListener("DOMContentLoaded", () => {
       getConf().then(config => {
+        applyRuntimeConfig(config);
         if (config.deviceName) {
           document.getElementById("deviceNameLabel").innerHTML = config.deviceName;
           
@@ -608,8 +647,13 @@
     const confItem = document.querySelector('[data-content-id="conf"]');
     confItem.addEventListener('click', () => {
       getConf().then(config => {
+        renderConfiguredStrips(config.strips || []);
         updatePasswordHints(config);
         Object.keys(config).forEach((key) => {
+          if (key === 'strips') {
+            return;
+          }
+
           const val = config[key];
           const element = document.getElementById(key);
 
@@ -641,7 +685,7 @@
     // Apply configuration button clicked
     document.getElementById("confApply").addEventListener('click', () => {
       const confObj = {};
-      const confInputs = document.querySelectorAll("#conf input, #conf select");
+      const confInputs = document.querySelectorAll("#conf input[id], #conf select[id]");
       confInputs.forEach((input) => {
         if (passwordFieldIds.includes(input.id) && input.value.trim() === '') {
           return;
@@ -659,6 +703,8 @@
             break;
         }        
       });
+
+      confObj.strips = collectConfiguredStrips();
 
       
       setConf(confObj).then((data) => {
@@ -681,6 +727,122 @@
         ? 'Stored AP password exists. Leave empty to keep it unchanged.'
         : 'No AP password stored. Enter one to save it.';
     }
+
+    function renderConfiguredStrips(strips) {
+      availableStripSlots = Array.isArray(strips)
+        ? strips
+            .map(strip => ({
+              index: Number.parseInt(strip.index, 10),
+              ledCount: Number.parseInt(strip.ledCount, 10) || 0,
+              dataPin: strip.dataPin ?? ''
+            }))
+            .filter(strip => Number.isInteger(strip.index) && strip.index >= 0)
+            .sort((left, right) => left.index - right.index)
+        : [];
+
+      stripTableBody.innerHTML = '';
+
+      const activeStrips = availableStripSlots.filter(strip => strip.ledCount > 0);
+      if (activeStrips.length === 0) {
+        renderStripEmptyState();
+      } else {
+        activeStrips.forEach(strip => {
+          stripTableBody.appendChild(createStripRow(strip.index, strip.ledCount, strip.dataPin));
+        });
+      }
+
+      updateAddStripButtonState();
+    }
+
+    function renderStripEmptyState() {
+      const row = document.createElement('tr');
+      row.id = 'stripEmptyState';
+      row.innerHTML = '<td colspan="4" class="text-muted">No active strips configured.</td>';
+      stripTableBody.appendChild(row);
+    }
+
+    function createStripRow(index, ledCount, dataPin) {
+      const row = document.createElement('tr');
+      row.dataset.index = index;
+
+      const stripCell = document.createElement('td');
+      stripCell.textContent = `Strip ${index}`;
+      row.appendChild(stripCell);
+
+      const ledCountCell = document.createElement('td');
+      const ledCountInput = document.createElement('input');
+      ledCountInput.type = 'number';
+      ledCountInput.min = '1';
+      ledCountInput.step = '1';
+      ledCountInput.value = ledCount;
+      ledCountInput.className = 'form-control strip-led-count';
+      ledCountCell.appendChild(ledCountInput);
+      row.appendChild(ledCountCell);
+
+      const dataPinCell = document.createElement('td');
+      dataPinCell.textContent = dataPin === '' ? 'Fixed' : dataPin;
+      row.appendChild(dataPinCell);
+
+      const actionCell = document.createElement('td');
+      actionCell.className = 'text-end';
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'btn btn-outline-danger btn-sm';
+      removeButton.textContent = 'Remove';
+      removeButton.addEventListener('click', () => {
+        row.remove();
+        if (stripTableBody.children.length === 0) {
+          renderStripEmptyState();
+        }
+        updateAddStripButtonState();
+      });
+      actionCell.appendChild(removeButton);
+      row.appendChild(actionCell);
+
+      return row;
+    }
+
+    function getNextAvailableStrip() {
+      const activeIndexes = new Set(
+        Array.from(stripTableBody.querySelectorAll('tr[data-index]'))
+          .map(row => Number.parseInt(row.dataset.index, 10))
+          .filter(index => Number.isInteger(index))
+      );
+
+      return availableStripSlots.find(strip => !activeIndexes.has(strip.index));
+    }
+
+    function updateAddStripButtonState() {
+      btnAddStrip.disabled = getNextAvailableStrip() === undefined;
+    }
+
+    function collectConfiguredStrips() {
+      return Array.from(stripTableBody.querySelectorAll('tr[data-index]'))
+        .map(row => {
+          const ledCountInput = row.querySelector('.strip-led-count');
+          return {
+            index: Number.parseInt(row.dataset.index, 10),
+            ledCount: Number.parseInt(ledCountInput.value, 10) || 0
+          };
+        })
+        .filter(strip => Number.isInteger(strip.index) && strip.index >= 0 && strip.ledCount > 0);
+    }
+
+    btnAddStrip.addEventListener('click', () => {
+      const nextStrip = getNextAvailableStrip();
+      if (!nextStrip) {
+        return;
+      }
+
+      const emptyState = document.getElementById('stripEmptyState');
+      if (emptyState) {
+        emptyState.remove();
+      }
+
+      const defaultLedCount = nextStrip.ledCount > 0 ? nextStrip.ledCount : 60;
+      stripTableBody.appendChild(createStripRow(nextStrip.index, defaultLedCount, nextStrip.dataPin));
+      updateAddStripButtonState();
+    });
 
     // Set default content
     const defaultItem = document.querySelector('[data-content-id="solid-color"]');
@@ -727,7 +889,7 @@
 
     // API calling
     function updateColors(params) {
-      if (chbUseWebSockets.checked) {
+      if (runtimeConfig.webUiUseWebSockets && socketReady && socket !== null) {
         sendMessage(`?${params}`);
       } else {
         const apiUrl = `/update?${params}`;
@@ -786,26 +948,69 @@
       });
     }
 
-    const socket = new WebSocket(`ws://${location.hostname}:81`);
+    function applyRuntimeConfig(config) {
+      runtimeConfig.webUiUseWebSockets = !!config.webUiUseWebSockets;
+      runtimeConfig.turnOffOnLeave = !!config.turnOffOnLeave;
+      ensureSocketState();
+    }
 
-    socket.onopen = function(event) {
+    function ensureSocketState() {
+      if (!runtimeConfig.webUiUseWebSockets) {
+        if (socket !== null) {
+          socket.close();
+          socket = null;
+        }
+        socketReady = false;
+        return;
+      }
+
+      if (socket !== null) {
+        return;
+      }
+
+      socket = new WebSocket(`ws://${location.hostname}:81`);
+
+      socket.onopen = function(event) {
+        socketReady = true;
         console.log('WebSocket connection opened');
-    };
+      };
 
-    socket.onmessage = function(event) {
+      socket.onmessage = function(event) {
         console.log('Received message from server:', event.data);
-    };
+      };
 
-    socket.onerror = function(error) {
+      socket.onerror = function(error) {
         console.error('WebSocket error:', error);
-    };
+      };
 
-    socket.onclose = function(event) {
+      socket.onclose = function(event) {
+        socketReady = false;
+        socket = null;
         console.log('WebSocket connection closed');
-    };
+      };
+    }
+
+    function sendOffOnLeave() {
+      if (!runtimeConfig.turnOffOnLeave || leaveOffSent) {
+        return;
+      }
+
+      leaveOffSent = true;
+      fetch('/update?command=off', {
+        method: 'GET',
+        keepalive: true,
+        cache: 'no-store'
+      }).catch(error => {
+        console.error('Leave-off request failed:', error);
+      });
+    }
+
+    window.addEventListener('beforeunload', sendOffOnLeave);
 
     function sendMessage(message) {
-        socket.send(message);
+        if (socket !== null && socketReady) {
+          socket.send(message);
+        }
     }
   </script>
 

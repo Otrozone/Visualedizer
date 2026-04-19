@@ -2,7 +2,7 @@ using NAudio.CoreAudioApi;
 
 namespace Ledqualizer
 {
-    internal static class AcVolume
+    public static class AcVolume
     {
         public enum AudioCaptureVolumeMode
         {

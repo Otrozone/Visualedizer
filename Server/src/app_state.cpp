@@ -17,7 +17,8 @@ String bootColor = "#FFFAFA";
 bool bootWol = false;
 String bootWolMac = "00:00:00:00:00:00";
 
-bool webSockEnabled = true;
+bool webUiUseWebSockets = true;
+bool turnOffOnLeave = false;
 
 unsigned long lastActivity = 0;
 bool activityTimeoutEnabled = false;

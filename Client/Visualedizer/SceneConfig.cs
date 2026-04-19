@@ -1,6 +1,6 @@
 namespace Ledqualizer
 {
-    internal enum SceneType
+    public enum SceneType
     {
         SolidColor,
         Gradient,
@@ -9,7 +9,7 @@ namespace Ledqualizer
         SpectralAnalysis
     }
 
-    internal sealed class SceneConfig
+    public sealed class SceneConfig
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string Name { get; set; } = "Scene";
@@ -46,7 +46,7 @@ namespace Ledqualizer
         }
     }
 
-    internal sealed class SolidColorSceneConfig
+    public sealed class SolidColorSceneConfig
     {
         public double Hue { get; set; }
         public double MinHue { get; set; }
@@ -60,7 +60,7 @@ namespace Ledqualizer
         }
     }
 
-    internal sealed class GradientSceneConfig
+    public sealed class GradientSceneConfig
     {
         public double HueMin { get; set; }
         public double HueMax { get; set; } = 360;
@@ -73,7 +73,7 @@ namespace Ledqualizer
         }
     }
 
-    internal class AudioReactiveSceneConfig
+    public class AudioReactiveSceneConfig
     {
         public AcVolume.AudioCaptureVolumeMode Mode { get; set; } = AcVolume.AudioCaptureVolumeMode.ModeStartToEnd;
         public int Brightness { get; set; } = 100;
@@ -90,7 +90,7 @@ namespace Ledqualizer
         public int RotateIntervalSeconds { get; set; } = 20;
     }
 
-    internal sealed class VolumeReactiveSceneConfig : AudioReactiveSceneConfig
+    public sealed class VolumeReactiveSceneConfig : AudioReactiveSceneConfig
     {
         public VolumeReactiveSceneConfig Clone()
         {
@@ -113,7 +113,7 @@ namespace Ledqualizer
         }
     }
 
-    internal sealed class SpectralAnalysisSceneConfig : AudioReactiveSceneConfig
+    public sealed class SpectralAnalysisSceneConfig : AudioReactiveSceneConfig
     {
         public double FrequencyLowHz { get; set; } = 60;
         public double FrequencyHighHz { get; set; } = 250;
@@ -145,7 +145,7 @@ namespace Ledqualizer
         }
     }
 
-    internal sealed class ScreenRowCaptureSceneConfig
+    public sealed class ScreenRowCaptureSceneConfig
     {
         public int CaptureY { get; set; }
         public bool Reverse { get; set; }
@@ -162,7 +162,8 @@ namespace Ledqualizer
         public string Name { get; set; } = "Device";
         public string Host { get; set; } = "127.0.0.1";
         public int Port { get; set; } = 81;
-        public int LedCount { get; set; } = 60;
+        public int LedCount { get; set; }
+        public int StripCount { get; set; }
         public bool Enabled { get; set; } = true;
         public string AssignedSceneId { get; set; } = string.Empty;
         public string? StripOverride { get; set; }
@@ -175,7 +176,8 @@ namespace Ledqualizer
         public string Name { get; set; } = "Device";
         public string Host { get; set; } = "127.0.0.1";
         public int Port { get; set; } = 81;
-        public int LedCount { get; set; } = 60;
+        public int LedCount { get; set; }
+        public int StripCount { get; set; }
         public string AssignedSceneId { get; set; } = string.Empty;
         public string Status { get; set; } = "Disconnected";
 
@@ -189,6 +191,7 @@ namespace Ledqualizer
                 Host = Host,
                 Port = Port,
                 LedCount = LedCount,
+                StripCount = StripCount,
                 AssignedSceneId = AssignedSceneId
             };
         }
@@ -203,6 +206,7 @@ namespace Ledqualizer
                 Host = device.Host,
                 Port = device.Port,
                 LedCount = device.LedCount,
+                StripCount = device.StripCount,
                 AssignedSceneId = device.AssignedSceneId,
                 Status = "Disconnected"
             };

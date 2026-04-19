@@ -1,10 +1,22 @@
 #include <Arduino.h>
+#include <algorithm>
 
 #include "main.h"
 #include "dmx.h"
 #include "controller_ir.h"
 #include "nvm.h"
 #include "credentials.h"
+
+namespace {
+String getStripLedCountKey(int stripIdx) {
+  return "strip" + String(stripIdx) + "LedCount";
+}
+
+uint16_t getStoredStripLedCount(int stripIdx) {
+  String key = getStripLedCountKey(stripIdx);
+  return preferences.getUInt(key.c_str(), DVC_NUM_LEDS_LIST[stripIdx]);
+}
+}
 
 void initConf() {
   preferences.begin(NVM_NAMESPACE, false);
@@ -23,7 +35,10 @@ void initConf() {
   activityTimeoutEnabled = preferences.getBool(NVM_ACTIVITY_TIMEOUT_ENABLED, activityTimeoutEnabled);
   activityTimeout = preferences.getUInt(NVM_ACTIVITY_TIMEOUT, activityTimeout);
 
-  webSockEnabled = preferences.getBool(NVM_WEB_SOCK_ENABLED, true);
+  webUiUseWebSockets = preferences.getBool(
+      NVM_WEB_UI_USE_WEB_SOCKETS,
+      preferences.getBool(NVM_WEB_SOCK_ENABLED_LEGACY, true));
+  turnOffOnLeave = preferences.getBool(NVM_TURN_OFF_ON_LEAVE, turnOffOnLeave);
 
   dmxEnabled = preferences.getBool(NVM_DMX_ENABLED, true);
   dmxUnicast = preferences.getBool(NVM_DMX_UNICAST, true);
@@ -42,11 +57,17 @@ void handleGetConf(AsyncWebServerRequest *request) {
   // Returns current configuration (not necessarily from NVM)
   JsonDocument jsonDoc;
 
-  JsonArray ledCounts = jsonDoc["ledCounts"].to<JsonArray>();
+  JsonArray strips = jsonDoc[DEVICE_STRIPS].to<JsonArray>();
+  preferences.begin(NVM_NAMESPACE, true);
   for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-    ledCounts.add(DVC_NUM_LEDS_LIST[i]);
+    const int ledCount = getStoredStripLedCount(i);
+
+    JsonObject strip = strips.add<JsonObject>();
+    strip["index"] = i;
+    strip[NVM_LED_COUNT] = ledCount;
+    strip[NVM_DATA_PIN] = DVC_DATA_PIN_LIST[i];
   }
-  jsonDoc[NVM_LED_COUNT] = DVC_NUM_LEDS_LIST[0];
+  preferences.end();
 
   jsonDoc[NVM_WIFI_MODE] = static_cast<int>(wifiMode);
   jsonDoc[NVM_WIFI_SSID] = wifiSsid;
@@ -63,7 +84,8 @@ void handleGetConf(AsyncWebServerRequest *request) {
   jsonDoc[NVM_ACTIVITY_TIMEOUT] = activityTimeout;
 
   jsonDoc[NVM_DEVICE_NAME] = deviceName;
-  jsonDoc[NVM_WEB_SOCK_ENABLED] = webSockEnabled;
+  jsonDoc[NVM_WEB_UI_USE_WEB_SOCKETS] = webUiUseWebSockets;
+  jsonDoc[NVM_TURN_OFF_ON_LEAVE] = turnOffOnLeave;
   jsonDoc[NVM_DMX_ENABLED] = dmxEnabled;
   jsonDoc[NVM_DMX_UNICAST] = dmxUnicast;
   jsonDoc[NVM_DMX_UNIVERSE] = dmxUniverse;
@@ -108,7 +130,8 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   const bool paramActivityTimeoutEnabled = jsonDoc[NVM_ACTIVITY_TIMEOUT_ENABLED].as<bool>();
   const int paramActivityTimeout = jsonDoc[NVM_ACTIVITY_TIMEOUT].as<uint>();
 
-  const bool paramWebSockEnabled = jsonDoc[NVM_WEB_SOCK_ENABLED].as<bool>();
+  const bool paramWebUiUseWebSockets = jsonDoc[NVM_WEB_UI_USE_WEB_SOCKETS].as<bool>();
+  const bool paramTurnOffOnLeave = jsonDoc[NVM_TURN_OFF_ON_LEAVE].as<bool>();
   
   const bool paramDmxEnabled = jsonDoc[NVM_DMX_ENABLED].as<bool>();
   const bool paramDmxUnicast = jsonDoc[NVM_DMX_UNICAST].as<bool>();
@@ -148,7 +171,8 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   preferences.putBool(NVM_ACTIVITY_TIMEOUT_ENABLED, paramActivityTimeoutEnabled);
   preferences.putUInt(NVM_ACTIVITY_TIMEOUT, paramActivityTimeout);
   
-  preferences.putBool(NVM_WEB_SOCK_ENABLED, paramWebSockEnabled);
+  preferences.putBool(NVM_WEB_UI_USE_WEB_SOCKETS, paramWebUiUseWebSockets);
+  preferences.putBool(NVM_TURN_OFF_ON_LEAVE, paramTurnOffOnLeave);
   
   preferences.putBool(NVM_DMX_ENABLED, paramDmxEnabled);
   preferences.putBool(NVM_DMX_UNICAST, paramDmxUnicast);
@@ -158,6 +182,25 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
 
   preferences.putBool(NVM_IR_ENABLED, paramIrEnabled);
   preferences.putBool(NVM_IR_UNRECOGNIZED_AS_ONOFF, paramIrUnrecognizedAsOnOff);
+
+  if (jsonDoc[DEVICE_STRIPS].is<JsonArray>()) {
+    for (int i = 0; i < DVC_STRIP_COUNT; i++) {
+      String key = getStripLedCountKey(i);
+      preferences.putUInt(key.c_str(), 0);
+    }
+
+    JsonArray strips = jsonDoc[DEVICE_STRIPS].as<JsonArray>();
+    for (JsonObject strip : strips) {
+      const int stripIdx = strip["index"] | -1;
+      const int ledCount = std::max(0, strip[NVM_LED_COUNT] | 0);
+      if (stripIdx < 0 || stripIdx >= DVC_STRIP_COUNT) {
+        continue;
+      }
+
+      String key = getStripLedCountKey(stripIdx);
+      preferences.putUInt(key.c_str(), ledCount);
+    }
+  }
 
   preferences.end();
 

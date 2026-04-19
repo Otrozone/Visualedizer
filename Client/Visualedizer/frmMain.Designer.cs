@@ -17,6 +17,7 @@ namespace Ledqualizer
         private DataGridViewComboBoxColumn colAssignedScene;
         private DataGridViewTextBoxColumn colHost;
         private DataGridViewTextBoxColumn colPort;
+        private DataGridViewTextBoxColumn colStripCount;
         private DataGridViewTextBoxColumn colLedCount;
         private DataGridViewTextBoxColumn colStatus;
         private SplitContainer splitContainerMain;
@@ -53,6 +54,7 @@ namespace Ledqualizer
             colAssignedScene = new DataGridViewComboBoxColumn();
             colHost = new DataGridViewTextBoxColumn();
             colPort = new DataGridViewTextBoxColumn();
+            colStripCount = new DataGridViewTextBoxColumn();
             colLedCount = new DataGridViewTextBoxColumn();
             colStatus = new DataGridViewTextBoxColumn();
             btnOtherDevices = new Button();
@@ -92,6 +94,7 @@ namespace Ledqualizer
             // 
             // splitContainerRoot
             // 
+            splitContainerRoot.BackColor = SystemColors.ControlDark;
             splitContainerRoot.Dock = DockStyle.Fill;
             splitContainerRoot.FixedPanel = FixedPanel.Panel1;
             splitContainerRoot.Location = new Point(0, 0);
@@ -100,6 +103,7 @@ namespace Ledqualizer
             // 
             // splitContainerRoot.Panel1
             // 
+            splitContainerRoot.Panel1.BackColor = SystemColors.Control;
             splitContainerRoot.Panel1.Controls.Add(dgvDevices);
             splitContainerRoot.Panel1.Controls.Add(btnOtherDevices);
             splitContainerRoot.Panel1.Controls.Add(btnRemoveDevice);
@@ -111,9 +115,11 @@ namespace Ledqualizer
             // 
             // splitContainerRoot.Panel2
             // 
+            splitContainerRoot.Panel2.BackColor = SystemColors.Control;
             splitContainerRoot.Panel2.Controls.Add(splitContainerMain);
             splitContainerRoot.Size = new Size(1103, 711);
             splitContainerRoot.SplitterDistance = 218;
+            splitContainerRoot.SplitterWidth = 3;
             splitContainerRoot.TabIndex = 0;
             // 
             // dgvDevices
@@ -122,7 +128,7 @@ namespace Ledqualizer
             dgvDevices.AllowUserToDeleteRows = false;
             dgvDevices.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             dgvDevices.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvDevices.Columns.AddRange(new DataGridViewColumn[] { colEnabled, colName, colAssignedScene, colHost, colPort, colLedCount, colStatus });
+            dgvDevices.Columns.AddRange(new DataGridViewColumn[] { colEnabled, colName, colAssignedScene, colHost, colPort, colStripCount, colLedCount, colStatus });
             dgvDevices.Location = new Point(12, 59);
             dgvDevices.Name = "dgvDevices";
             dgvDevices.RowHeadersVisible = false;
@@ -143,6 +149,7 @@ namespace Ledqualizer
             colName.FillWeight = 18F;
             colName.HeaderText = "Name";
             colName.Name = "colName";
+            colName.ReadOnly = true;
             // 
             // colAssignedScene
             // 
@@ -166,11 +173,20 @@ namespace Ledqualizer
             colPort.Name = "colPort";
             colPort.Width = 60;
             // 
+            // colStripCount
+            // 
+            colStripCount.DataPropertyName = "StripCount";
+            colStripCount.HeaderText = "Strips";
+            colStripCount.Name = "colStripCount";
+            colStripCount.ReadOnly = true;
+            colStripCount.Width = 60;
+            // 
             // colLedCount
             // 
             colLedCount.DataPropertyName = "LedCount";
             colLedCount.HeaderText = "LEDs";
             colLedCount.Name = "colLedCount";
+            colLedCount.ReadOnly = true;
             colLedCount.Width = 60;
             // 
             // colStatus
@@ -225,7 +241,7 @@ namespace Ledqualizer
             // 
             lblRefreshRate.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblRefreshRate.AutoSize = true;
-            lblRefreshRate.Location = new Point(1053, 36);
+            lblRefreshRate.Location = new Point(1042, 36);
             lblRefreshRate.Name = "lblRefreshRate";
             lblRefreshRate.Size = new Size(38, 15);
             lblRefreshRate.TabIndex = 2;
@@ -235,7 +251,7 @@ namespace Ledqualizer
             // 
             lblDelay.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblDelay.AutoSize = true;
-            lblDelay.Location = new Point(905, 34);
+            lblDelay.Location = new Point(894, 34);
             lblDelay.Name = "lblDelay";
             lblDelay.Size = new Size(63, 15);
             lblDelay.TabIndex = 1;
@@ -244,7 +260,7 @@ namespace Ledqualizer
             // numDelay
             // 
             numDelay.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            numDelay.Location = new Point(985, 32);
+            numDelay.Location = new Point(974, 32);
             numDelay.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
             numDelay.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numDelay.Name = "numDelay";
@@ -255,12 +271,14 @@ namespace Ledqualizer
             // 
             // splitContainerMain
             // 
+            splitContainerMain.BackColor = SystemColors.ControlDark;
             splitContainerMain.Dock = DockStyle.Fill;
             splitContainerMain.Location = new Point(0, 0);
             splitContainerMain.Name = "splitContainerMain";
             // 
             // splitContainerMain.Panel1
             // 
+            splitContainerMain.Panel1.BackColor = SystemColors.Control;
             splitContainerMain.Panel1.Controls.Add(dgvScenes);
             splitContainerMain.Panel1.Controls.Add(btnRemoveScene);
             splitContainerMain.Panel1.Controls.Add(btnDuplicateScene);
@@ -269,10 +287,12 @@ namespace Ledqualizer
             // 
             // splitContainerMain.Panel2
             // 
+            splitContainerMain.Panel2.BackColor = SystemColors.Control;
             splitContainerMain.Panel2.Controls.Add(panelSceneEditorHost);
             splitContainerMain.Panel2.Controls.Add(lblEditorTitle);
-            splitContainerMain.Size = new Size(1103, 493);
+            splitContainerMain.Size = new Size(1103, 490);
             splitContainerMain.SplitterDistance = 392;
+            splitContainerMain.SplitterWidth = 3;
             splitContainerMain.TabIndex = 1;
             // 
             // dgvScenes
@@ -285,7 +305,7 @@ namespace Ledqualizer
             dgvScenes.Location = new Point(12, 65);
             dgvScenes.Name = "dgvScenes";
             dgvScenes.RowHeadersVisible = false;
-            dgvScenes.Size = new Size(367, 416);
+            dgvScenes.Size = new Size(367, 413);
             dgvScenes.TabIndex = 4;
             // 
             // colSceneName
@@ -357,7 +377,7 @@ namespace Ledqualizer
             panelSceneEditorHost.BorderStyle = BorderStyle.FixedSingle;
             panelSceneEditorHost.Location = new Point(13, 36);
             panelSceneEditorHost.Name = "panelSceneEditorHost";
-            panelSceneEditorHost.Size = new Size(682, 445);
+            panelSceneEditorHost.Size = new Size(684, 442);
             panelSceneEditorHost.TabIndex = 1;
             // 
             // lblEditorTitle

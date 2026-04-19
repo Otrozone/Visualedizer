@@ -2,15 +2,24 @@ using static Ledqualizer.AcVolume;
 
 namespace Ledqualizer
 {
-    internal partial class SpectralAnalysisSceneEditorForm : SceneEditorFormBase
+    public partial class SpectralAnalysisSceneEditorForm : Form, ISceneEditorForm
     {
-        public override SceneType SceneType => SceneType.SpectralAnalysis;
+        private bool isLoading;
+
+        public SceneType SceneType => SceneType.SpectralAnalysis;
+
+        protected SceneConfig? CurrentScene { get; private set; }
+
+        public event EventHandler? SceneChanged;
 
         public event EventHandler? SelectedAudioDeviceChanged;
 
         public SpectralAnalysisSceneEditorForm()
         {
             InitializeComponent();
+            FormBorderStyle = FormBorderStyle.None;
+            TopLevel = false;
+            Dock = DockStyle.Fill;
             ucHueMinMax.ValueChanged += ControlValueChanged;
             ucHueBg.ValueChanged += ControlValueChanged;
         }
@@ -54,24 +63,33 @@ namespace Ledqualizer
             progressBar.Value = Math.Max(progressBar.Minimum, Math.Min(progressBar.Maximum, value));
         }
 
-        protected override void OnLoadScene(SceneConfig scene)
+        public void LoadScene(SceneConfig scene)
         {
-            SpectralAnalysisSceneConfig config = scene.SpectralAnalysis;
-            SelectMode(config.Mode);
-            trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, config.Brightness));
-            trackBarNormalizationLevel.Value = Math.Max(trackBarNormalizationLevel.Minimum, Math.Min(trackBarNormalizationLevel.Maximum, config.Normalization));
-            ucHueMinMax.HueMin = (int)Math.Round(config.HueMin);
-            ucHueMinMax.HueMax = (int)Math.Round(config.HueMax);
-            chbReverse.Checked = config.Reverse;
-            chbHueReverse.Checked = config.HueReverse;
-            chbWhite.Checked = config.White;
-            chbBgWhite.Checked = config.BackgroundWhite;
-            ucHueBg.Hue = (int)Math.Round(config.BackgroundHue);
-            trackBarBgBrightness.Value = Math.Max(trackBarBgBrightness.Minimum, Math.Min(trackBarBgBrightness.Maximum, config.BackgroundBrightness));
-            trackBarFrequencyLow.Value = ClampTrackBar(trackBarFrequencyLow, (int)Math.Round(config.FrequencyLowHz));
-            trackBarFrequencyHigh.Value = ClampTrackBar(trackBarFrequencyHigh, (int)Math.Round(config.FrequencyHighHz));
-            trackBarLevelLow.Value = ClampTrackBar(trackBarLevelLow, (int)Math.Round(config.LevelLowDb));
-            trackBarLevelHigh.Value = ClampTrackBar(trackBarLevelHigh, (int)Math.Round(config.LevelHighDb));
+            CurrentScene = scene;
+            isLoading = true;
+            try
+            {
+                SpectralAnalysisSceneConfig config = scene.SpectralAnalysis;
+                SelectMode(config.Mode);
+                trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, config.Brightness));
+                trackBarNormalizationLevel.Value = Math.Max(trackBarNormalizationLevel.Minimum, Math.Min(trackBarNormalizationLevel.Maximum, config.Normalization));
+                ucHueMinMax.HueMin = (int)Math.Round(config.HueMin);
+                ucHueMinMax.HueMax = (int)Math.Round(config.HueMax);
+                chbReverse.Checked = config.Reverse;
+                chbHueReverse.Checked = config.HueReverse;
+                chbWhite.Checked = config.White;
+                chbBgWhite.Checked = config.BackgroundWhite;
+                ucHueBg.Hue = (int)Math.Round(config.BackgroundHue);
+                trackBarBgBrightness.Value = Math.Max(trackBarBgBrightness.Minimum, Math.Min(trackBarBgBrightness.Maximum, config.BackgroundBrightness));
+                trackBarFrequencyLow.Value = ClampTrackBar(trackBarFrequencyLow, (int)Math.Round(config.FrequencyLowHz));
+                trackBarFrequencyHigh.Value = ClampTrackBar(trackBarFrequencyHigh, (int)Math.Round(config.FrequencyHighHz));
+                trackBarLevelLow.Value = ClampTrackBar(trackBarLevelLow, (int)Math.Round(config.LevelLowDb));
+                trackBarLevelHigh.Value = ClampTrackBar(trackBarLevelHigh, (int)Math.Round(config.LevelHighDb));
+            }
+            finally
+            {
+                isLoading = false;
+            }
         }
 
         private void cbAudioDevices_SelectedIndexChanged(object? sender, EventArgs e)
@@ -81,7 +99,7 @@ namespace Ledqualizer
 
         private void ControlValueChanged(object? sender, EventArgs e)
         {
-            if (CurrentScene == null || IsLoadingScene)
+            if (CurrentScene == null || isLoading)
             {
                 return;
             }
@@ -102,7 +120,7 @@ namespace Ledqualizer
             config.FrequencyHighHz = trackBarFrequencyHigh.Value;
             config.LevelLowDb = trackBarLevelLow.Value;
             config.LevelHighDb = trackBarLevelHigh.Value;
-            NotifySceneChanged();
+            SceneChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private static int ClampTrackBar(TrackBar trackBar, int value)

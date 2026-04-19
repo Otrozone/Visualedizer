@@ -1,8 +1,14 @@
 namespace Ledqualizer
 {
-    internal partial class ScreenRowCaptureSceneEditorForm : SceneEditorFormBase
+    public partial class ScreenRowCaptureSceneEditorForm : Form, ISceneEditorForm
     {
-        public override SceneType SceneType => SceneType.ScreenRowCapture;
+        private bool isLoading;
+
+        public SceneType SceneType => SceneType.ScreenRowCapture;
+
+        protected SceneConfig? CurrentScene { get; private set; }
+
+        public event EventHandler? SceneChanged;
 
         public event EventHandler? GuideChanged;
         public event EventHandler? CaptureRowChanged;
@@ -12,6 +18,9 @@ namespace Ledqualizer
         public ScreenRowCaptureSceneEditorForm()
         {
             InitializeComponent();
+            FormBorderStyle = FormBorderStyle.None;
+            TopLevel = false;
+            Dock = DockStyle.Fill;
             hsbScreenRowSelector.Maximum = Math.Max(Screen.PrimaryScreen?.Bounds.Height ?? 1, 1);
             numScreenRow.Maximum = hsbScreenRowSelector.Maximum;
             pictureBoxPreview.Paint += PictureBoxPreview_Paint;
@@ -34,12 +43,21 @@ namespace Ledqualizer
             pictureBoxPreview.Invalidate();
         }
 
-        protected override void OnLoadScene(SceneConfig scene)
+        public void LoadScene(SceneConfig scene)
         {
-            int captureY = Math.Max((int)numScreenRow.Minimum, Math.Min((int)numScreenRow.Maximum, scene.ScreenRowCapture.CaptureY));
-            numScreenRow.Value = captureY;
-            hsbScreenRowSelector.Value = Math.Max(hsbScreenRowSelector.Minimum, Math.Min(hsbScreenRowSelector.Maximum, captureY));
-            chbReverse.Checked = scene.ScreenRowCapture.Reverse;
+            CurrentScene = scene;
+            isLoading = true;
+            try
+            {
+                int captureY = Math.Max((int)numScreenRow.Minimum, Math.Min((int)numScreenRow.Maximum, scene.ScreenRowCapture.CaptureY));
+                numScreenRow.Value = captureY;
+                hsbScreenRowSelector.Value = Math.Max(hsbScreenRowSelector.Minimum, Math.Min(hsbScreenRowSelector.Maximum, captureY));
+                chbReverse.Checked = scene.ScreenRowCapture.Reverse;
+            }
+            finally
+            {
+                isLoading = false;
+            }
         }
 
         private void hsbScreenRowSelector_Scroll(object? sender, ScrollEventArgs e)
@@ -50,10 +68,10 @@ namespace Ledqualizer
         private void numScreenRow_ValueChanged(object? sender, EventArgs e)
         {
             hsbScreenRowSelector.Value = Math.Max(hsbScreenRowSelector.Minimum, Math.Min(hsbScreenRowSelector.Maximum, (int)numScreenRow.Value));
-            if (CurrentScene != null && !IsLoadingScene)
+            if (CurrentScene != null && !isLoading)
             {
                 CurrentScene.ScreenRowCapture.CaptureY = (int)numScreenRow.Value;
-                NotifySceneChanged();
+                SceneChanged?.Invoke(this, EventArgs.Empty);
             }
 
             CaptureRowChanged?.Invoke(this, EventArgs.Empty);
@@ -61,10 +79,10 @@ namespace Ledqualizer
 
         private void ControlValueChanged(object? sender, EventArgs e)
         {
-            if (CurrentScene != null && !IsLoadingScene)
+            if (CurrentScene != null && !isLoading)
             {
                 CurrentScene.ScreenRowCapture.Reverse = chbReverse.Checked;
-                NotifySceneChanged();
+                SceneChanged?.Invoke(this, EventArgs.Empty);
             }
 
             GuideChanged?.Invoke(this, EventArgs.Empty);

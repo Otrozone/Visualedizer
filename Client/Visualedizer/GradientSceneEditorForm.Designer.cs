@@ -1,6 +1,6 @@
 namespace Ledqualizer
 {
-    partial class GradientSceneEditorForm
+    public partial class GradientSceneEditorForm
     {
         private System.ComponentModel.IContainer components = null;
         private Label lblGradient;
@@ -36,7 +36,7 @@ namespace Ledqualizer
             // lblGradient
             // 
             lblGradient.AutoSize = true;
-            lblGradient.Location = new Point(16, 18);
+            lblGradient.Location = new Point(12, 12);
             lblGradient.Name = "lblGradient";
             lblGradient.Size = new Size(82, 15);
             lblGradient.TabIndex = 0;
@@ -47,15 +47,15 @@ namespace Ledqualizer
             ucHueMinMaxGradient.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             ucHueMinMaxGradient.HueMax = 360;
             ucHueMinMaxGradient.HueMin = 0;
-            ucHueMinMaxGradient.Location = new Point(16, 36);
+            ucHueMinMaxGradient.Location = new Point(12, 28);
             ucHueMinMaxGradient.Name = "ucHueMinMaxGradient";
-            ucHueMinMaxGradient.Size = new Size(620, 59);
+            ucHueMinMaxGradient.Size = new Size(626, 52);
             ucHueMinMaxGradient.TabIndex = 1;
             // 
             // lblSaturation
             // 
             lblSaturation.AutoSize = true;
-            lblSaturation.Location = new Point(16, 116);
+            lblSaturation.Location = new Point(12, 88);
             lblSaturation.Name = "lblSaturation";
             lblSaturation.Size = new Size(61, 15);
             lblSaturation.TabIndex = 2;
@@ -64,10 +64,10 @@ namespace Ledqualizer
             // trackBarSaturation
             // 
             trackBarSaturation.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarSaturation.Location = new Point(16, 134);
+            trackBarSaturation.Location = new Point(12, 104);
             trackBarSaturation.Maximum = 100;
             trackBarSaturation.Name = "trackBarSaturation";
-            trackBarSaturation.Size = new Size(620, 45);
+            trackBarSaturation.Size = new Size(626, 36);
             trackBarSaturation.TabIndex = 3;
             trackBarSaturation.Value = 100;
             trackBarSaturation.ValueChanged += ControlValueChanged;
@@ -75,7 +75,7 @@ namespace Ledqualizer
             // lblBrightness
             // 
             lblBrightness.AutoSize = true;
-            lblBrightness.Location = new Point(16, 197);
+            lblBrightness.Location = new Point(12, 144);
             lblBrightness.Name = "lblBrightness";
             lblBrightness.Size = new Size(62, 15);
             lblBrightness.TabIndex = 4;
@@ -84,10 +84,10 @@ namespace Ledqualizer
             // trackBarBrightness
             // 
             trackBarBrightness.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarBrightness.Location = new Point(16, 215);
+            trackBarBrightness.Location = new Point(12, 160);
             trackBarBrightness.Maximum = 100;
             trackBarBrightness.Name = "trackBarBrightness";
-            trackBarBrightness.Size = new Size(620, 45);
+            trackBarBrightness.Size = new Size(626, 36);
             trackBarBrightness.TabIndex = 5;
             trackBarBrightness.Value = 50;
             trackBarBrightness.ValueChanged += ControlValueChanged;
@@ -96,7 +96,7 @@ namespace Ledqualizer
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(654, 419);
+            ClientSize = new Size(654, 217);
             Controls.Add(trackBarBrightness);
             Controls.Add(lblBrightness);
             Controls.Add(trackBarSaturation);

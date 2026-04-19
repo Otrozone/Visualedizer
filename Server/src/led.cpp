@@ -2,10 +2,36 @@
 #include <freertos/semphr.h>
 
 #include "led.h"
+#include "main.h"
+#include "nvm.h"
 #include "render_service.h"
 
 namespace {
 SemaphoreHandle_t renderMutex = nullptr;
+
+String getStripLedCountKey(int stripIdx) {
+  return "strip" + String(stripIdx) + "LedCount";
+}
+
+uint16_t getConfiguredStripLedCount(int stripIdx) {
+  preferences.begin(NVM_NAMESPACE, true);
+  String key = getStripLedCountKey(stripIdx);
+  const uint16_t ledCount = preferences.getUInt(key.c_str(), DVC_NUM_LEDS_LIST[stripIdx]);
+  preferences.end();
+  return ledCount;
+}
+
+template <uint16_t DataPin>
+void initStripSlot(int stripIdx) {
+  const uint16_t ledCount = getConfiguredStripLedCount(stripIdx);
+  if (ledCount == 0) {
+    ledStrips[stripIdx] = nullptr;
+    return;
+  }
+
+  ledStrips[stripIdx] = new LedStripDvc(stripIdx, ledCount);
+  FastLED.addLeds<DVC_LED_TYPE, DataPin, DVC_LED_COLOR_ORDER>(ledStrips[stripIdx]->leds, ledStrips[stripIdx]->ledCount);
+}
 }
 
 LedStripDvc* ledStrips[DVC_STRIP_COUNT] = {nullptr};
@@ -19,28 +45,23 @@ void initLedRenderer() {
 void initLeds() {
   initLedRenderer();
 
-  // This is a workaround for the FastLED library limitation with multiple strips and dynamic pin assignments.
-  ledStrips[0] = new LedStripDvc(0, DVC_NUM_LEDS_LIST[0]);
-  FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[0], DVC_LED_COLOR_ORDER>(ledStrips[0]->leds, ledStrips[0]->ledCount);
+  // Pins remain compile-time, but per-strip LED counts can be persisted and disabled with 0.
+  initStripSlot<DVC_DATA_PIN_LIST[0]>(0);
 
   #if DVC_STRIP_COUNT > 1
-  ledStrips[1] = new LedStripDvc(1, DVC_NUM_LEDS_LIST[1]);
-  FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[1], DVC_LED_COLOR_ORDER>(ledStrips[1]->leds, ledStrips[1]->ledCount);
+  initStripSlot<DVC_DATA_PIN_LIST[1]>(1);
   #endif
 
   #if DVC_STRIP_COUNT > 2
-  ledStrips[2] = new LedStripDvc(2, DVC_NUM_LEDS_LIST[2]);
-  FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[2], DVC_LED_COLOR_ORDER>(ledStrips[2]->leds, ledStrips[2]->ledCount);
+  initStripSlot<DVC_DATA_PIN_LIST[2]>(2);
   #endif  
 
   #if DVC_STRIP_COUNT > 3
-  ledStrips[3] = new LedStripDvc(3, DVC_NUM_LEDS_LIST[3]);
-  FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[3], DVC_LED_COLOR_ORDER>(ledStrips[3]->leds, ledStrips[3]->ledCount);
+  initStripSlot<DVC_DATA_PIN_LIST[3]>(3);
   #endif
 
   #if DVC_STRIP_COUNT > 4
-  ledStrips[4] = new LedStripDvc(4, DVC_NUM_LEDS_LIST[4]);
-  FastLED.addLeds<DVC_LED_TYPE, DVC_DATA_PIN_LIST[4], DVC_LED_COLOR_ORDER>(ledStrips[4]->leds, ledStrips[4]->ledCount);
+  initStripSlot<DVC_DATA_PIN_LIST[4]>(4);
   #endif
 
   initRenderService();

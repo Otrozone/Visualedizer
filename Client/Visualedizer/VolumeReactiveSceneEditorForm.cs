@@ -2,18 +2,26 @@ using static Ledqualizer.AcVolume;
 
 namespace Ledqualizer
 {
-    internal partial class VolumeReactiveSceneEditorForm : SceneEditorFormBase
+    public partial class VolumeReactiveSceneEditorForm : Form, ISceneEditorForm
     {
         private readonly RadioButton[] rotateModes;
         private int rotateIdx;
+        private bool isLoading;
 
-        public override SceneType SceneType => SceneType.VolumeReactive;
+        public SceneType SceneType => SceneType.VolumeReactive;
+
+        protected SceneConfig? CurrentScene { get; private set; }
+
+        public event EventHandler? SceneChanged;
 
         public event EventHandler? SelectedAudioDeviceChanged;
 
         public VolumeReactiveSceneEditorForm()
         {
             InitializeComponent();
+            FormBorderStyle = FormBorderStyle.None;
+            TopLevel = false;
+            Dock = DockStyle.Fill;
             rotateModes = new[] { rbModeColorPush, rbModeEndToStart, rbModeMidToOut, rbModeMidToOutPoint, rbModeStartToEnd };
             ucHueMinMax.ValueChanged += ControlValueChanged;
             ucHueBg.ValueChanged += ControlValueChanged;
@@ -58,24 +66,33 @@ namespace Ledqualizer
             progressBar.Value = Math.Max(progressBar.Minimum, Math.Min(progressBar.Maximum, value));
         }
 
-        protected override void OnLoadScene(SceneConfig scene)
+        public void LoadScene(SceneConfig scene)
         {
-            VolumeReactiveSceneConfig config = scene.VolumeReactive;
-            SelectMode(config.Mode);
-            chbRotate.Checked = config.RotateModes;
-            trackBarRotate.Value = Math.Max(trackBarRotate.Minimum, Math.Min(trackBarRotate.Maximum, config.RotateIntervalSeconds));
-            trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, config.Brightness));
-            trackBarNormalizationLevel.Value = Math.Max(trackBarNormalizationLevel.Minimum, Math.Min(trackBarNormalizationLevel.Maximum, config.Normalization));
-            ucHueMinMax.HueMin = (int)Math.Round(config.HueMin);
-            ucHueMinMax.HueMax = (int)Math.Round(config.HueMax);
-            chbReverse.Checked = config.Reverse;
-            chbHueReverse.Checked = config.HueReverse;
-            chbWhite.Checked = config.White;
-            chbBgWhite.Checked = config.BackgroundWhite;
-            ucHueBg.Hue = (int)Math.Round(config.BackgroundHue);
-            trackBarBgBrightness.Value = Math.Max(trackBarBgBrightness.Minimum, Math.Min(trackBarBgBrightness.Maximum, config.BackgroundBrightness));
-            timerRotate.Interval = trackBarRotate.Value * 1000;
-            timerRotate.Enabled = chbRotate.Checked;
+            CurrentScene = scene;
+            isLoading = true;
+            try
+            {
+                VolumeReactiveSceneConfig config = scene.VolumeReactive;
+                SelectMode(config.Mode);
+                chbRotate.Checked = config.RotateModes;
+                trackBarRotate.Value = Math.Max(trackBarRotate.Minimum, Math.Min(trackBarRotate.Maximum, config.RotateIntervalSeconds));
+                trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, config.Brightness));
+                trackBarNormalizationLevel.Value = Math.Max(trackBarNormalizationLevel.Minimum, Math.Min(trackBarNormalizationLevel.Maximum, config.Normalization));
+                ucHueMinMax.HueMin = (int)Math.Round(config.HueMin);
+                ucHueMinMax.HueMax = (int)Math.Round(config.HueMax);
+                chbReverse.Checked = config.Reverse;
+                chbHueReverse.Checked = config.HueReverse;
+                chbWhite.Checked = config.White;
+                chbBgWhite.Checked = config.BackgroundWhite;
+                ucHueBg.Hue = (int)Math.Round(config.BackgroundHue);
+                trackBarBgBrightness.Value = Math.Max(trackBarBgBrightness.Minimum, Math.Min(trackBarBgBrightness.Maximum, config.BackgroundBrightness));
+                timerRotate.Interval = trackBarRotate.Value * 1000;
+                timerRotate.Enabled = chbRotate.Checked;
+            }
+            finally
+            {
+                isLoading = false;
+            }
         }
 
         private void cbAudioDevices_SelectedIndexChanged(object? sender, EventArgs e)
@@ -102,7 +119,7 @@ namespace Ledqualizer
 
         private void ControlValueChanged(object? sender, EventArgs e)
         {
-            if (CurrentScene == null || IsLoadingScene)
+            if (CurrentScene == null || isLoading)
             {
                 return;
             }
@@ -122,7 +139,7 @@ namespace Ledqualizer
             config.BackgroundHue = ucHueBg.Hue;
             config.BackgroundBrightness = trackBarBgBrightness.Value;
             timerRotate.Interval = trackBarRotate.Value * 1000;
-            NotifySceneChanged();
+            SceneChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private AcVolume.AudioCaptureVolumeMode GetSelectedMode()
