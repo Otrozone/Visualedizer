@@ -3,6 +3,8 @@ namespace Ledqualizer
     public partial class ScreenRowCaptureSceneEditorForm
     {
         private System.ComponentModel.IContainer components = null;
+        private Label lblMonitor;
+        private ComboBox cbMonitors;
         private Label lblScreenRow;
         private NumericUpDown numScreenRow;
         private Panel pnlScreenRowSelector;
@@ -25,6 +27,8 @@ namespace Ledqualizer
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
+            lblMonitor = new Label();
+            cbMonitors = new ComboBox();
             lblScreenRow = new Label();
             numScreenRow = new NumericUpDown();
             pnlScreenRowSelector = new Panel();
@@ -38,22 +42,42 @@ namespace Ledqualizer
             ((System.ComponentModel.ISupportInitialize)pictureBoxPreview).BeginInit();
             SuspendLayout();
             // 
+            // lblMonitor
+            // 
+            lblMonitor.AutoSize = true;
+            lblMonitor.Location = new Point(12, 12);
+            lblMonitor.Name = "lblMonitor";
+            lblMonitor.Size = new Size(46, 15);
+            lblMonitor.TabIndex = 0;
+            lblMonitor.Text = "Display";
+            // 
+            // cbMonitors
+            // 
+            cbMonitors.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            cbMonitors.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbMonitors.FormattingEnabled = true;
+            cbMonitors.Location = new Point(12, 28);
+            cbMonitors.Name = "cbMonitors";
+            cbMonitors.Size = new Size(626, 23);
+            cbMonitors.TabIndex = 1;
+            cbMonitors.SelectedIndexChanged += cbMonitors_SelectedIndexChanged;
+            // 
             // lblScreenRow
             // 
             lblScreenRow.AutoSize = true;
-            lblScreenRow.Location = new Point(12, 12);
+            lblScreenRow.Location = new Point(12, 60);
             lblScreenRow.Name = "lblScreenRow";
             lblScreenRow.Size = new Size(65, 15);
-            lblScreenRow.TabIndex = 0;
+            lblScreenRow.TabIndex = 2;
             lblScreenRow.Text = "Screen row";
             // 
             // numScreenRow
             // 
-            numScreenRow.Location = new Point(12, 28);
+            numScreenRow.Location = new Point(12, 76);
             numScreenRow.Name = "numScreenRow";
             numScreenRow.ReadOnly = true;
             numScreenRow.Size = new Size(72, 23);
-            numScreenRow.TabIndex = 1;
+            numScreenRow.TabIndex = 3;
             numScreenRow.ValueChanged += numScreenRow_ValueChanged;
             // 
             // pnlScreenRowSelector
@@ -61,10 +85,10 @@ namespace Ledqualizer
             pnlScreenRowSelector.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             pnlScreenRowSelector.BorderStyle = BorderStyle.FixedSingle;
             pnlScreenRowSelector.Controls.Add(hsbScreenRowSelector);
-            pnlScreenRowSelector.Location = new Point(90, 28);
+            pnlScreenRowSelector.Location = new Point(90, 76);
             pnlScreenRowSelector.Name = "pnlScreenRowSelector";
             pnlScreenRowSelector.Size = new Size(548, 22);
-            pnlScreenRowSelector.TabIndex = 2;
+            pnlScreenRowSelector.TabIndex = 4;
             // 
             // hsbScreenRowSelector
             // 
@@ -78,10 +102,10 @@ namespace Ledqualizer
             // chbShowGuide
             // 
             chbShowGuide.AutoSize = true;
-            chbShowGuide.Location = new Point(12, 62);
+            chbShowGuide.Location = new Point(12, 110);
             chbShowGuide.Name = "chbShowGuide";
             chbShowGuide.Size = new Size(115, 19);
-            chbShowGuide.TabIndex = 3;
+            chbShowGuide.TabIndex = 5;
             chbShowGuide.Text = "Show guide line";
             chbShowGuide.UseVisualStyleBackColor = true;
             chbShowGuide.CheckedChanged += ControlValueChanged;
@@ -89,10 +113,10 @@ namespace Ledqualizer
             // chbReverse
             // 
             chbReverse.AutoSize = true;
-            chbReverse.Location = new Point(145, 62);
+            chbReverse.Location = new Point(145, 110);
             chbReverse.Name = "chbReverse";
             chbReverse.Size = new Size(105, 19);
-            chbReverse.TabIndex = 4;
+            chbReverse.TabIndex = 6;
             chbReverse.Text = "Reverse output";
             chbReverse.UseVisualStyleBackColor = true;
             chbReverse.CheckedChanged += ControlValueChanged;
@@ -100,27 +124,29 @@ namespace Ledqualizer
             // lblPreview
             // 
             lblPreview.AutoSize = true;
-            lblPreview.Location = new Point(12, 92);
+            lblPreview.Location = new Point(12, 140);
             lblPreview.Name = "lblPreview";
             lblPreview.Size = new Size(45, 15);
-            lblPreview.TabIndex = 5;
+            lblPreview.TabIndex = 7;
             lblPreview.Text = "Preview";
             // 
             // pictureBoxPreview
             // 
             pictureBoxPreview.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             pictureBoxPreview.BorderStyle = BorderStyle.FixedSingle;
-            pictureBoxPreview.Location = new Point(12, 108);
+            pictureBoxPreview.Location = new Point(12, 156);
             pictureBoxPreview.Name = "pictureBoxPreview";
             pictureBoxPreview.Size = new Size(626, 24);
-            pictureBoxPreview.TabIndex = 6;
+            pictureBoxPreview.TabIndex = 8;
             pictureBoxPreview.TabStop = false;
             // 
             // ScreenRowCaptureSceneEditorForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(654, 150);
+            ClientSize = new Size(654, 193);
+            Controls.Add(cbMonitors);
+            Controls.Add(lblMonitor);
             Controls.Add(pictureBoxPreview);
             Controls.Add(lblPreview);
             Controls.Add(chbReverse);

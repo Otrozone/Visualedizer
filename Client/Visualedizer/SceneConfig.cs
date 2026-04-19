@@ -147,6 +147,7 @@ namespace Ledqualizer
 
     public sealed class ScreenRowCaptureSceneConfig
     {
+        public int MonitorIndex { get; set; }
         public int CaptureY { get; set; }
         public bool Reverse { get; set; }
 
@@ -257,7 +258,7 @@ namespace Ledqualizer
                 SceneType.SolidColor => $"Hue {scene.SolidColor.Hue:F0}, Sat {scene.SolidColor.Saturation}%, Bright {scene.SolidColor.Brightness}%",
                 SceneType.Gradient => $"Hue {scene.Gradient.HueMin:F0}-{scene.Gradient.HueMax:F0}, Bright {scene.Gradient.Brightness}%",
                 SceneType.VolumeReactive => $"Mode {scene.VolumeReactive.Mode}, Norm {scene.VolumeReactive.Normalization}",
-                SceneType.ScreenRowCapture => $"Row {scene.ScreenRowCapture.CaptureY}" + (scene.ScreenRowCapture.Reverse ? ", Reversed" : string.Empty),
+                SceneType.ScreenRowCapture => $"Display {scene.ScreenRowCapture.MonitorIndex + 1}, Row {scene.ScreenRowCapture.CaptureY}" + (scene.ScreenRowCapture.Reverse ? ", Reversed" : string.Empty),
                 SceneType.SpectralAnalysis => $"{scene.SpectralAnalysis.FrequencyLowHz:F0}-{scene.SpectralAnalysis.FrequencyHighHz:F0} Hz",
                 _ => string.Empty
             };

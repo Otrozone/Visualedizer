@@ -54,20 +54,30 @@ namespace Ledqualizer
 
         public sealed class FormOverlay : Form
         {
+            private readonly Rectangle highlightRectangle;
+
             public FormOverlay(Rectangle rectangle)
             {
                 FormBorderStyle = FormBorderStyle.None;
-                BackColor = Color.WhiteSmoke;
-                Opacity = 0.5;
+                BackColor = Color.Black;
+                TransparencyKey = Color.Black;
+                Opacity = 1;
                 TopMost = true;
                 StartPosition = FormStartPosition.Manual;
                 Location = rectangle.Location;
                 Size = rectangle.Size;
+                ShowInTaskbar = false;
+                highlightRectangle = new Rectangle(0, 0, rectangle.Width, rectangle.Height);
 
                 Paint += (sender, e) =>
                 {
-                    using Pen redPen = new(Color.Red, 1);
-                    e.Graphics.DrawRectangle(redPen, new Rectangle(0, 17, Width - 1, 3));
+                    using Pen whitePen = new(Color.White, 1);
+                    e.Graphics.DrawRectangle(
+                        whitePen,
+                        highlightRectangle.X,
+                        highlightRectangle.Y,
+                        Math.Max(0, highlightRectangle.Width - 1),
+                        Math.Max(0, highlightRectangle.Height - 1));
                 };
             }
         }
@@ -461,6 +471,7 @@ namespace Ledqualizer
             return ReadUi(() => new ScreenCaptureSceneSettings
             {
                 Delay = (int)numDelay.Value,
+                MonitorIndex = scene.ScreenRowCapture.MonitorIndex,
                 CaptureY = scene.ScreenRowCapture.CaptureY,
                 Reverse = scene.ScreenRowCapture.Reverse
             });
@@ -1009,7 +1020,7 @@ namespace Ledqualizer
 
             if (screenEditor.ShowGuide)
             {
-                ShowOverlayForm(screenEditor.CaptureRow);
+                ShowOverlayForm(screenEditor.MonitorIndex, screenEditor.CaptureRow);
             }
             else
             {
@@ -1017,14 +1028,19 @@ namespace Ledqualizer
             }
         }
 
-        public void ShowOverlayForm(int y)
+        public void ShowOverlayForm(int monitorIndex, int y)
         {
-            int screenWidth = Screen.PrimaryScreen?.Bounds.Width ?? 1;
-            Rectangle captureArea = new(0, y - 18, screenWidth - 1, 3);
+            Screen[] screens = Screen.AllScreens;
+            Screen screen = (monitorIndex >= 0 && monitorIndex < screens.Length)
+                ? screens[monitorIndex]
+                : (Screen.PrimaryScreen ?? screens[0]);
+            Rectangle bounds = screen.Bounds;
+            Rectangle captureArea = new(bounds.Left, bounds.Top + Math.Max(0, y - 1), bounds.Width, 3);
             if (frmOverlay != null)
             {
                 frmOverlay.Location = captureArea.Location;
                 frmOverlay.Size = captureArea.Size;
+                frmOverlay.Invalidate();
                 return;
             }
 

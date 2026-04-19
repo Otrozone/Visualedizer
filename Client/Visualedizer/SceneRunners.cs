@@ -54,6 +54,7 @@ namespace Ledqualizer
     internal sealed class ScreenCaptureSceneSettings
     {
         public int Delay { get; set; }
+        public int MonitorIndex { get; set; }
         public int CaptureY { get; set; }
         public bool Reverse { get; set; }
     }
@@ -507,22 +508,24 @@ namespace Ledqualizer
 
         public async Task RunAsync(IReadOnlyList<DeviceTarget> devices, CancellationToken token)
         {
-            int screenWidth = Screen.PrimaryScreen?.Bounds.Width ?? 0;
-            if (screenWidth <= 0)
-            {
-                return;
-            }
-
-            using Bitmap screenCapture = new(screenWidth, 1);
-            using Graphics graphics = Graphics.FromImage(screenCapture);
-
             while (!token.IsCancellationRequested)
             {
                 ScreenCaptureSceneSettings settings = settingsProvider();
-                graphics.CopyFromScreen(0, settings.CaptureY, 0, 0, new Size(screenWidth, 1));
+                Screen targetScreen = ResolveScreen(settings.MonitorIndex);
+                Rectangle bounds = targetScreen.Bounds;
+                if (bounds.Width <= 0 || bounds.Height <= 0)
+                {
+                    return;
+                }
 
-                List<Color> pixelColors = new(screenWidth);
-                for (int x = 0; x < screenWidth; x++)
+                int captureY = Math.Max(0, Math.Min(bounds.Height - 1, settings.CaptureY));
+
+                using Bitmap screenCapture = new(bounds.Width, 1);
+                using Graphics graphics = Graphics.FromImage(screenCapture);
+                graphics.CopyFromScreen(bounds.Left, bounds.Top + captureY, 0, 0, new Size(bounds.Width, 1));
+
+                List<Color> pixelColors = new(bounds.Width);
+                for (int x = 0; x < bounds.Width; x++)
                 {
                     pixelColors.Add(screenCapture.GetPixel(x, 0));
                 }
@@ -536,7 +539,7 @@ namespace Ledqualizer
                 bool anySent = false;
                 foreach (DeviceTarget device in devices)
                 {
-                    List<Color> reducedColors = ReducePixels(pixelColors, device.Config.LedCount, screenWidth);
+                    List<Color> reducedColors = ReducePixels(pixelColors, device.Config.LedCount, bounds.Width);
                     anySent |= await device.Session.SendFrameAsync(ColorListToByteArray(reducedColors), token).ConfigureAwait(false);
 
                     if (!previewUpdated)
@@ -553,6 +556,22 @@ namespace Ledqualizer
 
                 await Task.Delay(Math.Max(settings.Delay, 1), token).ConfigureAwait(false);
             }
+        }
+
+        private static Screen ResolveScreen(int monitorIndex)
+        {
+            Screen[] screens = Screen.AllScreens;
+            if (screens.Length == 0)
+            {
+                return Screen.PrimaryScreen ?? throw new InvalidOperationException("No screens are available.");
+            }
+
+            if (monitorIndex >= 0 && monitorIndex < screens.Length)
+            {
+                return screens[monitorIndex];
+            }
+
+            return Screen.PrimaryScreen ?? screens[0];
         }
 
         private static List<Color> ReducePixels(List<Color> pixelColors, int ledCount, int screenWidth)

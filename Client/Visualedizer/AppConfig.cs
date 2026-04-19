@@ -168,6 +168,7 @@ namespace Ledqualizer
             section["spectralLevelHighDb"] = scene.SpectralAnalysis.LevelHighDb.ToString(CultureInfo.InvariantCulture);
 
             section["screenCaptureRow"] = scene.ScreenRowCapture.CaptureY.ToString(CultureInfo.InvariantCulture);
+            section["screenCaptureMonitorIndex"] = scene.ScreenRowCapture.MonitorIndex.ToString(CultureInfo.InvariantCulture);
             section["screenCaptureReverse"] = scene.ScreenRowCapture.Reverse.ToString(CultureInfo.InvariantCulture);
         }
 
@@ -225,6 +226,7 @@ namespace Ledqualizer
             scene.SpectralAnalysis.LevelHighDb = ParseDouble(section.Keys["spectralLevelHighDb"], scene.SpectralAnalysis.LevelHighDb);
 
             scene.ScreenRowCapture.CaptureY = ParseInt(section.Keys["screenCaptureRow"], scene.ScreenRowCapture.CaptureY);
+            scene.ScreenRowCapture.MonitorIndex = ParseInt(section.Keys["screenCaptureMonitorIndex"], scene.ScreenRowCapture.MonitorIndex);
             scene.ScreenRowCapture.Reverse = ParseBool(section.Keys["screenCaptureReverse"], scene.ScreenRowCapture.Reverse);
 
             return scene;
@@ -345,6 +347,7 @@ namespace Ledqualizer
             scene.SpectralAnalysis.LevelLowDb = ParseInt(GetValue(data, "SpectralAnalysis", "levelLowDb"), (int)scene.SpectralAnalysis.LevelLowDb);
             scene.SpectralAnalysis.LevelHighDb = ParseInt(GetValue(data, "SpectralAnalysis", "levelHighDb"), (int)scene.SpectralAnalysis.LevelHighDb);
             scene.ScreenRowCapture.CaptureY = ParseInt(GetValue(data, "ScreenCapture", "screenCaptureRow"), scene.ScreenRowCapture.CaptureY);
+            scene.ScreenRowCapture.MonitorIndex = ParseInt(GetValue(data, "ScreenCapture", "screenCaptureMonitorIndex"), scene.ScreenRowCapture.MonitorIndex);
 
             return scene;
         }

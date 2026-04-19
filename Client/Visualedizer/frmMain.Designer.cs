@@ -132,7 +132,7 @@ namespace Ledqualizer
             dgvDevices.Location = new Point(12, 59);
             dgvDevices.Name = "dgvDevices";
             dgvDevices.RowHeadersVisible = false;
-            dgvDevices.Size = new Size(1079, 142);
+            dgvDevices.Size = new Size(1079, 152);
             dgvDevices.TabIndex = 7;
             // 
             // colEnabled
@@ -377,7 +377,7 @@ namespace Ledqualizer
             panelSceneEditorHost.BorderStyle = BorderStyle.FixedSingle;
             panelSceneEditorHost.Location = new Point(13, 36);
             panelSceneEditorHost.Name = "panelSceneEditorHost";
-            panelSceneEditorHost.Size = new Size(684, 442);
+            panelSceneEditorHost.Size = new Size(685, 442);
             panelSceneEditorHost.TabIndex = 1;
             // 
             // lblEditorTitle
