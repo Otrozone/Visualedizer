@@ -1,199 +1,259 @@
-﻿using NAudio.Dsp;
+using NAudio.CoreAudioApi;
+using NAudio.Dsp;
 using NAudio.Wave;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace Ledqualizer
 {
-    internal class AcSpectralAnalysis
+    internal sealed class AcSpectralAnalysis : IDisposable
     {
-        // NAudio.Wave.WaveOut waveOut;
+        private const int FftLength = 2048;
+        private const double SilenceFloorDb = -90.0;
+        private const double LevelEpsilon = 1e-12;
 
-        private LedSync ledSync;
+        private readonly SampleAggregator sampleAggregator = new(FftLength);
+        private readonly object settingsLock = new();
 
-        // private static int fftLength = 8192;
-        private static int fftLength = 16;
-        private SampleAggregator sampleAggregator = new SampleAggregator(fftLength);
+        private WasapiLoopbackCapture? capture;
+        private int sampleRate;
+        private float currentStrength;
+        private double currentBandLevelDb = SilenceFloorDb;
+        private SpectralBandSettings bandSettings = SpectralBandSettings.Default;
 
-        int sampleRate;
-        int bytesPerSample;
-
-        double minFrequency = 20.0;
-        double maxFrequency = 20000.0;
-
-
-        public AcSpectralAnalysis(LedSync ledSync)
+        public AcSpectralAnalysis()
         {
-            this.ledSync = ledSync;
-        }
-
-        void OnDataAvailable(object sender, WaveInEventArgs e)
-        {
-            if (e.BytesRecorded > 0)
-            {
-                int bytesRecorded = e.BytesRecorded;
-
-                for (int i = 0; i < bytesRecorded; i += bytesPerSample)
-                {
-                    if (bytesPerSample == 4)
-                    {
-                        float sample32 = BitConverter.ToSingle(e.Buffer, i);
-                        sampleAggregator.Add(sample32);
-                    }
-                    else if (bytesPerSample == 8)
-                    {
-                        double sample64 = BitConverter.ToDouble(e.Buffer, i);
-                        sampleAggregator.Add(sample64);
-                    }
-                }
-            }
-        }
-
-        private Color CalculateColor(double intensity, double segmentStartFrequency, double segmentEndFrequency)
-        {
-            // Now it's done in normalization
-            double minIntensity = 0.0;
-            double maxIntensity = 1.0;
-
-            double brightness = Common.MapValue(intensity, minIntensity, maxIntensity, 0.0, 1.0);
-            // double brightness = Math.Min(intensity * 100, 1);
-
-            double hue = Common.MapValue(segmentStartFrequency, minFrequency, maxFrequency, 0.0, 360.0);
-            float saturation = 1.0f;
-
-            Color rgbColor = Common.HSVToRGB((float)hue, saturation, (float)brightness);
-            // Color rgbColor = Color.FromArgb(hsvColor.R, hsvColor.G, hsvColor.B);
-
-            return rgbColor;
-        }
-
-
-        private double[] SegmentMagnitudeSpectrum(double[] magnitudeSpectrum)
-        {
-            // int segmentCount = ledSync.config.ledCount;
-            int segmentCount = 3;
-            double[] segmentedMagnitude = new double[segmentCount];
-            double segmentSize = (maxFrequency - minFrequency) / segmentCount;
-
-            for (int segmentIndex = 0; segmentIndex < segmentCount; segmentIndex++)
-            {
-                double segmentMinFrequency = minFrequency + segmentIndex * segmentSize;
-                double segmentMaxFrequency = segmentMinFrequency + segmentSize;
-
-                // Get the frequency indexies
-                int startIndex = (int)Math.Floor(segmentMinFrequency * fftLength / sampleRate); 
-                int endIndex = (int)Math.Ceiling(segmentMaxFrequency * fftLength / sampleRate);
-                startIndex = Math.Max(0, Math.Min(startIndex, fftLength - 1));
-                endIndex = Math.Max(0, Math.Min(endIndex, fftLength - 1));
-
-                double totalMagnitude = 0.0;
-                int count = 0;
-
-                for (int i = startIndex; i <= endIndex; i++)
-                {
-                    totalMagnitude += magnitudeSpectrum[i];
-                    count++;
-                }
-
-                double averageMagnitude = count > 0 ? totalMagnitude / count : 0.0;
-
-                // averageMagnitude = Math.Min(averageMagnitude, 0.0000002);
-                // segmentedMagnitude[segmentIndex] = MapValue(averageMagnitude, 0, 0.0000002, 0.0, 1.0);
-                // Math.Floor(Math.Log10(Math.Abs(averageMagnitude)));
-                segmentedMagnitude[segmentIndex] = Math.Floor(Math.Log10(Math.Abs(averageMagnitude * 1000)));
-                // Debug.WriteLine($"AvgMag: [{segmentIndex}]: {averageMagnitude} ({Math.Floor(Math.Log10(Math.Abs(averageMagnitude)))})");
-            }
-
-            return segmentedMagnitude;
-        }
-
-        private void NormalizeMagnitudeSpectrum(double[] magnitudeSpectrum)
-        {
-            double maxMagnitude = magnitudeSpectrum.Max();
-            for (int i = 0; i < magnitudeSpectrum.Length; i++)
-            {
-                double normalizedMagnitude = magnitudeSpectrum[i] / maxMagnitude;
-                magnitudeSpectrum[i] = double.IsNaN(normalizedMagnitude) ? 0 : (double.IsInfinity(normalizedMagnitude) ? double.MaxValue : normalizedMagnitude);
-            }
-        }
-
-        private void FftCalculated(object sender, FftEventArgs e)
-        {
-            double[] magnitudeSpectrum = new double[e.Result.Length];
-            for (int i = 0; i < e.Result.Length; i++)
-            {
-                magnitudeSpectrum[i] = Math.Sqrt(e.Result[i].X * e.Result[i].X + e.Result[i].Y * e.Result[i].Y);
-            }
-            NormalizeMagnitudeSpectrum(magnitudeSpectrum);
-
-            double[] segmentedMagnitude = SegmentMagnitudeSpectrum(magnitudeSpectrum);
-// fail?
-            int segmentCount = segmentedMagnitude.Length;
-            double segmentSize = (maxFrequency - minFrequency) / segmentCount;
-
-            Color[] colors = new Color[segmentedMagnitude.Length];
-
-            for (int i = 0; i < segmentedMagnitude.Length; i++)
-            {
-                // Debug.WriteLine($"Segment {i}: Average Magnitude = {segmentedMagnitude[i]}");
-                
-                double segmentStartFreq = minFrequency + (i * segmentSize);
-                double segmentEndFreq = segmentStartFreq + segmentSize;
-
-                colors[i] = CalculateColor(segmentedMagnitude[i], segmentStartFreq, segmentEndFreq);
-            }
-
-            _ = ledSync.SendDataAsync(ColorArrayToByteArray(colors));
-        }
-
-        private byte[] ColorArrayToByteArray(Color[] colors)
-        {
-            byte[] bytes = new byte[colors.Length * 3];
-
-            for (int i = 0; i < colors.Length; i++)
-            {
-                bytes[i * 3] = colors[i].R;
-                bytes[i * 3 + 1] = colors[i].G;
-                bytes[i * 3 + 2] = colors[i].B;
-            }
-
-            return bytes;
-        }
-
-        public async Task Capture(CancellationToken token)
-        {
-            sampleAggregator.FftCalculated += new EventHandler<FftEventArgs>(FftCalculated);
             sampleAggregator.PerformFFT = true;
+            sampleAggregator.FftCalculated += SampleAggregator_FftCalculated;
+        }
 
-            var capture = new WasapiLoopbackCapture();
-            // capture.WaveFormat = new WaveFormat(44100, 16, 2);
-
-            sampleRate = capture.WaveFormat.SampleRate;
-            bytesPerSample = capture.WaveFormat.BlockAlign;
-
-            capture.DataAvailable += OnDataAvailable;
-
-            capture.RecordingStopped += (s, a) =>
+        public void UpdateBandSettings(SpectralBandSettings settings)
+        {
+            lock (settingsLock)
             {
-                capture.Dispose();
-            };
+                bandSettings = settings.Normalize();
+            }
+        }
 
-            capture.StartRecording();
+        public void Start(string? deviceId)
+        {
+            Stop();
+            currentStrength = 0.0f;
+            currentBandLevelDb = SilenceFloorDb;
 
-            while (!token.IsCancellationRequested)
+            try
             {
-                await Task.Delay(ledSync.config.delay);
+                using MMDeviceEnumerator deviceEnumerator = new();
+                MMDevice device = ResolveAudioDevice(deviceEnumerator, deviceId);
+
+                capture = new WasapiLoopbackCapture(device);
+                sampleRate = capture.WaveFormat.SampleRate;
+                capture.DataAvailable += Capture_DataAvailable;
+                capture.RecordingStopped += Capture_RecordingStopped;
+                capture.StartRecording();
+            }
+            catch
+            {
+                capture?.Dispose();
+                capture = null;
+            }
+        }
+
+        public float GetCurrentStrength() => currentStrength;
+
+        public double GetCurrentBandLevelDb() => currentBandLevelDb;
+
+        public void Stop()
+        {
+            if (capture == null)
+            {
+                return;
             }
 
-            if (token.IsCancellationRequested)
+            capture.DataAvailable -= Capture_DataAvailable;
+            capture.RecordingStopped -= Capture_RecordingStopped;
+
+            try
             {
                 capture.StopRecording();
             }
+            catch
+            {
+                capture.Dispose();
+            }
+
+            capture = null;
+        }
+
+        public void Dispose()
+        {
+            Stop();
+            sampleAggregator.FftCalculated -= SampleAggregator_FftCalculated;
+        }
+
+        private void Capture_DataAvailable(object? sender, WaveInEventArgs e)
+        {
+            WasapiLoopbackCapture? activeCapture = capture;
+            if (activeCapture == null || e.BytesRecorded <= 0)
+            {
+                return;
+            }
+
+            WaveFormat format = activeCapture.WaveFormat;
+            int bytesPerFrame = format.BlockAlign;
+            if (bytesPerFrame <= 0)
+            {
+                return;
+            }
+
+            for (int frameOffset = 0; frameOffset + bytesPerFrame <= e.BytesRecorded; frameOffset += bytesPerFrame)
+            {
+                sampleAggregator.Add(ReadMonoSample(e.Buffer, frameOffset, format));
+            }
+        }
+
+        private static float ReadMonoSample(byte[] buffer, int frameOffset, WaveFormat format)
+        {
+            int channels = Math.Max(format.Channels, 1);
+            int bytesPerChannel = Math.Max(format.BitsPerSample / 8, 1);
+            double sum = 0.0;
+
+            for (int channel = 0; channel < channels; channel++)
+            {
+                int sampleOffset = frameOffset + (channel * bytesPerChannel);
+                switch (format.Encoding)
+                {
+                    case WaveFormatEncoding.IeeeFloat when format.BitsPerSample == 32:
+                        sum += BitConverter.ToSingle(buffer, sampleOffset);
+                        break;
+                    case WaveFormatEncoding.Pcm when format.BitsPerSample == 16:
+                        sum += BitConverter.ToInt16(buffer, sampleOffset) / 32768.0;
+                        break;
+                    case WaveFormatEncoding.Pcm when format.BitsPerSample == 24:
+                        int sample24 = buffer[sampleOffset] | (buffer[sampleOffset + 1] << 8) | (buffer[sampleOffset + 2] << 16);
+                        if ((sample24 & 0x800000) != 0)
+                        {
+                            sample24 |= unchecked((int)0xFF000000);
+                        }
+
+                        sum += sample24 / 8388608.0;
+                        break;
+                    default:
+                        return 0.0f;
+                }
+            }
+
+            return (float)(sum / channels);
+        }
+
+        private void SampleAggregator_FftCalculated(object? sender, FftEventArgs e)
+        {
+            if (sampleRate <= 0)
+            {
+                return;
+            }
+
+            SpectralBandSettings settings;
+            lock (settingsLock)
+            {
+                settings = bandSettings;
+            }
+
+            int usableBins = e.Result.Length / 2;
+            if (usableBins <= 0)
+            {
+                currentStrength = 0.0f;
+                currentBandLevelDb = SilenceFloorDb;
+                return;
+            }
+
+            double binWidth = sampleRate / (double)FftLength;
+            int startIndex = Math.Max(1, (int)Math.Floor(settings.FrequencyLowHz / binWidth));
+            int endIndex = Math.Min(usableBins - 1, (int)Math.Ceiling(settings.FrequencyHighHz / binWidth));
+            if (endIndex < startIndex)
+            {
+                currentStrength = 0.0f;
+                currentBandLevelDb = SilenceFloorDb;
+                return;
+            }
+
+            double power = 0.0;
+            int count = 0;
+            for (int i = startIndex; i <= endIndex; i++)
+            {
+                double magnitude = Math.Sqrt((e.Result[i].X * e.Result[i].X) + (e.Result[i].Y * e.Result[i].Y));
+                power += magnitude * magnitude;
+                count++;
+            }
+
+            double rmsMagnitude = count == 0 ? 0.0 : Math.Sqrt(power / count);
+            double bandLevelDb = 20.0 * Math.Log10(rmsMagnitude + LevelEpsilon);
+            bandLevelDb = Math.Max(SilenceFloorDb, Math.Min(0.0, bandLevelDb));
+
+            float targetStrength = (float)Math.Clamp(
+                Common.MapValue(bandLevelDb, settings.LevelLowDb, settings.LevelHighDb, 0.0, 1.0),
+                0.0,
+                1.0);
+
+            float previous = currentStrength;
+            float smoothing = targetStrength >= previous ? 0.45f : 0.20f;
+            currentStrength = previous + ((targetStrength - previous) * smoothing);
+            currentBandLevelDb = bandLevelDb;
+        }
+
+        private void Capture_RecordingStopped(object? sender, StoppedEventArgs e)
+        {
+            capture?.Dispose();
+        }
+
+        private static MMDevice ResolveAudioDevice(MMDeviceEnumerator deviceEnumerator, string? deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+            {
+                return deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            }
+
+            try
+            {
+                return deviceEnumerator.GetDevice(deviceId);
+            }
+            catch
+            {
+                return deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            }
+        }
+    }
+
+    internal readonly struct SpectralBandSettings
+    {
+        private const double MinimumDb = -90.0;
+
+        public static SpectralBandSettings Default => new(60, 250, -60, -20);
+
+        public SpectralBandSettings(double frequencyLowHz, double frequencyHighHz, double levelLowDb, double levelHighDb)
+        {
+            FrequencyLowHz = frequencyLowHz;
+            FrequencyHighHz = frequencyHighHz;
+            LevelLowDb = levelLowDb;
+            LevelHighDb = levelHighDb;
+        }
+
+        public double FrequencyLowHz { get; }
+        public double FrequencyHighHz { get; }
+        public double LevelLowDb { get; }
+        public double LevelHighDb { get; }
+
+        public SpectralBandSettings Normalize()
+        {
+            double lowHz = Math.Clamp(Math.Min(FrequencyLowHz, FrequencyHighHz), 20.0, 20000.0);
+            double highHz = Math.Clamp(Math.Max(FrequencyLowHz, FrequencyHighHz), 20.0, 20000.0);
+            double lowDb = Math.Clamp(Math.Min(LevelLowDb, LevelHighDb), MinimumDb, 0.0);
+            double highDb = Math.Clamp(Math.Max(LevelLowDb, LevelHighDb), MinimumDb, 0.0);
+
+            if (Math.Abs(highDb - lowDb) < 0.1)
+            {
+                highDb = Math.Min(0.0, lowDb + 0.1);
+            }
+
+            return new SpectralBandSettings(lowHz, highHz, lowDb, highDb);
         }
     }
 }

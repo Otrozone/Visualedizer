@@ -29,11 +29,22 @@ namespace Ledqualizer
         private bool suppressTabRestart;
         private bool reconcileInProgress;
         private bool reconcileRequested;
+        private bool syncingAudioDeviceSelection;
         private int rotateIdx;
         private RadioButton[] rotateModeRadios = Array.Empty<RadioButton>();
         private string? selectedAudioDeviceId;
         private AcVolume.AudioCaptureVolumeMode audioCaptureVolumeMode;
         private FormOverlay? frmOverlay;
+        private ComboBox cbAudioDevicesSpectral = null!;
+        private ProgressBar progressBarSpectral = null!;
+        private TrackBar trackBarSpectralFrequencyLow = null!;
+        private TrackBar trackBarSpectralFrequencyHigh = null!;
+        private TrackBar trackBarSpectralLevelLow = null!;
+        private TrackBar trackBarSpectralLevelHigh = null!;
+        private Label lblSpectralFrequencyLowValue = null!;
+        private Label lblSpectralFrequencyHighValue = null!;
+        private Label lblSpectralLevelLowValue = null!;
+        private Label lblSpectralLevelHighValue = null!;
 
         public class FormOverlay : Form
         {
@@ -58,9 +69,183 @@ namespace Ledqualizer
         public FrmMain()
         {
             InitializeComponent();
+            InitializeSpectralAnalysisUi();
             ConfigureDevicePanel();
             pictureBox.Paint += PictureBox_Paint;
             cbAudioDevices.SelectedIndexChanged += CbAudioDevices_SelectedIndexChanged;
+            cbAudioDevicesSpectral.SelectedIndexChanged += CbAudioDevices_SelectedIndexChanged;
+        }
+
+        private void InitializeSpectralAnalysisUi()
+        {
+            Label lblHint = new()
+            {
+                AutoSize = true,
+                Location = new Point(16, 16),
+                Text = "Band detection drives the same LED modes and colors configured on the Volume tab."
+            };
+
+            Label lblAudioDeviceSpectral = new()
+            {
+                AutoSize = true,
+                Location = new Point(16, 52),
+                Text = "Audio device"
+            };
+
+            cbAudioDevicesSpectral = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Location = new Point(16, 70),
+                Size = new Size(520, 23)
+            };
+
+            Label lblFrequencyLow = new()
+            {
+                AutoSize = true,
+                Location = new Point(16, 112),
+                Text = "Frequency low (Hz)"
+            };
+
+            trackBarSpectralFrequencyLow = new TrackBar
+            {
+                AutoSize = false,
+                Location = new Point(16, 132),
+                Minimum = 20,
+                Maximum = 20000,
+                TickFrequency = 1000,
+                LargeChange = 200,
+                SmallChange = 10,
+                Size = new Size(264, 32),
+                Value = 60
+            };
+
+            lblSpectralFrequencyLowValue = new Label
+            {
+                AutoSize = true,
+                Location = new Point(290, 137),
+                Text = "60 Hz"
+            };
+
+            Label lblFrequencyHigh = new()
+            {
+                AutoSize = true,
+                Location = new Point(16, 176),
+                Text = "Frequency high (Hz)"
+            };
+
+            trackBarSpectralFrequencyHigh = new TrackBar
+            {
+                AutoSize = false,
+                Location = new Point(16, 196),
+                Minimum = 20,
+                Maximum = 20000,
+                TickFrequency = 1000,
+                LargeChange = 200,
+                SmallChange = 10,
+                Size = new Size(264, 32),
+                Value = 250
+            };
+
+            lblSpectralFrequencyHighValue = new Label
+            {
+                AutoSize = true,
+                Location = new Point(290, 201),
+                Text = "250 Hz"
+            };
+
+            Label lblLevelLow = new()
+            {
+                AutoSize = true,
+                Location = new Point(16, 240),
+                Text = "Level low (dB)"
+            };
+
+            trackBarSpectralLevelLow = new TrackBar
+            {
+                AutoSize = false,
+                Location = new Point(16, 260),
+                Minimum = -90,
+                Maximum = 0,
+                TickFrequency = 10,
+                LargeChange = 5,
+                SmallChange = 1,
+                Size = new Size(264, 32),
+                Value = -60
+            };
+
+            lblSpectralLevelLowValue = new Label
+            {
+                AutoSize = true,
+                Location = new Point(290, 265),
+                Text = "-60 dB"
+            };
+
+            Label lblLevelHigh = new()
+            {
+                AutoSize = true,
+                Location = new Point(16, 304),
+                Text = "Level high (dB)"
+            };
+
+            trackBarSpectralLevelHigh = new TrackBar
+            {
+                AutoSize = false,
+                Location = new Point(16, 324),
+                Minimum = -90,
+                Maximum = 0,
+                TickFrequency = 10,
+                LargeChange = 5,
+                SmallChange = 1,
+                Size = new Size(264, 32),
+                Value = -20
+            };
+
+            lblSpectralLevelHighValue = new Label
+            {
+                AutoSize = true,
+                Location = new Point(290, 329),
+                Text = "-20 dB"
+            };
+
+            Label lblLevelHelp = new()
+            {
+                AutoSize = true,
+                Location = new Point(16, 370),
+                Text = "Below low the strip stays idle; at high and above it reaches full response."
+            };
+
+            progressBarSpectral = new ProgressBar
+            {
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                Location = new Point(8, 542),
+                Name = "progressBarSpectral",
+                Size = new Size(785, 24),
+                Style = ProgressBarStyle.Continuous
+            };
+
+            tabPageAcSpectralAnalysis.Controls.Add(lblHint);
+            tabPageAcSpectralAnalysis.Controls.Add(lblAudioDeviceSpectral);
+            tabPageAcSpectralAnalysis.Controls.Add(cbAudioDevicesSpectral);
+            tabPageAcSpectralAnalysis.Controls.Add(lblFrequencyLow);
+            tabPageAcSpectralAnalysis.Controls.Add(trackBarSpectralFrequencyLow);
+            tabPageAcSpectralAnalysis.Controls.Add(lblSpectralFrequencyLowValue);
+            tabPageAcSpectralAnalysis.Controls.Add(lblFrequencyHigh);
+            tabPageAcSpectralAnalysis.Controls.Add(trackBarSpectralFrequencyHigh);
+            tabPageAcSpectralAnalysis.Controls.Add(lblSpectralFrequencyHighValue);
+            tabPageAcSpectralAnalysis.Controls.Add(lblLevelLow);
+            tabPageAcSpectralAnalysis.Controls.Add(trackBarSpectralLevelLow);
+            tabPageAcSpectralAnalysis.Controls.Add(lblSpectralLevelLowValue);
+            tabPageAcSpectralAnalysis.Controls.Add(lblLevelHigh);
+            tabPageAcSpectralAnalysis.Controls.Add(trackBarSpectralLevelHigh);
+            tabPageAcSpectralAnalysis.Controls.Add(lblSpectralLevelHighValue);
+            tabPageAcSpectralAnalysis.Controls.Add(lblLevelHelp);
+            tabPageAcSpectralAnalysis.Controls.Add(progressBarSpectral);
+
+            trackBarSpectralFrequencyLow.ValueChanged += SpectralTrackBar_ValueChanged;
+            trackBarSpectralFrequencyHigh.ValueChanged += SpectralTrackBar_ValueChanged;
+            trackBarSpectralLevelLow.ValueChanged += SpectralTrackBar_ValueChanged;
+            trackBarSpectralLevelHigh.ValueChanged += SpectralTrackBar_ValueChanged;
+            UpdateSpectralTrackBarLabels();
         }
 
         private void ConfigureDevicePanel()
@@ -90,12 +275,10 @@ namespace Ledqualizer
             rotateModeRadios = new[] { rbModeColorPush, rbModeEndToStart, rbModeMidToOut, rbModeMidToOutPoint, rbModeStartToEnd };
             audioCaptureVolumeMode = AcVolume.AudioCaptureVolumeMode.ModeStartToEnd;
 
-            tabControl.TabPages.Remove(tabPageAcSpectralAnalysis);
-
             appConfig.LoadFromIni();
             ApplyConfigToUi();
 
-            if (tabControl.SelectedTab == tabPageAcVolume)
+            if (tabControl.SelectedTab == tabPageAcVolume || tabControl.SelectedTab == tabPageAcSpectralAnalysis)
             {
                 LoadAudioDevices();
             }
@@ -112,6 +295,11 @@ namespace Ledqualizer
             numScreenRow.Value = Math.Max(numScreenRow.Minimum, Math.Min(numScreenRow.Maximum, (decimal)appConfig.ScreenCaptureRow));
             trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, (int)Math.Round(appConfig.Brightness * 100)));
             trackBarNormalizationLevel.Value = Math.Max(trackBarNormalizationLevel.Minimum, Math.Min(trackBarNormalizationLevel.Maximum, (int)Math.Round(appConfig.NormalizationLevel * 10)));
+            trackBarSpectralFrequencyLow.Value = Math.Max(trackBarSpectralFrequencyLow.Minimum, Math.Min(trackBarSpectralFrequencyLow.Maximum, appConfig.SpectralFrequencyLow));
+            trackBarSpectralFrequencyHigh.Value = Math.Max(trackBarSpectralFrequencyHigh.Minimum, Math.Min(trackBarSpectralFrequencyHigh.Maximum, appConfig.SpectralFrequencyHigh));
+            trackBarSpectralLevelLow.Value = Math.Max(trackBarSpectralLevelLow.Minimum, Math.Min(trackBarSpectralLevelLow.Maximum, appConfig.SpectralLevelLowDb));
+            trackBarSpectralLevelHigh.Value = Math.Max(trackBarSpectralLevelHigh.Minimum, Math.Min(trackBarSpectralLevelHigh.Maximum, appConfig.SpectralLevelHighDb));
+            UpdateSpectralTrackBarLabels();
 
             numStrobeX.Value = appConfig.StrobeTriggerX;
             numStrobeY.Value = appConfig.StrobeTriggerY;
@@ -135,6 +323,10 @@ namespace Ledqualizer
             appConfig.ScreenCaptureRow = (int)numScreenRow.Value;
             appConfig.NormalizationLevel = trackBarNormalizationLevel.Value / 10.0f;
             appConfig.Brightness = trackBarBrightness.Value / (float)Math.Max(trackBarBrightness.Maximum, 1);
+            appConfig.SpectralFrequencyLow = trackBarSpectralFrequencyLow.Value;
+            appConfig.SpectralFrequencyHigh = trackBarSpectralFrequencyHigh.Value;
+            appConfig.SpectralLevelLowDb = trackBarSpectralLevelLow.Value;
+            appConfig.SpectralLevelHighDb = trackBarSpectralLevelHigh.Value;
 
             appConfig.StrobeTriggerX = (int)numStrobeX.Value;
             appConfig.StrobeTriggerY = (int)numStrobeY.Value;
@@ -256,6 +448,11 @@ namespace Ledqualizer
                     () => selectedAudioDeviceId,
                     UpdateProgress,
                     UpdateRate),
+                SceneKind.SpectralAnalysis => new SpectralSceneRunner(
+                    GetSpectralSceneSettings,
+                    () => selectedAudioDeviceId,
+                    UpdateSpectralProgress,
+                    UpdateRate),
                 SceneKind.ScreenCapture => new ScreenCaptureSceneRunner(GetScreenCaptureSceneSettings, UpdatePreview),
                 SceneKind.OtherDevices => new OtherDevicesSceneRunner(GetOtherDevicesSceneSettings),
                 _ => new BasicSceneRunner(GetBasicSceneSettings),
@@ -301,6 +498,43 @@ namespace Ledqualizer
             });
         }
 
+        private SpectralSceneSettings GetSpectralSceneSettings()
+        {
+            return ReadUi(() => new SpectralSceneSettings
+            {
+                Mode = audioCaptureVolumeMode,
+                Delay = (int)numDelay.Value,
+                BrightnessValue = trackBarBrightness.Value,
+                BrightnessMaximum = trackBarBrightness.Maximum,
+                NormalizationValue = trackBarNormalizationLevel.Value,
+                Reverse = chbRevers.Checked,
+                HueReverse = chbHueRevers.Checked,
+                White = chbWhite.Checked,
+                BackgroundWhite = chbBgWhite.Checked,
+                BackgroundBrightnessValue = trackBarBgBrightness.Value,
+                BackgroundHue = ucHueBg.Hue,
+                HueMin = ucHueMinMax.HueMin,
+                HueMax = ucHueMinMax.HueMax,
+                FrequencyLowHz = trackBarSpectralFrequencyLow.Value,
+                FrequencyHighHz = trackBarSpectralFrequencyHigh.Value,
+                LevelLowDb = trackBarSpectralLevelLow.Value,
+                LevelHighDb = trackBarSpectralLevelHigh.Value
+            });
+        }
+
+        private void SpectralTrackBar_ValueChanged(object? sender, EventArgs e)
+        {
+            UpdateSpectralTrackBarLabels();
+        }
+
+        private void UpdateSpectralTrackBarLabels()
+        {
+            lblSpectralFrequencyLowValue.Text = $"{trackBarSpectralFrequencyLow.Value} Hz";
+            lblSpectralFrequencyHighValue.Text = $"{trackBarSpectralFrequencyHigh.Value} Hz";
+            lblSpectralLevelLowValue.Text = $"{trackBarSpectralLevelLow.Value} dB";
+            lblSpectralLevelHighValue.Text = $"{trackBarSpectralLevelHigh.Value} dB";
+        }
+
         private ScreenCaptureSceneSettings GetScreenCaptureSceneSettings()
         {
             return ReadUi(() => new ScreenCaptureSceneSettings
@@ -340,6 +574,11 @@ namespace Ledqualizer
         private void UpdateProgress(int value)
         {
             SafeUi(() => progressBar.Value = Math.Max(progressBar.Minimum, Math.Min(progressBar.Maximum, value)));
+        }
+
+        private void UpdateSpectralProgress(int value)
+        {
+            SafeUi(() => progressBarSpectral.Value = Math.Max(progressBarSpectral.Minimum, Math.Min(progressBarSpectral.Maximum, value)));
         }
 
         private void UpdateRate(string text)
@@ -415,7 +654,16 @@ namespace Ledqualizer
             try
             {
                 AcVolume.LoadAudioDevicesToComboBox(cbAudioDevices);
-                selectedAudioDeviceId = (cbAudioDevices.SelectedItem as DeviceDescriptor)?.DeviceId;
+                AcVolume.LoadAudioDevicesToComboBox(cbAudioDevicesSpectral);
+
+                if (!string.IsNullOrWhiteSpace(selectedAudioDeviceId))
+                {
+                    TrySelectAudioDevice(cbAudioDevices, selectedAudioDeviceId);
+                    TrySelectAudioDevice(cbAudioDevicesSpectral, selectedAudioDeviceId);
+                }
+
+                selectedAudioDeviceId = (cbAudioDevices.SelectedItem as DeviceDescriptor)?.DeviceId
+                    ?? (cbAudioDevicesSpectral.SelectedItem as DeviceDescriptor)?.DeviceId;
             }
             finally
             {
@@ -425,7 +673,52 @@ namespace Ledqualizer
 
         private void CbAudioDevices_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            selectedAudioDeviceId = (cbAudioDevices.SelectedItem as DeviceDescriptor)?.DeviceId;
+            if (syncingAudioDeviceSelection)
+            {
+                return;
+            }
+
+            if (sender is not ComboBox comboBox)
+            {
+                return;
+            }
+
+            selectedAudioDeviceId = (comboBox.SelectedItem as DeviceDescriptor)?.DeviceId;
+
+            syncingAudioDeviceSelection = true;
+            try
+            {
+                if (!ReferenceEquals(comboBox, cbAudioDevices))
+                {
+                    TrySelectAudioDevice(cbAudioDevices, selectedAudioDeviceId);
+                }
+
+                if (!ReferenceEquals(comboBox, cbAudioDevicesSpectral))
+                {
+                    TrySelectAudioDevice(cbAudioDevicesSpectral, selectedAudioDeviceId);
+                }
+            }
+            finally
+            {
+                syncingAudioDeviceSelection = false;
+            }
+        }
+
+        private static void TrySelectAudioDevice(ComboBox comboBox, string? deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+            {
+                return;
+            }
+
+            for (int i = 0; i < comboBox.Items.Count; i++)
+            {
+                if (comboBox.Items[i] is DeviceDescriptor descriptor && string.Equals(descriptor.DeviceId, deviceId, StringComparison.Ordinal))
+                {
+                    comboBox.SelectedIndex = i;
+                    return;
+                }
+            }
         }
 
         private async void btnAddDevice_Click(object? sender, EventArgs e)
@@ -656,7 +949,7 @@ namespace Ledqualizer
                 return;
             }
 
-            if (tabControl.SelectedTab == tabPageAcVolume)
+            if (tabControl.SelectedTab == tabPageAcVolume || tabControl.SelectedTab == tabPageAcSpectralAnalysis)
             {
                 LoadAudioDevices();
             }
@@ -764,6 +1057,11 @@ namespace Ledqualizer
             if (tabControl.SelectedTab == tabPageAcVolume)
             {
                 return SceneKind.Volume;
+            }
+
+            if (tabControl.SelectedTab == tabPageAcSpectralAnalysis)
+            {
+                return SceneKind.SpectralAnalysis;
             }
 
             if (tabControl.SelectedTab == tabPageScreenCapture)

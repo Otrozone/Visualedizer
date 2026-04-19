@@ -8,6 +8,7 @@ namespace Ledqualizer
     {
         private const string IniFileName = "config.ini";
         private const string IniSectionSettings = "Settings";
+        private const string IniSectionSpectralAnalysis = "SpectralAnalysis";
         private const string IniSectionScreenCapture = "ScreenCapture";
         private const string IniSectionScreenCaptureOther = "ScreenCaptureOther";
         private const string IniSectionDevicePrefix = "Device:";
@@ -17,6 +18,10 @@ namespace Ledqualizer
         public int Delay { get; set; } = 20;
         public float Brightness { get; set; } = 1.0f;
         public float NormalizationLevel { get; set; } = 1.0f;
+        public int SpectralFrequencyLow { get; set; } = 60;
+        public int SpectralFrequencyHigh { get; set; } = 250;
+        public int SpectralLevelLowDb { get; set; } = -60;
+        public int SpectralLevelHighDb { get; set; } = -20;
         public int ScreenCaptureRow { get; set; }
 
         public int StrobeTriggerX { get; set; }
@@ -44,6 +49,10 @@ namespace Ledqualizer
             Delay = ParseInt(GetValue(data, IniSectionSettings, "delay"), Delay);
             Brightness = ParseFloat(GetValue(data, IniSectionSettings, "brightness"), Brightness);
             NormalizationLevel = ParseFloat(GetValue(data, IniSectionSettings, "normalizationLevel"), NormalizationLevel);
+            SpectralFrequencyLow = ParseInt(GetValue(data, IniSectionSpectralAnalysis, "frequencyLow"), SpectralFrequencyLow);
+            SpectralFrequencyHigh = ParseInt(GetValue(data, IniSectionSpectralAnalysis, "frequencyHigh"), SpectralFrequencyHigh);
+            SpectralLevelLowDb = ParseInt(GetValue(data, IniSectionSpectralAnalysis, "levelLowDb"), SpectralLevelLowDb);
+            SpectralLevelHighDb = ParseInt(GetValue(data, IniSectionSpectralAnalysis, "levelHighDb"), SpectralLevelHighDb);
 
             ScreenCaptureRow = ParseInt(GetValue(data, IniSectionScreenCapture, "screenCaptureRow"), ScreenCaptureRow);
 
@@ -92,6 +101,10 @@ namespace Ledqualizer
             data[IniSectionSettings]["delay"] = Delay.ToString(CultureInfo.InvariantCulture);
             data[IniSectionSettings]["brightness"] = Brightness.ToString(CultureInfo.InvariantCulture);
             data[IniSectionSettings]["normalizationLevel"] = NormalizationLevel.ToString(CultureInfo.InvariantCulture);
+            data[IniSectionSpectralAnalysis]["frequencyLow"] = SpectralFrequencyLow.ToString(CultureInfo.InvariantCulture);
+            data[IniSectionSpectralAnalysis]["frequencyHigh"] = SpectralFrequencyHigh.ToString(CultureInfo.InvariantCulture);
+            data[IniSectionSpectralAnalysis]["levelLowDb"] = SpectralLevelLowDb.ToString(CultureInfo.InvariantCulture);
+            data[IniSectionSpectralAnalysis]["levelHighDb"] = SpectralLevelHighDb.ToString(CultureInfo.InvariantCulture);
 
             data[IniSectionScreenCapture]["screenCaptureRow"] = ScreenCaptureRow.ToString(CultureInfo.InvariantCulture);
 

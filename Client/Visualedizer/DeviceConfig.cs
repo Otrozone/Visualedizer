@@ -4,6 +4,7 @@ namespace Ledqualizer
     {
         Basic,
         Volume,
+        SpectralAnalysis,
         ScreenCapture,
         OtherDevices
     }

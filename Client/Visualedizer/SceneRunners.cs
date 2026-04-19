@@ -19,7 +19,7 @@ namespace Ledqualizer
         public int Delay { get; set; }
     }
 
-    internal sealed class VolumeSceneSettings
+    internal class AudioReactiveSceneSettings
     {
         public AcVolume.AudioCaptureVolumeMode Mode { get; set; }
         public int Delay { get; set; }
@@ -34,6 +34,18 @@ namespace Ledqualizer
         public double BackgroundHue { get; set; }
         public double HueMin { get; set; }
         public double HueMax { get; set; }
+    }
+
+    internal sealed class VolumeSceneSettings : AudioReactiveSceneSettings
+    {
+    }
+
+    internal sealed class SpectralSceneSettings : AudioReactiveSceneSettings
+    {
+        public double FrequencyLowHz { get; set; }
+        public double FrequencyHighHz { get; set; }
+        public double LevelLowDb { get; set; }
+        public double LevelHighDb { get; set; }
     }
 
     internal sealed class ScreenCaptureSceneSettings
@@ -160,7 +172,7 @@ namespace Ledqualizer
 
                 foreach (DeviceTarget device in devices)
                 {
-                    byte[] frame = BuildFrame(device.Config.LedCount, volume, settings);
+                    byte[] frame = AudioReactiveFrameBuilder.BuildFrame(device.Config.LedCount, volume, settings);
                     anySent |= await device.Session.SendFrameAsync(frame, token).ConfigureAwait(false);
                 }
 
@@ -185,7 +197,7 @@ namespace Ledqualizer
         {
             try
             {
-                using MMDeviceEnumerator deviceEnumerator = new MMDeviceEnumerator();
+                using MMDeviceEnumerator deviceEnumerator = new();
                 using MMDevice audioDevice = ResolveAudioDevice(deviceEnumerator, deviceId);
                 return audioDevice.AudioMeterInformation.MasterPeakValue;
             }
@@ -211,31 +223,105 @@ namespace Ledqualizer
                 return deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
             }
         }
+    }
 
-        private static byte[] BuildFrame(int ledCount, float volume, VolumeSceneSettings settings)
+    internal sealed class SpectralSceneRunner : ISceneRunner
+    {
+        private readonly Func<SpectralSceneSettings> settingsProvider;
+        private readonly Func<string?> audioDeviceIdProvider;
+        private readonly Action<int> progressReporter;
+        private readonly Action<string> rateReporter;
+
+        public SpectralSceneRunner(
+            Func<SpectralSceneSettings> settingsProvider,
+            Func<string?> audioDeviceIdProvider,
+            Action<int> progressReporter,
+            Action<string> rateReporter)
+        {
+            this.settingsProvider = settingsProvider;
+            this.audioDeviceIdProvider = audioDeviceIdProvider;
+            this.progressReporter = progressReporter;
+            this.rateReporter = rateReporter;
+        }
+
+        public async Task RunAsync(IReadOnlyList<DeviceTarget> devices, CancellationToken token)
+        {
+            string? activeDeviceId = null;
+            int iterations = 0;
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            using AcSpectralAnalysis spectralAnalysis = new();
+
+            while (!token.IsCancellationRequested)
+            {
+                SpectralSceneSettings settings = settingsProvider();
+                string? requestedDeviceId = audioDeviceIdProvider();
+
+                if (!string.Equals(activeDeviceId, requestedDeviceId, StringComparison.Ordinal))
+                {
+                    spectralAnalysis.Start(requestedDeviceId);
+                    activeDeviceId = requestedDeviceId;
+                }
+
+                spectralAnalysis.UpdateBandSettings(new SpectralBandSettings(
+                    settings.FrequencyLowHz,
+                    settings.FrequencyHighHz,
+                    settings.LevelLowDb,
+                    settings.LevelHighDb));
+
+                float strength = spectralAnalysis.GetCurrentStrength();
+                progressReporter((int)Math.Round(strength * 100.0f));
+
+                bool anySent = false;
+                foreach (DeviceTarget device in devices)
+                {
+                    byte[] frame = AudioReactiveFrameBuilder.BuildFrame(device.Config.LedCount, strength, settings);
+                    anySent |= await device.Session.SendFrameAsync(frame, token).ConfigureAwait(false);
+                }
+
+                if (!anySent)
+                {
+                    return;
+                }
+
+                iterations++;
+                if (stopwatch.ElapsedMilliseconds >= 1000)
+                {
+                    rateReporter($"Rate: {iterations} | Band: {spectralAnalysis.GetCurrentBandLevelDb():F1} dB");
+                    iterations = 0;
+                    stopwatch.Restart();
+                }
+
+                await Task.Delay(Math.Max(settings.Delay, 1), token).ConfigureAwait(false);
+            }
+        }
+    }
+
+    internal static class AudioReactiveFrameBuilder
+    {
+        public static byte[] BuildFrame(int ledCount, float inputLevel, AudioReactiveSceneSettings settings)
         {
             byte[] ledConfigArray = new byte[ledCount * 3];
-            float normalizedVol = (settings.NormalizationValue / 10.0f) * volume;
+            float normalizedLevel = Math.Max(0.0f, (settings.NormalizationValue / 10.0f) * inputLevel);
 
             switch (settings.Mode)
             {
                 case AcVolume.AudioCaptureVolumeMode.ModeEndToStart:
-                    ComputeColorsEndToStart(ledConfigArray, ledCount, normalizedVol, settings);
+                    ComputeColorsEndToStart(ledConfigArray, ledCount, normalizedLevel, settings);
                     break;
                 case AcVolume.AudioCaptureVolumeMode.ModeMidToOut:
-                    ComputeColorsMidToOut(ledConfigArray, ledCount, normalizedVol, settings);
+                    ComputeColorsMidToOut(ledConfigArray, ledCount, normalizedLevel, settings);
                     break;
                 case AcVolume.AudioCaptureVolumeMode.ModeColorPush:
-                    ComputeColorsColorPush(ledConfigArray, ledCount, normalizedVol, settings);
+                    ComputeColorsColorPush(ledConfigArray, ledCount, normalizedLevel, settings);
                     break;
                 case AcVolume.AudioCaptureVolumeMode.ModeMidToOut_Point:
-                    ComputeColorsMidToOutPoint(ledConfigArray, ledCount, normalizedVol, settings);
+                    ComputeColorsMidToOutPoint(ledConfigArray, ledCount, normalizedLevel, settings);
                     break;
                 case AcVolume.AudioCaptureVolumeMode.ModeBrightness:
-                    ComputeColorsBrightness(ledConfigArray, ledCount, normalizedVol, settings);
+                    ComputeColorsBrightness(ledConfigArray, ledCount, normalizedLevel, settings);
                     break;
                 default:
-                    ComputeColorsStartToEnd(ledConfigArray, ledCount, normalizedVol, settings);
+                    ComputeColorsStartToEnd(ledConfigArray, ledCount, normalizedLevel, settings);
                     break;
             }
 
@@ -247,7 +333,7 @@ namespace Ledqualizer
             return ledConfigArray;
         }
 
-        private static void ComputeColorsStartToEnd(byte[] ledConfigArray, int ledCount, float vol, VolumeSceneSettings settings)
+        private static void ComputeColorsStartToEnd(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             for (int i = 0; i < ledCount; i++)
             {
@@ -268,7 +354,7 @@ namespace Ledqualizer
             }
         }
 
-        private static void ComputeColorsEndToStart(byte[] ledConfigArray, int ledCount, float vol, VolumeSceneSettings settings)
+        private static void ComputeColorsEndToStart(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             for (int i = ledCount - 1; i > 0; i--)
             {
@@ -289,7 +375,7 @@ namespace Ledqualizer
             }
         }
 
-        private static void ComputeColorsMidToOut(byte[] ledConfigArray, int ledCount, float vol, VolumeSceneSettings settings)
+        private static void ComputeColorsMidToOut(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             int center = ledCount / 2;
             for (int i = 0; i < ledCount; i++)
@@ -314,7 +400,7 @@ namespace Ledqualizer
             }
         }
 
-        private static void ComputeColorsMidToOutPoint(byte[] ledConfigArray, int ledCount, float vol, VolumeSceneSettings settings)
+        private static void ComputeColorsMidToOutPoint(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             int center = ledCount / 2;
             const int pointSize = 10;
@@ -341,7 +427,7 @@ namespace Ledqualizer
             }
         }
 
-        private static void ComputeColorsColorPush(byte[] ledConfigArray, int ledCount, float vol, VolumeSceneSettings settings)
+        private static void ComputeColorsColorPush(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             int center = ledCount / 2;
 
@@ -359,7 +445,7 @@ namespace Ledqualizer
             }
         }
 
-        private static void ComputeColorsBrightness(byte[] ledConfigArray, int ledCount, float vol, VolumeSceneSettings settings)
+        private static void ComputeColorsBrightness(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             int center = ledCount / 2;
 
@@ -379,7 +465,7 @@ namespace Ledqualizer
             }
         }
 
-        private static void ApplyBackground(byte[] ledConfigArray, int idx, VolumeSceneSettings settings)
+        private static void ApplyBackground(byte[] ledConfigArray, int idx, AudioReactiveSceneSettings settings)
         {
             double saturation = settings.BackgroundWhite ? 0 : 1.0;
             double brightness = settings.BackgroundBrightnessValue / 100.0;
@@ -409,7 +495,7 @@ namespace Ledqualizer
                 return;
             }
 
-            using Bitmap screenCapture = new Bitmap(screenWidth, 1);
+            using Bitmap screenCapture = new(screenWidth, 1);
             using Graphics graphics = Graphics.FromImage(screenCapture);
 
             while (!token.IsCancellationRequested)
@@ -514,7 +600,7 @@ namespace Ledqualizer
 
         public async Task RunAsync(IReadOnlyList<DeviceTarget> devices, CancellationToken token)
         {
-            using Bitmap screenCapture = new Bitmap(1, 1);
+            using Bitmap screenCapture = new(1, 1);
             using Graphics graphics = Graphics.FromImage(screenCapture);
 
             while (!token.IsCancellationRequested)
