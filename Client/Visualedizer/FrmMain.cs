@@ -1247,7 +1247,11 @@ namespace Ledqualizer
             if (row != null)
             {
                 row.Summary = SceneSummaryBuilder.Build(selectedScene);
-                sceneGridBindingSource.ResetBindings(false);
+                int rowIndex = sceneRows.IndexOf(row);
+                if (rowIndex >= 0)
+                {
+                    sceneGridBindingSource.ResetItem(rowIndex);
+                }
             }
         }
 

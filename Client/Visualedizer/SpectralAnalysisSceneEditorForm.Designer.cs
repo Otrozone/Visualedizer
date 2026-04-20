@@ -263,8 +263,8 @@ namespace Ledqualizer
             // ucHueMinMax
             // 
             ucHueMinMax.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            ucHueMinMax.HueMax = 360;
-            ucHueMinMax.HueMin = 0;
+            ucHueMinMax.HueEnd = 360;
+            ucHueMinMax.HueStart = 0;
             ucHueMinMax.Location = new Point(12, 244);
             ucHueMinMax.Name = "ucHueMinMax";
             ucHueMinMax.Size = new Size(626, 52);

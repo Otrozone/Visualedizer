@@ -73,8 +73,8 @@ namespace Ledqualizer
                 SelectMode(config.Mode);
                 trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, config.Brightness));
                 trackBarNormalizationLevel.Value = Math.Max(trackBarNormalizationLevel.Minimum, Math.Min(trackBarNormalizationLevel.Maximum, config.Normalization));
-                ucHueMinMax.HueMin = (int)Math.Round(config.HueMin);
-                ucHueMinMax.HueMax = (int)Math.Round(config.HueMax);
+                ucHueMinMax.HueStart = (int)Math.Round(config.HueMin);
+                ucHueMinMax.HueEnd = (int)Math.Round(config.HueMax);
                 chbReverse.Checked = config.Reverse;
                 chbHueReverse.Checked = config.HueReverse;
                 chbWhite.Checked = config.White;
@@ -112,8 +112,8 @@ namespace Ledqualizer
             config.Mode = GetSelectedMode();
             config.Brightness = trackBarBrightness.Value;
             config.Normalization = trackBarNormalizationLevel.Value;
-            config.HueMin = ucHueMinMax.HueMin;
-            config.HueMax = ucHueMinMax.HueMax;
+            config.HueMin = ucHueMinMax.HueStart;
+            config.HueMax = ucHueMinMax.HueEnd;
             config.Reverse = chbReverse.Checked;
             config.HueReverse = chbHueReverse.Checked;
             config.White = chbWhite.Checked;

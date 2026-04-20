@@ -45,8 +45,8 @@ namespace Ledqualizer
             // ucHueMinMaxGradient
             // 
             ucHueMinMaxGradient.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            ucHueMinMaxGradient.HueMax = 360;
-            ucHueMinMaxGradient.HueMin = 0;
+            ucHueMinMaxGradient.HueEnd = 360;
+            ucHueMinMaxGradient.HueStart = 0;
             ucHueMinMaxGradient.Location = new Point(12, 28);
             ucHueMinMaxGradient.Name = "ucHueMinMaxGradient";
             ucHueMinMaxGradient.Size = new Size(626, 52);
