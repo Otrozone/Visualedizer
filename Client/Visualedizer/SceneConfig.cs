@@ -167,12 +167,29 @@ namespace Ledqualizer
         public int StripCount { get; set; }
         public bool Enabled { get; set; } = true;
         public string AssignedSceneId { get; set; } = string.Empty;
-        public string? StripOverride { get; set; }
+        public List<DeviceStripConfig> Strips { get; set; } = new();
+    }
+
+    internal sealed class DeviceStripConfig
+    {
+        public int StripIndex { get; set; }
+        public int LedCount { get; set; }
+        public bool Enabled { get; set; }
+        public string AssignedSceneId { get; set; } = string.Empty;
+    }
+
+    internal enum DeviceRowKind
+    {
+        Device,
+        Strip
     }
 
     internal sealed class DeviceGridRow
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string ParentDeviceId { get; set; } = string.Empty;
+        public DeviceRowKind Kind { get; set; } = DeviceRowKind.Device;
+        public int StripIndex { get; set; } = -1;
         public bool Enabled { get; set; } = true;
         public string Name { get; set; } = "Device";
         public string Host { get; set; } = "127.0.0.1";
@@ -202,6 +219,9 @@ namespace Ledqualizer
             return new DeviceGridRow
             {
                 Id = device.Id,
+                ParentDeviceId = device.Id,
+                Kind = DeviceRowKind.Device,
+                StripIndex = -1,
                 Enabled = device.Enabled,
                 Name = device.Name,
                 Host = device.Host,
@@ -209,6 +229,25 @@ namespace Ledqualizer
                 LedCount = device.LedCount,
                 StripCount = device.StripCount,
                 AssignedSceneId = device.AssignedSceneId,
+                Status = "Disconnected"
+            };
+        }
+
+        public static DeviceGridRow FromStripConfig(DeviceConfig device, DeviceStripConfig strip)
+        {
+            return new DeviceGridRow
+            {
+                Id = $"{device.Id}:strip:{strip.StripIndex}",
+                ParentDeviceId = device.Id,
+                Kind = DeviceRowKind.Strip,
+                StripIndex = strip.StripIndex,
+                Enabled = strip.Enabled,
+                Name = $"Strip {strip.StripIndex}",
+                Host = device.Host,
+                Port = device.Port,
+                LedCount = strip.LedCount,
+                StripCount = 1,
+                AssignedSceneId = strip.AssignedSceneId,
                 Status = "Disconnected"
             };
         }

@@ -8,7 +8,13 @@ namespace Ledqualizer
         public string Name { get; init; } = "Device";
         public int StripCount { get; init; }
         public int TotalLedCount { get; init; }
-        public IReadOnlyList<int> StripLedCounts { get; init; } = Array.Empty<int>();
+        public IReadOnlyList<DeviceStripMetadata> Strips { get; init; } = Array.Empty<DeviceStripMetadata>();
+    }
+
+    internal sealed class DeviceStripMetadata
+    {
+        public int Index { get; init; }
+        public int LedCount { get; init; }
     }
 
     internal sealed class DeviceMetadataService
@@ -30,17 +36,28 @@ namespace Ledqualizer
                         continue;
                     }
 
-                    List<int> ledCounts = response.Strips?
-                        .Select(strip => strip.LedCount)
-                        .Where(count => count > 0)
-                        .ToList() ?? new List<int>();
-                    int stripCount = ledCounts.Count;
-                    int totalLedCount = ledCounts.Sum();
+                    List<DeviceStripMetadata> strips = response.Strips?
+                        .Where(strip => strip.LedCount > 0)
+                        .Select(strip => new DeviceStripMetadata
+                        {
+                            Index = strip.Index,
+                            LedCount = strip.LedCount
+                        })
+                        .OrderBy(strip => strip.Index)
+                        .ToList() ?? new List<DeviceStripMetadata>();
+                    int stripCount = strips.Count;
+                    int totalLedCount = strips.Sum(strip => strip.LedCount);
 
                     if (totalLedCount <= 0)
                     {
                         List<int> legacyLedCounts = response.LedCounts?.Where(count => count > 0).ToList() ?? new List<int>();
-                        ledCounts = legacyLedCounts;
+                        strips = legacyLedCounts
+                            .Select((count, index) => new DeviceStripMetadata
+                            {
+                                Index = index,
+                                LedCount = count
+                            })
+                            .ToList();
                         stripCount = response.StripCount > 0 ? response.StripCount : legacyLedCounts.Count;
                         totalLedCount = response.TotalLedCount > 0 ? response.TotalLedCount : legacyLedCounts.Sum();
                         if (totalLedCount <= 0)
@@ -59,7 +76,7 @@ namespace Ledqualizer
                         Name = string.IsNullOrWhiteSpace(response.DeviceName) ? host : response.DeviceName,
                         StripCount = stripCount,
                         TotalLedCount = totalLedCount,
-                        StripLedCounts = ledCounts
+                        Strips = strips
                     };
                 }
                 catch (OperationCanceledException)

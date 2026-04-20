@@ -85,6 +85,10 @@ namespace Ledqualizer
                 trackBarFrequencyHigh.Value = ClampTrackBar(trackBarFrequencyHigh, (int)Math.Round(config.FrequencyHighHz));
                 trackBarLevelLow.Value = ClampTrackBar(trackBarLevelLow, (int)Math.Round(config.LevelLowDb));
                 trackBarLevelHigh.Value = ClampTrackBar(trackBarLevelHigh, (int)Math.Round(config.LevelHighDb));
+                SyncNumericWithTrackBar(numFrequencyLow, trackBarFrequencyLow);
+                SyncNumericWithTrackBar(numFrequencyHigh, trackBarFrequencyHigh);
+                SyncNumericWithTrackBar(numLevelLow, trackBarLevelLow);
+                SyncNumericWithTrackBar(numLevelHigh, trackBarLevelHigh);
             }
             finally
             {
@@ -126,6 +130,72 @@ namespace Ledqualizer
         private static int ClampTrackBar(TrackBar trackBar, int value)
         {
             return Math.Max(trackBar.Minimum, Math.Min(trackBar.Maximum, value));
+        }
+
+        private void trackBarFrequencyLow_ValueChanged(object? sender, EventArgs e)
+        {
+            SyncNumericWithTrackBar(numFrequencyLow, trackBarFrequencyLow);
+            ControlValueChanged(sender, e);
+        }
+
+        private void trackBarFrequencyHigh_ValueChanged(object? sender, EventArgs e)
+        {
+            SyncNumericWithTrackBar(numFrequencyHigh, trackBarFrequencyHigh);
+            ControlValueChanged(sender, e);
+        }
+
+        private void trackBarLevelLow_ValueChanged(object? sender, EventArgs e)
+        {
+            SyncNumericWithTrackBar(numLevelLow, trackBarLevelLow);
+            ControlValueChanged(sender, e);
+        }
+
+        private void trackBarLevelHigh_ValueChanged(object? sender, EventArgs e)
+        {
+            SyncNumericWithTrackBar(numLevelHigh, trackBarLevelHigh);
+            ControlValueChanged(sender, e);
+        }
+
+        private void numFrequencyLow_ValueChanged(object? sender, EventArgs e)
+        {
+            SyncTrackBarWithNumeric(trackBarFrequencyLow, numFrequencyLow);
+            ControlValueChanged(sender, e);
+        }
+
+        private void numFrequencyHigh_ValueChanged(object? sender, EventArgs e)
+        {
+            SyncTrackBarWithNumeric(trackBarFrequencyHigh, numFrequencyHigh);
+            ControlValueChanged(sender, e);
+        }
+
+        private void numLevelLow_ValueChanged(object? sender, EventArgs e)
+        {
+            SyncTrackBarWithNumeric(trackBarLevelLow, numLevelLow);
+            ControlValueChanged(sender, e);
+        }
+
+        private void numLevelHigh_ValueChanged(object? sender, EventArgs e)
+        {
+            SyncTrackBarWithNumeric(trackBarLevelHigh, numLevelHigh);
+            ControlValueChanged(sender, e);
+        }
+
+        private void SyncNumericWithTrackBar(NumericUpDown numericUpDown, TrackBar trackBar)
+        {
+            decimal value = trackBar.Value;
+            if (numericUpDown.Value != value)
+            {
+                numericUpDown.Value = value;
+            }
+        }
+
+        private void SyncTrackBarWithNumeric(TrackBar trackBar, NumericUpDown numericUpDown)
+        {
+            int value = Decimal.ToInt32(numericUpDown.Value);
+            if (trackBar.Value != value)
+            {
+                trackBar.Value = ClampTrackBar(trackBar, value);
+            }
         }
 
         private AcVolume.AudioCaptureVolumeMode GetSelectedMode()

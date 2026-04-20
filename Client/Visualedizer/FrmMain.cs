@@ -7,15 +7,15 @@ namespace Ledqualizer
     {
         private sealed class DeviceRunEntry
         {
-            public DeviceRunEntry(DeviceConfig config, SceneType sceneType, RunController controller)
+            public DeviceRunEntry(DeviceConfig config, string configSignature, RunController controller)
             {
                 Config = config;
-                SceneType = sceneType;
+                ConfigSignature = configSignature;
                 Controller = controller;
             }
 
             public DeviceConfig Config { get; }
-            public SceneType SceneType { get; }
+            public string ConfigSignature { get; }
             public RunController Controller { get; }
         }
 
@@ -41,6 +41,7 @@ namespace Ledqualizer
         private readonly List<SceneTypeOption> sceneTypeOptions = Enum.GetValues<SceneType>().Select(type => new SceneTypeOption(type)).ToList();
         private readonly DeviceMetadataService deviceMetadataService = new();
         private readonly Dictionary<string, Task> metadataRefreshTasks = new();
+        private readonly Font deviceGroupFont;
 
         private bool isLoading;
         private bool reconcileInProgress;
@@ -85,6 +86,7 @@ namespace Ledqualizer
         public FrmMain()
         {
             InitializeComponent();
+            deviceGroupFont = new Font(dgvDevices.Font, FontStyle.Bold);
             InitializeSceneEditors();
             ConfigureDeviceGrid();
             ConfigureSceneGrid();
@@ -131,7 +133,9 @@ namespace Ledqualizer
             dgvDevices.CurrentCellDirtyStateChanged += dgvDevices_CurrentCellDirtyStateChanged;
             dgvDevices.CellValueChanged += dgvDevices_CellValueChanged;
             dgvDevices.CellEndEdit += dgvDevices_CellEndEdit;
+            dgvDevices.CellBeginEdit += dgvDevices_CellBeginEdit;
             dgvDevices.CellValidating += dgvDevices_CellValidating;
+            dgvDevices.CellFormatting += dgvDevices_CellFormatting;
             dgvDevices.DataError += dgvDevices_DataError;
 
             colAssignedScene.DataSource = sceneLookupBindingSource;
@@ -193,7 +197,10 @@ namespace Ledqualizer
             deviceRows.Clear();
             foreach (DeviceConfig device in appConfig.Devices)
             {
-                deviceRows.Add(DeviceGridRow.FromDeviceConfig(device));
+                foreach (DeviceGridRow row in BuildDeviceRows(device))
+                {
+                    deviceRows.Add(row);
+                }
             }
 
             sceneLookupBindingSource.ResetBindings(false);
@@ -212,7 +219,66 @@ namespace Ledqualizer
         private void SyncConfigFromUi()
         {
             appConfig.Delay = (int)numDelay.Value;
-            appConfig.Devices = deviceRows.Select(row => row.ToDeviceConfig()).ToList();
+            appConfig.Devices = GetRootDeviceRows()
+                .Select(BuildDeviceConfigFromRows)
+                .ToList();
+        }
+
+        private IEnumerable<DeviceGridRow> BuildDeviceRows(DeviceConfig device)
+        {
+            yield return DeviceGridRow.FromDeviceConfig(device);
+
+            if (device.StripCount < 2)
+            {
+                yield break;
+            }
+
+            foreach (DeviceStripConfig strip in device.Strips.OrderBy(strip => strip.StripIndex))
+            {
+                yield return DeviceGridRow.FromStripConfig(device, strip);
+            }
+        }
+
+        private IEnumerable<DeviceGridRow> GetRootDeviceRows()
+        {
+            return deviceRows.Where(row => row.Kind == DeviceRowKind.Device);
+        }
+
+        private DeviceGridRow? FindRootDeviceRow(string deviceId)
+        {
+            return deviceRows.FirstOrDefault(row => row.Kind == DeviceRowKind.Device && string.Equals(row.Id, deviceId, StringComparison.Ordinal));
+        }
+
+        private List<DeviceGridRow> GetStripRows(string deviceId)
+        {
+            return deviceRows
+                .Where(row => row.Kind == DeviceRowKind.Strip && string.Equals(row.ParentDeviceId, deviceId, StringComparison.Ordinal))
+                .OrderBy(row => row.StripIndex)
+                .ToList();
+        }
+
+        private DeviceConfig BuildDeviceConfigFromRows(DeviceGridRow rootRow)
+        {
+            return new DeviceConfig
+            {
+                Id = rootRow.Id,
+                Name = rootRow.Name,
+                Host = rootRow.Host,
+                Port = rootRow.Port,
+                LedCount = rootRow.LedCount,
+                StripCount = rootRow.StripCount,
+                Enabled = rootRow.Enabled,
+                AssignedSceneId = rootRow.AssignedSceneId,
+                Strips = GetStripRows(rootRow.Id)
+                    .Select(row => new DeviceStripConfig
+                    {
+                        StripIndex = row.StripIndex,
+                        LedCount = row.LedCount,
+                        Enabled = row.Enabled,
+                        AssignedSceneId = row.AssignedSceneId
+                    })
+                    .ToList()
+            };
         }
 
         private void LoadAudioDevices()
@@ -260,9 +326,9 @@ namespace Ledqualizer
                     await RefreshMetadataForEnabledDevicesAsync();
                     UpdateInvalidDeviceStatuses();
 
-                    Dictionary<string, DeviceConfig> desiredDevices = deviceRows
-                        .Where(row => row.Enabled && IsValidDeviceRow(row) && row.LedCount > 0 && FindSceneById(row.AssignedSceneId) != null)
-                        .Select(row => row.ToDeviceConfig())
+                    Dictionary<string, DeviceConfig> desiredDevices = GetRootDeviceRows()
+                        .Select(BuildDeviceConfigFromRows)
+                        .Where(HasActiveTargets)
                         .ToDictionary(device => device.Id, device => device);
 
                     foreach (string deviceId in deviceRuns.Keys.ToList())
@@ -273,12 +339,11 @@ namespace Ledqualizer
                             continue;
                         }
 
-                        SceneConfig scene = FindSceneById(desiredDevice.AssignedSceneId)!;
                         DeviceRunEntry current = deviceRuns[deviceId];
-                        if (RequiresRestart(current, desiredDevice, scene.Type))
+                        if (RequiresRestart(current, desiredDevice))
                         {
                             await StopDeviceRunAsync(deviceId);
-                            await StartDeviceRunAsync(desiredDevice, scene.Type);
+                            await StartDeviceRunAsync(desiredDevice);
                         }
                     }
 
@@ -286,8 +351,7 @@ namespace Ledqualizer
                     {
                         if (!deviceRuns.ContainsKey(desiredDevice.Id))
                         {
-                            SceneConfig scene = FindSceneById(desiredDevice.AssignedSceneId)!;
-                            await StartDeviceRunAsync(desiredDevice, scene.Type);
+                            await StartDeviceRunAsync(desiredDevice);
                         }
                     }
 
@@ -305,33 +369,40 @@ namespace Ledqualizer
         {
             foreach (DeviceGridRow row in deviceRows)
             {
-                if (!row.Enabled)
+                DeviceGridRow rootRow = row.Kind == DeviceRowKind.Device
+                    ? row
+                    : FindRootDeviceRow(row.ParentDeviceId) ?? row;
+                bool anyTargetEnabled = HasAnyEnabledTarget(rootRow.Id);
+                bool rowEnabled = row.Kind == DeviceRowKind.Device ? anyTargetEnabled : row.Enabled;
+
+                if (!rowEnabled)
                 {
                     row.Status = "Disconnected";
                     continue;
                 }
 
-                if (!IsValidDeviceRow(row))
+                if (!IsValidDeviceRow(rootRow))
                 {
                     row.Status = "Invalid";
                     continue;
                 }
 
-                if (row.LedCount <= 0)
+                if (row.LedCount <= 0 || rootRow.LedCount <= 0)
                 {
                     row.Status = "Metadata unavailable";
                     continue;
                 }
 
-                if (FindSceneById(row.AssignedSceneId) == null)
+                bool rowHasTarget = row.Kind == DeviceRowKind.Device ? row.Enabled : row.Enabled;
+                if (rowHasTarget && FindSceneById(row.AssignedSceneId) == null)
                 {
                     row.Status = "Scene missing";
                 }
-                else if (!deviceRuns.ContainsKey(row.Id) && row.Status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase))
+                else if (!deviceRuns.ContainsKey(rootRow.Id) && row.Status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
-                else if (!deviceRuns.ContainsKey(row.Id))
+                else if (!deviceRuns.ContainsKey(rootRow.Id))
                 {
                     row.Status = "Pending";
                 }
@@ -340,7 +411,7 @@ namespace Ledqualizer
             dgvDevices.Refresh();
         }
 
-        private async Task StartDeviceRunAsync(DeviceConfig config, SceneType sceneType)
+        private async Task StartDeviceRunAsync(DeviceConfig config)
         {
             if (config.LedCount <= 0)
             {
@@ -349,8 +420,8 @@ namespace Ledqualizer
 
             RunController controller = new();
             controller.DeviceStatusChanged += RunController_DeviceStatusChanged;
-            deviceRuns[config.Id] = new DeviceRunEntry(config, sceneType, controller);
-            await controller.StartAsync(new[] { config }, CreateSceneRunner(config.AssignedSceneId, sceneType));
+            deviceRuns[config.Id] = new DeviceRunEntry(config, BuildRunSignature(config), controller);
+            await controller.StartAsync(new[] { config }, CreateCompositeSceneRunner(config.Id));
         }
 
         private async Task StopDeviceRunAsync(string deviceId)
@@ -373,25 +444,137 @@ namespace Ledqualizer
             }
         }
 
-        private static bool RequiresRestart(DeviceRunEntry current, DeviceConfig desired, SceneType sceneType)
+        private static bool RequiresRestart(DeviceRunEntry current, DeviceConfig desired)
         {
             return !string.Equals(current.Config.Host, desired.Host, StringComparison.OrdinalIgnoreCase)
                 || current.Config.Port != desired.Port
                 || current.Config.LedCount != desired.LedCount
-                || !string.Equals(current.Config.AssignedSceneId, desired.AssignedSceneId, StringComparison.Ordinal)
-                || current.SceneType != sceneType;
+                || current.Config.StripCount != desired.StripCount
+                || !string.Equals(current.ConfigSignature, BuildRunSignature(desired), StringComparison.Ordinal);
         }
 
-        private ISceneRunner CreateSceneRunner(string sceneId, SceneType sceneType)
+        private bool HasActiveTargets(DeviceConfig device)
         {
-            return sceneType switch
+            if (!IsValidDeviceConfig(device) || device.LedCount <= 0)
             {
-                SceneType.Gradient => new GradientSceneRunner(() => GetGradientSceneSettings(sceneId)),
-                SceneType.VolumeReactive => new VolumeSceneRunner(() => GetVolumeSceneSettings(sceneId), () => selectedAudioDeviceId, UpdateVolumeProgress, UpdateRate),
-                SceneType.ScreenRowCapture => new ScreenCaptureSceneRunner(() => GetScreenCaptureSceneSettings(sceneId), UpdatePreview),
-                SceneType.SpectralAnalysis => new SpectralSceneRunner(() => GetSpectralSceneSettings(sceneId), () => selectedAudioDeviceId, UpdateSpectralProgress, UpdateRate),
-                _ => new SolidColorSceneRunner(() => GetSolidColorSceneSettings(sceneId)),
+                return false;
+            }
+
+            if (device.Enabled && FindSceneById(device.AssignedSceneId) != null)
+            {
+                return true;
+            }
+
+            return device.Strips.Any(strip => strip.Enabled && strip.LedCount > 0 && FindSceneById(strip.AssignedSceneId) != null);
+        }
+
+        private bool HasAnyEnabledTarget(string deviceId)
+        {
+            DeviceGridRow? rootRow = FindRootDeviceRow(deviceId);
+            if (rootRow == null)
+            {
+                return false;
+            }
+
+            return rootRow.Enabled || GetStripRows(deviceId).Any(row => row.Enabled);
+        }
+
+        private string ResolveActiveStatus(string deviceId)
+        {
+            return deviceRuns.ContainsKey(deviceId) ? "Effect active" : "Online";
+        }
+
+        private string ResolvePostMetadataStatus(string deviceId)
+        {
+            DeviceGridRow? rootRow = FindRootDeviceRow(deviceId);
+            if (rootRow == null || !HasAnyEnabledTarget(deviceId))
+            {
+                return "Disconnected";
+            }
+
+            return rootRow.Status switch
+            {
+                "Connecting" => "Connecting",
+                string status when status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase) => status,
+                "Invalid" => "Invalid",
+                "Metadata unavailable" => "Metadata unavailable",
+                "Scene missing" => "Scene missing",
+                _ => ResolveActiveStatus(deviceId)
             };
+        }
+
+        private static bool IsValidDeviceConfig(DeviceConfig device)
+        {
+            return !string.IsNullOrWhiteSpace(device.Host)
+                && device.Port > 0
+                && device.Port <= 65535;
+        }
+
+        private static string BuildRunSignature(DeviceConfig config)
+        {
+            string stripSignature = string.Join("|", config.Strips
+                .OrderBy(strip => strip.StripIndex)
+                .Select(strip => $"{strip.StripIndex}:{strip.LedCount}:{strip.Enabled}:{strip.AssignedSceneId}"));
+            return $"{config.Host}|{config.Port}|{config.LedCount}|{config.StripCount}|{config.Enabled}|{config.AssignedSceneId}|{stripSignature}";
+        }
+
+        private ISceneRunner CreateCompositeSceneRunner(string deviceId)
+        {
+            return new CompositeSceneRunner(
+                () => GetDeviceSceneAssignments(deviceId),
+                () => selectedAudioDeviceId,
+                () => ReadUi(() => (int)numDelay.Value),
+                UpdatePreview,
+                UpdateVolumeProgress,
+                UpdateSpectralProgress,
+                UpdateRate);
+        }
+
+        private IReadOnlyList<DeviceSceneAssignment> GetDeviceSceneAssignments(string deviceId)
+        {
+            DeviceGridRow? rootRow = FindRootDeviceRow(deviceId);
+            if (rootRow == null)
+            {
+                return Array.Empty<DeviceSceneAssignment>();
+            }
+
+            var assignments = new List<DeviceSceneAssignment>();
+            int offset = 0;
+
+            if (rootRow.Enabled)
+            {
+                SceneConfig? rootScene = FindSceneById(rootRow.AssignedSceneId);
+                if (rootScene != null && rootRow.LedCount > 0)
+                {
+                    assignments.Add(new DeviceSceneAssignment
+                    {
+                        Scene = rootScene,
+                        LedCount = rootRow.LedCount,
+                        StartIndex = 0
+                    });
+                }
+            }
+
+            foreach (DeviceGridRow stripRow in GetStripRows(deviceId))
+            {
+                if (stripRow.Enabled)
+                {
+                    SceneConfig? stripScene = FindSceneById(stripRow.AssignedSceneId);
+                    if (stripScene != null && stripRow.LedCount > 0)
+                    {
+                        assignments.Add(new DeviceSceneAssignment
+                        {
+                            Scene = stripScene,
+                            LedCount = stripRow.LedCount,
+                            StartIndex = offset
+                        });
+                    }
+                }
+
+                offset += Math.Max(stripRow.LedCount, 0);
+            }
+
+            return assignments;
         }
 
         private SolidColorSceneSettings GetSolidColorSceneSettings(string sceneId)
@@ -510,19 +693,25 @@ namespace Ledqualizer
         {
             SafeUi(() =>
             {
-                DeviceGridRow? row = deviceRows.FirstOrDefault(item => item.Id == deviceId);
-                if (row == null)
+                DeviceGridRow? rootRow = FindRootDeviceRow(deviceId);
+                if (rootRow == null)
                 {
                     return;
                 }
 
-                row.Status = state switch
+                string status = state switch
                 {
                     ConnectionState.Connecting => "Connecting",
-                    ConnectionState.Connected => "Connected",
+                    ConnectionState.Connected => ResolveActiveStatus(deviceId),
                     ConnectionState.Faulted => string.IsNullOrWhiteSpace(detail) ? "Offline" : $"Offline: {detail}",
-                    _ => row.Enabled ? "Pending" : "Disconnected"
+                    _ => HasAnyEnabledTarget(deviceId) ? "Pending" : "Disconnected"
                 };
+
+                rootRow.Status = status;
+                foreach (DeviceGridRow stripRow in GetStripRows(deviceId))
+                {
+                    stripRow.Status = stripRow.Enabled ? status : "Disconnected";
+                }
 
                 dgvDevices.Refresh();
                 UpdateConnectionSummary();
@@ -536,9 +725,11 @@ namespace Ledqualizer
 
         private void UpdateConnectionSummary()
         {
-            int enabledCount = deviceRows.Count(item => item.Enabled && IsValidDeviceRow(item) && item.LedCount > 0 && FindSceneById(item.AssignedSceneId) != null);
-            int connectedCount = deviceRows.Count(item => item.Status == "Connected");
-            int offlineCount = deviceRows.Count(item => item.Enabled && item.Status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase));
+            int enabledCount = GetRootDeviceRows()
+                .Select(BuildDeviceConfigFromRows)
+                .Count(HasActiveTargets);
+            int connectedCount = GetRootDeviceRows().Count(item => item.Status is "Online" or "Effect active");
+            int offlineCount = GetRootDeviceRows().Count(item => item.Enabled && item.Status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase));
 
             if (enabledCount == 0)
             {
@@ -558,6 +749,68 @@ namespace Ledqualizer
             if (dgvDevices.IsCurrentCellDirty && IsImmediateCommitCell(dgvDevices))
             {
                 dgvDevices.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            }
+        }
+
+        private void dgvDevices_CellBeginEdit(object? sender, DataGridViewCellCancelEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0)
+            {
+                return;
+            }
+
+            if (dgvDevices.Rows[e.RowIndex].DataBoundItem is not DeviceGridRow row)
+            {
+                return;
+            }
+
+            string propertyName = dgvDevices.Columns[e.ColumnIndex].DataPropertyName;
+            if (row.Kind == DeviceRowKind.Strip
+                && propertyName is nameof(DeviceGridRow.Name) or nameof(DeviceGridRow.Host) or nameof(DeviceGridRow.Port))
+            {
+                e.Cancel = true;
+            }
+        }
+
+        private void dgvDevices_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex < 0 || dgvDevices.Rows[e.RowIndex].DataBoundItem is not DeviceGridRow row)
+            {
+                return;
+            }
+
+            string propertyName = dgvDevices.Columns[e.ColumnIndex].DataPropertyName;
+            if (propertyName == nameof(DeviceGridRow.Name))
+            {
+                e.Value = row.Kind == DeviceRowKind.Strip ? $"    Strip {row.StripIndex}" : row.Name;
+                e.FormattingApplied = true;
+            }
+            else if (propertyName == nameof(DeviceGridRow.StripCount))
+            {
+                e.Value = row.Kind == DeviceRowKind.Device
+                    ? $"Count: {row.StripCount}"
+                    : $"Idx: {row.StripIndex}";
+                e.FormattingApplied = true;
+            }
+            else if (propertyName == nameof(DeviceGridRow.LedCount))
+            {
+                e.Value = row.LedCount.ToString();
+                e.FormattingApplied = true;
+            }
+            else if (row.Kind == DeviceRowKind.Strip && propertyName is nameof(DeviceGridRow.Host) or nameof(DeviceGridRow.Port) or nameof(DeviceGridRow.StripCount))
+            {
+                e.Value = string.Empty;
+                e.FormattingApplied = true;
+            }
+
+            DataGridViewCellStyle style = dgvDevices.Rows[e.RowIndex].DefaultCellStyle;
+            if (row.Kind == DeviceRowKind.Device)
+            {
+                style.Font = deviceGroupFont;
+            }
+            else
+            {
+                style.Font = dgvDevices.Font;
             }
         }
 
@@ -589,14 +842,34 @@ namespace Ledqualizer
             }
 
             string propertyName = dgvDevices.Columns[columnIndex].DataPropertyName;
-            if (dgvDevices.Rows[rowIndex].DataBoundItem is DeviceGridRow row
+            if (dgvDevices.Rows[rowIndex].DataBoundItem is not DeviceGridRow row)
+            {
+                return;
+            }
+
+            if (row.Kind == DeviceRowKind.Device
                 && (propertyName == nameof(DeviceGridRow.Host) || propertyName == nameof(DeviceGridRow.Port)))
             {
                 row.Name = "Device";
                 row.StripCount = 0;
                 row.LedCount = 0;
                 row.Status = row.Enabled ? "Pending metadata" : "Disconnected";
+                foreach (DeviceGridRow stripRow in GetStripRows(row.Id))
+                {
+                    stripRow.Host = row.Host;
+                    stripRow.Port = row.Port;
+                    stripRow.LedCount = 0;
+                    stripRow.Status = row.Status;
+                }
                 dgvDevices.Refresh();
+            }
+            else if (row.Kind == DeviceRowKind.Device)
+            {
+                foreach (DeviceGridRow stripRow in GetStripRows(row.Id))
+                {
+                    stripRow.Host = row.Host;
+                    stripRow.Port = row.Port;
+                }
             }
 
             await ReconcileDeviceRunsAsync();
@@ -609,6 +882,11 @@ namespace Ledqualizer
 
             if (propertyName == nameof(DeviceGridRow.Host))
             {
+                if (dgvDevices.Rows[e.RowIndex].DataBoundItem is DeviceGridRow row && row.Kind == DeviceRowKind.Strip)
+                {
+                    return;
+                }
+
                 if (string.IsNullOrWhiteSpace(formattedValue))
                 {
                     e.Cancel = true;
@@ -618,6 +896,11 @@ namespace Ledqualizer
 
             if (propertyName == nameof(DeviceGridRow.Port))
             {
+                if (dgvDevices.Rows[e.RowIndex].DataBoundItem is DeviceGridRow row && row.Kind == DeviceRowKind.Strip)
+                {
+                    return;
+                }
+
                 if (!int.TryParse(formattedValue, out int port) || port <= 0 || port > 65535)
                 {
                     e.Cancel = true;
@@ -811,8 +1094,7 @@ namespace Ledqualizer
         private async void btnAddDevice_Click(object? sender, EventArgs e)
         {
             string defaultSceneId = appConfig.Scenes.FirstOrDefault()?.Id ?? string.Empty;
-            int deviceNumber = deviceRows.Count + 1;
-            deviceRows.Add(new DeviceGridRow
+            DeviceConfig device = new()
             {
                 Id = Guid.NewGuid().ToString("N"),
                 Enabled = false,
@@ -821,25 +1103,37 @@ namespace Ledqualizer
                 Port = 81,
                 LedCount = 0,
                 StripCount = 0,
-                AssignedSceneId = defaultSceneId,
-                Status = "Disconnected"
-            });
+                AssignedSceneId = defaultSceneId
+            };
+
+            foreach (DeviceGridRow row in BuildDeviceRows(device))
+            {
+                deviceRows.Add(row);
+            }
 
             await ReconcileDeviceRunsAsync();
         }
 
         private async void btnRemoveDevice_Click(object? sender, EventArgs e)
         {
-            List<DeviceGridRow> rowsToRemove = dgvDevices.SelectedRows
+            List<string> deviceIdsToRemove = dgvDevices.SelectedRows
                 .Cast<DataGridViewRow>()
                 .Select(row => row.DataBoundItem as DeviceGridRow)
                 .Where(row => row != null)
                 .Cast<DeviceGridRow>()
+                .Select(row => row.Kind == DeviceRowKind.Device ? row.Id : row.ParentDeviceId)
+                .Distinct(StringComparer.Ordinal)
                 .ToList();
 
-            foreach (DeviceGridRow row in rowsToRemove)
+            foreach (string deviceId in deviceIdsToRemove)
             {
-                deviceRows.Remove(row);
+                foreach (DeviceGridRow row in deviceRows
+                    .Where(item => string.Equals(item.Id, deviceId, StringComparison.Ordinal)
+                        || string.Equals(item.ParentDeviceId, deviceId, StringComparison.Ordinal))
+                    .ToList())
+                {
+                    deviceRows.Remove(row);
+                }
             }
 
             await ReconcileDeviceRunsAsync();
@@ -1062,9 +1356,12 @@ namespace Ledqualizer
 
         private bool IsValidDeviceRow(DeviceGridRow row)
         {
-            return !string.IsNullOrWhiteSpace(row.Host)
-                && row.Port > 0
-                && row.Port <= 65535;
+            DeviceGridRow rootRow = row.Kind == DeviceRowKind.Device
+                ? row
+                : FindRootDeviceRow(row.ParentDeviceId) ?? row;
+            return !string.IsNullOrWhiteSpace(rootRow.Host)
+                && rootRow.Port > 0
+                && rootRow.Port <= 65535;
         }
 
         private void CountHz()
@@ -1083,8 +1380,8 @@ namespace Ledqualizer
 
         private async Task RefreshMetadataForEnabledDevicesAsync()
         {
-            List<DeviceGridRow> rows = deviceRows
-                .Where(row => row.Enabled && IsValidDeviceRow(row) && row.LedCount <= 0)
+            List<DeviceGridRow> rows = GetRootDeviceRows()
+                .Where(row => HasAnyEnabledTarget(row.Id) && IsValidDeviceRow(row) && row.LedCount <= 0)
                 .ToList();
 
             foreach (DeviceGridRow row in rows)
@@ -1133,6 +1430,11 @@ namespace Ledqualizer
 
         private async Task RefreshMetadataForRowAsync(DeviceGridRow row, bool force)
         {
+            if (row.Kind != DeviceRowKind.Device)
+            {
+                row = FindRootDeviceRow(row.ParentDeviceId) ?? row;
+            }
+
             if (!force && row.LedCount > 0)
             {
                 return;
@@ -1140,7 +1442,7 @@ namespace Ledqualizer
 
             SafeUi(() =>
             {
-                if (row.Enabled)
+                if (HasAnyEnabledTarget(row.Id))
                 {
                     row.Status = "Loading metadata";
                     dgvDevices.Refresh();
@@ -1159,17 +1461,81 @@ namespace Ledqualizer
                     row.LedCount = metadata.TotalLedCount;
                     row.StripCount = metadata.StripCount;
 
+                    Dictionary<int, DeviceGridRow> existingStripRows = GetStripRows(row.Id)
+                        .ToDictionary(stripRow => stripRow.StripIndex, stripRow => stripRow);
+
+                    if (metadata.StripCount >= 2)
+                    {
+                        foreach (DeviceStripMetadata stripMetadata in metadata.Strips)
+                        {
+                            if (!existingStripRows.TryGetValue(stripMetadata.Index, out DeviceGridRow? stripRow))
+                            {
+                                stripRow = new DeviceGridRow
+                                {
+                                    Id = $"{row.Id}:strip:{stripMetadata.Index}",
+                                    ParentDeviceId = row.Id,
+                                    Kind = DeviceRowKind.Strip,
+                                    StripIndex = stripMetadata.Index,
+                                    Enabled = false,
+                                    Name = $"Strip {stripMetadata.Index}",
+                                    Host = row.Host,
+                                    Port = row.Port,
+                                    AssignedSceneId = row.AssignedSceneId,
+                                    Status = row.Enabled ? row.Status : "Disconnected"
+                                };
+
+                                int insertIndex = deviceRows.IndexOf(row) + 1 + deviceRows.Count(item => item.Kind == DeviceRowKind.Strip && string.Equals(item.ParentDeviceId, row.Id, StringComparison.Ordinal) && item.StripIndex < stripMetadata.Index);
+                                deviceRows.Insert(insertIndex, stripRow);
+                            }
+
+                            stripRow.Host = row.Host;
+                            stripRow.Port = row.Port;
+                            stripRow.LedCount = stripMetadata.LedCount;
+                            stripRow.Status = stripRow.Enabled ? ResolvePostMetadataStatus(row.Id) : "Disconnected";
+                        }
+                    }
+
+                    foreach (DeviceGridRow obsoleteStrip in existingStripRows.Values.Where(stripRow => metadata.Strips.All(strip => strip.Index != stripRow.StripIndex)).ToList())
+                    {
+                        deviceRows.Remove(obsoleteStrip);
+                    }
+
+                    if (metadata.StripCount < 2)
+                    {
+                        foreach (DeviceGridRow obsoleteStrip in existingStripRows.Values.ToList())
+                        {
+                            deviceRows.Remove(obsoleteStrip);
+                        }
+                    }
+
                     DeviceConfig? config = appConfig.Devices.FirstOrDefault(device => device.Id == row.Id);
                     if (config != null)
                     {
                         config.Name = metadata.Name;
                         config.LedCount = metadata.TotalLedCount;
                         config.StripCount = metadata.StripCount;
+                        config.Strips = metadata.Strips
+                            .Select(strip => new DeviceStripConfig
+                            {
+                                StripIndex = strip.Index,
+                                LedCount = strip.LedCount,
+                                Enabled = config.Strips.FirstOrDefault(existing => existing.StripIndex == strip.Index)?.Enabled ?? false,
+                                AssignedSceneId = config.Strips.FirstOrDefault(existing => existing.StripIndex == strip.Index)?.AssignedSceneId ?? config.AssignedSceneId
+                            })
+                            .ToList();
                     }
 
-                    if (!row.Enabled)
+                    if (!HasAnyEnabledTarget(row.Id))
                     {
                         row.Status = "Disconnected";
+                    }
+                    else
+                    {
+                        row.Status = ResolvePostMetadataStatus(row.Id);
+                        foreach (DeviceGridRow stripRow in GetStripRows(row.Id))
+                        {
+                            stripRow.Status = stripRow.Enabled ? row.Status : "Disconnected";
+                        }
                     }
 
                     dgvDevices.Refresh();
@@ -1184,7 +1550,7 @@ namespace Ledqualizer
             {
                 SafeUi(() =>
                 {
-                    if (row.Enabled && row.LedCount <= 0)
+                    if (HasAnyEnabledTarget(row.Id) && row.LedCount <= 0)
                     {
                         row.Status = "Metadata unavailable";
                         dgvDevices.Refresh();

@@ -137,6 +137,13 @@ namespace Ledqualizer
                 data[sectionName]["stripCount"] = device.StripCount.ToString(CultureInfo.InvariantCulture);
                 data[sectionName]["enabled"] = device.Enabled.ToString(CultureInfo.InvariantCulture);
                 data[sectionName]["assignedSceneId"] = device.AssignedSceneId;
+                foreach (DeviceStripConfig strip in device.Strips.OrderBy(strip => strip.StripIndex))
+                {
+                    string keyPrefix = $"strip.{strip.StripIndex}.";
+                    data[sectionName][$"{keyPrefix}enabled"] = strip.Enabled.ToString(CultureInfo.InvariantCulture);
+                    data[sectionName][$"{keyPrefix}ledCount"] = strip.LedCount.ToString(CultureInfo.InvariantCulture);
+                    data[sectionName][$"{keyPrefix}assignedSceneId"] = strip.AssignedSceneId;
+                }
             }
 
             parser.WriteFile(IniFileName, data);
@@ -266,7 +273,7 @@ namespace Ledqualizer
                 assignedSceneId = MigrateLegacySceneAssignment(section.Keys["scene"], legacySceneMap, data);
             }
 
-            return new DeviceConfig
+            DeviceConfig config = new DeviceConfig
             {
                 Id = string.IsNullOrWhiteSpace(section.Keys["id"]) ? Guid.NewGuid().ToString("N") : section.Keys["id"],
                 Name = string.IsNullOrWhiteSpace(section.Keys["name"]) ? "Device" : section.Keys["name"],
@@ -277,6 +284,9 @@ namespace Ledqualizer
                 Enabled = ParseBool(section.Keys["enabled"], true),
                 AssignedSceneId = assignedSceneId
             };
+
+            config.Strips = LoadStripTargets(section, config.AssignedSceneId, config.StripCount, config.LedCount);
+            return config;
         }
 
         private DeviceConfig? TryMigrateLegacySingleDevice(IniData data, IDictionary<LegacySceneKind, string> legacySceneMap)
@@ -298,7 +308,19 @@ namespace Ledqualizer
                 LedCount = ledCount,
                 StripCount = ledCount > 0 ? 1 : 0,
                 Enabled = true,
-                AssignedSceneId = GetOrCreateLegacyScene(LegacySceneKind.Basic, legacySceneMap, data)
+                AssignedSceneId = GetOrCreateLegacyScene(LegacySceneKind.Basic, legacySceneMap, data),
+                Strips = ledCount > 0
+                    ? new List<DeviceStripConfig>
+                    {
+                        new()
+                        {
+                            StripIndex = 0,
+                            LedCount = ledCount,
+                            Enabled = false,
+                            AssignedSceneId = GetOrCreateLegacyScene(LegacySceneKind.Basic, legacySceneMap, data)
+                        }
+                    }
+                    : new List<DeviceStripConfig>()
             };
         }
 
@@ -392,7 +414,123 @@ namespace Ledqualizer
                 {
                     device.AssignedSceneId = fallbackSceneId;
                 }
+
+                device.Strips ??= new List<DeviceStripConfig>();
+                EnsureStripDefaults(device, fallbackSceneId);
             }
+        }
+
+        private static List<DeviceStripConfig> LoadStripTargets(SectionData section, string fallbackSceneId, int stripCount, int totalLedCount)
+        {
+            var strips = new Dictionary<int, DeviceStripConfig>();
+            foreach (KeyData key in section.Keys)
+            {
+                if (!key.KeyName.StartsWith("strip.", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string suffix = key.KeyName["strip.".Length..];
+                int separatorIndex = suffix.IndexOf('.');
+                if (separatorIndex <= 0)
+                {
+                    continue;
+                }
+
+                string indexText = suffix[..separatorIndex];
+                string propertyName = suffix[(separatorIndex + 1)..];
+                if (!int.TryParse(indexText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int stripIndex) || stripIndex < 0)
+                {
+                    continue;
+                }
+
+                if (!strips.TryGetValue(stripIndex, out DeviceStripConfig? strip))
+                {
+                    strip = new DeviceStripConfig
+                    {
+                        StripIndex = stripIndex,
+                        AssignedSceneId = fallbackSceneId
+                    };
+                    strips.Add(stripIndex, strip);
+                }
+
+                switch (propertyName)
+                {
+                    case "enabled":
+                        strip.Enabled = ParseBool(key.Value, false);
+                        break;
+                    case "ledCount":
+                        strip.LedCount = ParseInt(key.Value, strip.LedCount);
+                        break;
+                    case "assignedSceneId":
+                        strip.AssignedSceneId = string.IsNullOrWhiteSpace(key.Value) ? fallbackSceneId : key.Value;
+                        break;
+                }
+            }
+
+            var orderedStrips = strips.Values.OrderBy(strip => strip.StripIndex).ToList();
+            if (orderedStrips.Count == 0 && stripCount > 0)
+            {
+                int fallbackLedCount = stripCount > 0 ? Math.Max(totalLedCount / stripCount, 0) : 0;
+                for (int i = 0; i < stripCount; i++)
+                {
+                    orderedStrips.Add(new DeviceStripConfig
+                    {
+                        StripIndex = i,
+                        LedCount = fallbackLedCount,
+                        Enabled = false,
+                        AssignedSceneId = fallbackSceneId
+                    });
+                }
+            }
+
+            return orderedStrips;
+        }
+
+        private static void EnsureStripDefaults(DeviceConfig device, string fallbackSceneId)
+        {
+            Dictionary<int, DeviceStripConfig> existing = device.Strips
+                .Where(strip => strip.StripIndex >= 0)
+                .GroupBy(strip => strip.StripIndex)
+                .ToDictionary(group => group.Key, group => group.First());
+
+            var normalized = new List<DeviceStripConfig>();
+            int fallbackLedCount = device.StripCount > 0 ? Math.Max(device.LedCount / Math.Max(device.StripCount, 1), 0) : 0;
+            for (int i = 0; i < device.StripCount; i++)
+            {
+                if (!existing.TryGetValue(i, out DeviceStripConfig? strip))
+                {
+                    strip = new DeviceStripConfig
+                    {
+                        StripIndex = i,
+                        AssignedSceneId = fallbackSceneId
+                    };
+                }
+
+                if (string.IsNullOrWhiteSpace(strip.AssignedSceneId))
+                {
+                    strip.AssignedSceneId = fallbackSceneId;
+                }
+
+                if (strip.LedCount <= 0)
+                {
+                    strip.LedCount = fallbackLedCount;
+                }
+
+                normalized.Add(strip);
+            }
+
+            foreach (DeviceStripConfig extraStrip in existing.Values.Where(strip => strip.StripIndex >= device.StripCount).OrderBy(strip => strip.StripIndex))
+            {
+                if (string.IsNullOrWhiteSpace(extraStrip.AssignedSceneId))
+                {
+                    extraStrip.AssignedSceneId = fallbackSceneId;
+                }
+
+                normalized.Add(extraStrip);
+            }
+
+            device.Strips = normalized;
         }
 
         private static string GetValue(IniData data, string section, string key)

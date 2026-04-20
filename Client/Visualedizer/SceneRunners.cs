@@ -72,6 +72,13 @@ namespace Ledqualizer
         public int LaserColorY { get; set; }
     }
 
+    internal sealed class DeviceSceneAssignment
+    {
+        public required SceneConfig Scene { get; init; }
+        public int StartIndex { get; init; }
+        public int LedCount { get; init; }
+    }
+
     internal sealed class SolidColorSceneRunner : ISceneRunner
     {
         private readonly Func<SolidColorSceneSettings> settingsProvider;
@@ -221,7 +228,7 @@ namespace Ledqualizer
             }
         }
 
-        private static float ReadVolume(string? deviceId)
+        internal static float ReadVolume(string? deviceId)
         {
             try
             {
@@ -682,6 +689,323 @@ namespace Ledqualizer
         {
             graphics.CopyFromScreen(x, y, 0, 0, new Size(1, 1));
             return screenCapture.GetPixel(0, 0);
+        }
+    }
+
+    internal sealed class CompositeSceneRunner : ISceneRunner
+    {
+        private readonly Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider;
+        private readonly Func<string?> audioDeviceIdProvider;
+        private readonly Func<int> delayProvider;
+        private readonly Action<IReadOnlyList<Color>> previewUpdater;
+        private readonly Action<int> volumeProgressReporter;
+        private readonly Action<int> spectralProgressReporter;
+        private readonly Action<string> rateReporter;
+
+        public CompositeSceneRunner(
+            Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider,
+            Func<string?> audioDeviceIdProvider,
+            Func<int> delayProvider,
+            Action<IReadOnlyList<Color>> previewUpdater,
+            Action<int> volumeProgressReporter,
+            Action<int> spectralProgressReporter,
+            Action<string> rateReporter)
+        {
+            this.assignmentsProvider = assignmentsProvider;
+            this.audioDeviceIdProvider = audioDeviceIdProvider;
+            this.delayProvider = delayProvider;
+            this.previewUpdater = previewUpdater;
+            this.volumeProgressReporter = volumeProgressReporter;
+            this.spectralProgressReporter = spectralProgressReporter;
+            this.rateReporter = rateReporter;
+        }
+
+        public async Task RunAsync(IReadOnlyList<DeviceTarget> devices, CancellationToken token)
+        {
+            if (devices.Count == 0)
+            {
+                return;
+            }
+
+            string? activeAudioDeviceId = null;
+            int iterations = 0;
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            using AcSpectralAnalysis spectralAnalysis = new();
+
+            while (!token.IsCancellationRequested)
+            {
+                IReadOnlyList<DeviceSceneAssignment> assignments = assignmentsProvider();
+                if (assignments.Count == 0)
+                {
+                    return;
+                }
+
+                bool needsSpectral = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysis);
+                if (needsSpectral)
+                {
+                    string? requestedDeviceId = audioDeviceIdProvider();
+                    if (!string.Equals(activeAudioDeviceId, requestedDeviceId, StringComparison.Ordinal))
+                    {
+                        spectralAnalysis.Start(requestedDeviceId);
+                        activeAudioDeviceId = requestedDeviceId;
+                    }
+                }
+
+                float? sharedVolume = null;
+                bool previewUpdated = false;
+                double? lastSpectralDb = null;
+
+                foreach (DeviceTarget device in devices)
+                {
+                    byte[] composedFrame = new byte[device.Config.LedCount * 3];
+                    foreach (DeviceSceneAssignment assignment in assignments)
+                    {
+                        byte[] segmentFrame = BuildAssignmentFrame(
+                            assignment,
+                            audioDeviceIdProvider,
+                            ref sharedVolume,
+                            spectralAnalysis,
+                            ref lastSpectralDb,
+                            previewUpdated ? null : previewUpdater,
+                            volumeProgressReporter,
+                            spectralProgressReporter);
+                        OverlayFrame(composedFrame, segmentFrame, assignment.StartIndex);
+                        previewUpdated = previewUpdated || assignment.Scene.Type == SceneType.ScreenRowCapture;
+                    }
+
+                    bool sent = await device.Session.SendFrameAsync(composedFrame, token).ConfigureAwait(false);
+                    if (!sent)
+                    {
+                        return;
+                    }
+                }
+
+                iterations++;
+                if (stopwatch.ElapsedMilliseconds >= 1000)
+                {
+                    string rateText = needsSpectral && lastSpectralDb.HasValue
+                        ? $"Rate: {iterations} | Band: {lastSpectralDb.Value:F1} dB"
+                        : $"Rate: {iterations}";
+                    rateReporter(rateText);
+                    iterations = 0;
+                    stopwatch.Restart();
+                }
+
+                await Task.Delay(Math.Max(delayProvider(), 1), token).ConfigureAwait(false);
+            }
+        }
+
+        private static byte[] BuildAssignmentFrame(
+            DeviceSceneAssignment assignment,
+            Func<string?> audioDeviceIdProvider,
+            ref float? sharedVolume,
+            AcSpectralAnalysis spectralAnalysis,
+            ref double? lastSpectralDb,
+            Action<IReadOnlyList<Color>>? previewUpdater,
+            Action<int> volumeProgressReporter,
+            Action<int> spectralProgressReporter)
+        {
+            return assignment.Scene.Type switch
+            {
+                SceneType.Gradient => BuildGradientFrame(assignment.LedCount, assignment.Scene.Gradient),
+                SceneType.VolumeReactive => BuildVolumeFrame(assignment.Scene, assignment.LedCount, audioDeviceIdProvider, ref sharedVolume, volumeProgressReporter),
+                SceneType.ScreenRowCapture => BuildScreenCaptureFrame(assignment.Scene.ScreenRowCapture, assignment.LedCount, previewUpdater),
+                SceneType.SpectralAnalysis => BuildSpectralFrame(assignment.Scene, assignment.LedCount, spectralAnalysis, ref lastSpectralDb, spectralProgressReporter),
+                _ => BuildSolidFrame(assignment.LedCount, assignment.Scene.SolidColor),
+            };
+        }
+
+        private static byte[] BuildSolidFrame(int ledCount, SolidColorSceneConfig config)
+        {
+            byte[] frame = new byte[ledCount * 3];
+            double hue = Common.MapValue(config.Hue, 0, 360, config.MinHue, config.MaxHue);
+            Color color = Common.HSVToRGB(hue, config.Saturation / 100.0, config.Brightness / 100.0);
+            for (int i = 0; i < ledCount; i++)
+            {
+                int index = i * 3;
+                frame[index] = color.R;
+                frame[index + 1] = color.G;
+                frame[index + 2] = color.B;
+            }
+
+            return frame;
+        }
+
+        private static byte[] BuildGradientFrame(int ledCount, GradientSceneConfig config)
+        {
+            byte[] frame = new byte[ledCount * 3];
+            for (int i = 0; i < ledCount; i++)
+            {
+                double hue = Common.MapValue(i, 0, Math.Max(ledCount, 1), config.HueMin, config.HueMax);
+                Color color = Common.HSVToRGB(hue, config.Saturation / 100.0, config.Brightness / 100.0);
+                int index = i * 3;
+                frame[index] = color.R;
+                frame[index + 1] = color.G;
+                frame[index + 2] = color.B;
+            }
+
+            return frame;
+        }
+
+        private static byte[] BuildVolumeFrame(
+            SceneConfig scene,
+            int ledCount,
+            Func<string?> audioDeviceIdProvider,
+            ref float? sharedVolume,
+            Action<int> progressReporter)
+        {
+            sharedVolume ??= VolumeSceneRunner.ReadVolume(audioDeviceIdProvider());
+            progressReporter((int)Math.Round(sharedVolume.Value * 100));
+            return AudioReactiveFrameBuilder.BuildFrame(ledCount, sharedVolume.Value, new VolumeSceneSettings
+            {
+                Mode = scene.VolumeReactive.Mode,
+                BrightnessValue = scene.VolumeReactive.Brightness,
+                NormalizationValue = scene.VolumeReactive.Normalization,
+                Reverse = scene.VolumeReactive.Reverse,
+                HueReverse = scene.VolumeReactive.HueReverse,
+                White = scene.VolumeReactive.White,
+                BackgroundWhite = scene.VolumeReactive.BackgroundWhite,
+                BackgroundBrightnessValue = scene.VolumeReactive.BackgroundBrightness,
+                BackgroundHue = scene.VolumeReactive.BackgroundHue,
+                HueMin = scene.VolumeReactive.HueMin,
+                HueMax = scene.VolumeReactive.HueMax
+            });
+        }
+
+        private static byte[] BuildSpectralFrame(
+            SceneConfig scene,
+            int ledCount,
+            AcSpectralAnalysis spectralAnalysis,
+            ref double? lastSpectralDb,
+            Action<int> progressReporter)
+        {
+            spectralAnalysis.UpdateBandSettings(new SpectralBandSettings(
+                scene.SpectralAnalysis.FrequencyLowHz,
+                scene.SpectralAnalysis.FrequencyHighHz,
+                scene.SpectralAnalysis.LevelLowDb,
+                scene.SpectralAnalysis.LevelHighDb));
+
+            float strength = spectralAnalysis.GetCurrentStrength();
+            progressReporter((int)Math.Round(strength * 100.0f));
+            lastSpectralDb = spectralAnalysis.GetCurrentBandLevelDb();
+            return AudioReactiveFrameBuilder.BuildFrame(ledCount, strength, new SpectralSceneSettings
+            {
+                Mode = scene.SpectralAnalysis.Mode,
+                BrightnessValue = scene.SpectralAnalysis.Brightness,
+                NormalizationValue = scene.SpectralAnalysis.Normalization,
+                Reverse = scene.SpectralAnalysis.Reverse,
+                HueReverse = scene.SpectralAnalysis.HueReverse,
+                White = scene.SpectralAnalysis.White,
+                BackgroundWhite = scene.SpectralAnalysis.BackgroundWhite,
+                BackgroundBrightnessValue = scene.SpectralAnalysis.BackgroundBrightness,
+                BackgroundHue = scene.SpectralAnalysis.BackgroundHue,
+                HueMin = scene.SpectralAnalysis.HueMin,
+                HueMax = scene.SpectralAnalysis.HueMax
+            });
+        }
+
+        private static byte[] BuildScreenCaptureFrame(ScreenRowCaptureSceneConfig config, int ledCount, Action<IReadOnlyList<Color>>? previewUpdater)
+        {
+            Screen targetScreen = ResolveScreen(config.MonitorIndex);
+            Rectangle bounds = targetScreen.Bounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return new byte[ledCount * 3];
+            }
+
+            int captureY = Math.Max(0, Math.Min(bounds.Height - 1, config.CaptureY));
+            using Bitmap screenCapture = new(bounds.Width, 1);
+            using Graphics graphics = Graphics.FromImage(screenCapture);
+            graphics.CopyFromScreen(bounds.Left, bounds.Top + captureY, 0, 0, new Size(bounds.Width, 1));
+
+            List<Color> pixelColors = new(bounds.Width);
+            for (int x = 0; x < bounds.Width; x++)
+            {
+                pixelColors.Add(screenCapture.GetPixel(x, 0));
+            }
+
+            if (config.Reverse)
+            {
+                pixelColors.Reverse();
+            }
+
+            List<Color> reducedColors = ReducePixels(pixelColors, ledCount, bounds.Width);
+            previewUpdater?.Invoke(reducedColors);
+            return ColorListToByteArray(reducedColors);
+        }
+
+        private static void OverlayFrame(byte[] composedFrame, byte[] segmentFrame, int startLedIndex)
+        {
+            int startByteIndex = Math.Max(0, startLedIndex) * 3;
+            int copyLength = Math.Min(segmentFrame.Length, Math.Max(0, composedFrame.Length - startByteIndex));
+            if (copyLength > 0)
+            {
+                Array.Copy(segmentFrame, 0, composedFrame, startByteIndex, copyLength);
+            }
+        }
+
+        private static Screen ResolveScreen(int monitorIndex)
+        {
+            Screen[] screens = Screen.AllScreens;
+            if (screens.Length == 0)
+            {
+                return Screen.PrimaryScreen ?? throw new InvalidOperationException("No screens are available.");
+            }
+
+            if (monitorIndex >= 0 && monitorIndex < screens.Length)
+            {
+                return screens[monitorIndex];
+            }
+
+            return Screen.PrimaryScreen ?? screens[0];
+        }
+
+        private static List<Color> ReducePixels(List<Color> pixelColors, int ledCount, int screenWidth)
+        {
+            var reducedPixelColors = new List<Color>(ledCount);
+            int segmentSize = Math.Max(screenWidth / Math.Max(ledCount, 1), 1);
+            for (int i = 0; i < ledCount; i++)
+            {
+                int startIndex = i * segmentSize;
+                if (startIndex >= pixelColors.Count)
+                {
+                    reducedPixelColors.Add(Color.Black);
+                    continue;
+                }
+
+                int endIndex = Math.Min((i + 1) * segmentSize, pixelColors.Count) - 1;
+                reducedPixelColors.Add(CalculateAverageColor(pixelColors.GetRange(startIndex, endIndex - startIndex + 1)));
+            }
+
+            return reducedPixelColors;
+        }
+
+        private static Color CalculateAverageColor(List<Color> colors)
+        {
+            int totalRed = 0;
+            int totalGreen = 0;
+            int totalBlue = 0;
+            foreach (Color color in colors)
+            {
+                totalRed += color.R;
+                totalGreen += color.G;
+                totalBlue += color.B;
+            }
+
+            return Color.FromArgb(totalRed / colors.Count, totalGreen / colors.Count, totalBlue / colors.Count);
+        }
+
+        private static byte[] ColorListToByteArray(List<Color> colorList)
+        {
+            byte[] bytes = new byte[colorList.Count * 3];
+            for (int i = 0; i < colorList.Count; i++)
+            {
+                bytes[i * 3] = colorList[i].R;
+                bytes[i * 3 + 1] = colorList[i].G;
+                bytes[i * 3 + 2] = colorList[i].B;
+            }
+
+            return bytes;
         }
     }
 }

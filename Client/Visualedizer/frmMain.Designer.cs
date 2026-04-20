@@ -126,7 +126,7 @@ namespace Ledqualizer
             // 
             dgvDevices.AllowUserToAddRows = false;
             dgvDevices.AllowUserToDeleteRows = false;
-            dgvDevices.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            dgvDevices.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             dgvDevices.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             dgvDevices.Columns.AddRange(new DataGridViewColumn[] { colEnabled, colName, colAssignedScene, colHost, colPort, colStripCount, colLedCount, colStatus });
             dgvDevices.Location = new Point(12, 59);
@@ -377,7 +377,7 @@ namespace Ledqualizer
             panelSceneEditorHost.BorderStyle = BorderStyle.FixedSingle;
             panelSceneEditorHost.Location = new Point(13, 36);
             panelSceneEditorHost.Name = "panelSceneEditorHost";
-            panelSceneEditorHost.Size = new Size(685, 442);
+            panelSceneEditorHost.Size = new Size(687, 442);
             panelSceneEditorHost.TabIndex = 1;
             // 
             // lblEditorTitle
