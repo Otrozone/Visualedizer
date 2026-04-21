@@ -17,6 +17,7 @@ namespace Visualedizer
         private int hueStart;
         private int hueEnd = HueMaximum;
         private DragTarget dragTarget = DragTarget.None;
+        private DragTarget lastEditedTarget = DragTarget.End;
 
         public event EventHandler? ValueChanged;
 
@@ -36,6 +37,7 @@ namespace Visualedizer
         [Browsable(true)]
         [Category("Color")]
         [Description("Start hue value (0 - 360).")]
+        [DefaultValue(HueMinimum)]
         public int HueStart
         {
             get => hueStart;
@@ -49,6 +51,7 @@ namespace Visualedizer
                 }
 
                 hueStart = clamped;
+                lastEditedTarget = DragTarget.Start;
                 Invalidate();
             }
         }
@@ -56,6 +59,7 @@ namespace Visualedizer
         [Browsable(true)]
         [Category("Color")]
         [Description("End hue value (0 - 360).")]
+        [DefaultValue(HueMaximum)]
         public int HueEnd
         {
             get => hueEnd;
@@ -69,9 +73,13 @@ namespace Visualedizer
                 }
 
                 hueEnd = clamped;
+                lastEditedTarget = DragTarget.End;
                 Invalidate();
             }
         }
+
+        [Browsable(false)]
+        public int ActiveHue => lastEditedTarget == DragTarget.Start ? hueStart : hueEnd;
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -83,8 +91,8 @@ namespace Visualedizer
             Rectangle railBounds = GetRailBounds();
             DrawHueRail(e.Graphics, railBounds);
             DrawSelectionOverlay(e.Graphics, railBounds);
-            DrawThumb(e.Graphics, railBounds, hueStart, true, Focused || dragTarget == DragTarget.Start);
-            DrawThumb(e.Graphics, railBounds, hueEnd, false, Focused || dragTarget == DragTarget.End);
+            DrawThumb(e.Graphics, railBounds, hueStart, Focused || dragTarget == DragTarget.Start);
+            DrawThumb(e.Graphics, railBounds, hueEnd, Focused || dragTarget == DragTarget.End);
         }
 
         protected override void OnMouseDown(MouseEventArgs e)
@@ -93,8 +101,8 @@ namespace Visualedizer
             Focus();
 
             Rectangle railBounds = GetRailBounds();
-            Rectangle startThumbBounds = GetThumbBounds(railBounds, hueStart, true);
-            Rectangle endThumbBounds = GetThumbBounds(railBounds, hueEnd, false);
+            Rectangle startThumbBounds = GetThumbBounds(railBounds, hueStart);
+            Rectangle endThumbBounds = GetThumbBounds(railBounds, hueEnd);
 
             dragTarget = ResolveDragTarget(e.Location, startThumbBounds, endThumbBounds, railBounds);
             UpdateFromPointer(e.Location.X, raiseEvent: true);
@@ -150,10 +158,12 @@ namespace Visualedizer
 
             if ((ModifierKeys & Keys.Shift) == Keys.Shift)
             {
+                lastEditedTarget = DragTarget.End;
                 SetHueRange(hueStart, hueEnd + delta, true);
             }
             else
             {
+                lastEditedTarget = DragTarget.Start;
                 SetHueRange(hueStart + delta, hueEnd, true);
             }
 
@@ -178,9 +188,11 @@ namespace Visualedizer
             switch (dragTarget)
             {
                 case DragTarget.Start:
+                    lastEditedTarget = DragTarget.Start;
                     SetHueRange(hue, hueEnd, raiseEvent);
                     break;
                 case DragTarget.End:
+                    lastEditedTarget = DragTarget.End;
                     SetHueRange(hueStart, hue, raiseEvent);
                     break;
             }
@@ -209,12 +221,10 @@ namespace Visualedizer
             return new Rectangle(x, y, width, RailHeight);
         }
 
-        private Rectangle GetThumbBounds(Rectangle railBounds, int hue, bool alignLeft)
+        private Rectangle GetThumbBounds(Rectangle railBounds, int hue)
         {
             int centerX = HueToPosition(railBounds, hue);
-            int x = alignLeft ? centerX - ThumbWidth : centerX;
-            int y = railBounds.Top + (railBounds.Height - ThumbHeight) / 2;
-            return new Rectangle(x, y, ThumbWidth, ThumbHeight);
+            return new Rectangle(centerX - (ThumbWidth / 2), railBounds.Top + (railBounds.Height - ThumbHeight) / 2, ThumbWidth, ThumbHeight);
         }
 
         private int HueToPosition(Rectangle railBounds, int hue)
@@ -257,7 +267,7 @@ namespace Visualedizer
 
             if (!railBounds.Contains(location))
             {
-                return Math.Abs(location.X - startThumbBounds.Left) <= Math.Abs(location.X - endThumbBounds.Right)
+                return Math.Abs(location.X - (startThumbBounds.Left + startThumbBounds.Width / 2)) <= Math.Abs(location.X - (endThumbBounds.Left + endThumbBounds.Width / 2))
                     ? DragTarget.Start
                     : DragTarget.End;
             }
@@ -304,9 +314,9 @@ namespace Visualedizer
             graphics.DrawRectangle(selectionPen, selectionBounds);
         }
 
-        private void DrawThumb(Graphics graphics, Rectangle railBounds, int hue, bool alignLeft, bool emphasize)
+        private void DrawThumb(Graphics graphics, Rectangle railBounds, int hue, bool emphasize)
         {
-            Rectangle thumbBounds = GetThumbBounds(railBounds, hue, alignLeft);
+            Rectangle thumbBounds = GetThumbBounds(railBounds, hue);
             using GraphicsPath path = CreateThumbPath(thumbBounds);
             using Brush fillBrush = new SolidBrush(emphasize ? Color.White : Color.FromArgb(245, 245, 245));
             using Pen borderPen = new(Color.FromArgb(60, 60, 60));

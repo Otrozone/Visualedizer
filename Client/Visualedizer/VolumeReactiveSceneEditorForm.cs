@@ -23,8 +23,8 @@ namespace Ledqualizer
             TopLevel = false;
             Dock = DockStyle.Fill;
             rotateModes = new[] { rbModeColorPush, rbModeEndToStart, rbModeMidToOut, rbModeMidToOutPoint, rbModeStartToEnd };
-            ucHueMinMax.ValueChanged += ControlValueChanged;
-            ucHueBg.ValueChanged += ControlValueChanged;
+            ucColorRange.ValueChanged += ControlValueChanged;
+            ucBackgroundSettings.ValueChanged += ControlValueChanged;
         }
 
         public void LoadAudioDevices(string? selectedDeviceId)
@@ -76,16 +76,20 @@ namespace Ledqualizer
                 SelectMode(config.Mode);
                 chbRotate.Checked = config.RotateModes;
                 trackBarRotate.Value = Math.Max(trackBarRotate.Minimum, Math.Min(trackBarRotate.Maximum, config.RotateIntervalSeconds));
-                trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, config.Brightness));
+                ucColorRange.Brightness = config.Brightness;
+                ucColorRange.Saturation = config.Saturation;
                 trackBarNormalizationLevel.Value = Math.Max(trackBarNormalizationLevel.Minimum, Math.Min(trackBarNormalizationLevel.Maximum, config.Normalization));
-                ucHueMinMax.HueStart = (int)Math.Round(config.HueMin);
-                ucHueMinMax.HueEnd = (int)Math.Round(config.HueMax);
+                ucColorRange.HueStart = (int)Math.Round(config.HueMin);
+                ucColorRange.HueEnd = (int)Math.Round(config.HueMax);
                 chbReverse.Checked = config.Reverse;
                 chbHueReverse.Checked = config.HueReverse;
                 chbWhite.Checked = config.White;
-                chbBgWhite.Checked = config.BackgroundWhite;
-                ucHueBg.Hue = (int)Math.Round(config.BackgroundHue);
-                trackBarBgBrightness.Value = Math.Max(trackBarBgBrightness.Minimum, Math.Min(trackBarBgBrightness.Maximum, config.BackgroundBrightness));
+                chbBackgroundEnabled.Checked = config.BackgroundBrightness > 0;
+                ucBackgroundSettings.Hue = (int)Math.Round(config.BackgroundHue);
+                ucBackgroundSettings.Saturation = config.BackgroundWhite
+                    ? 0
+                    : (config.BackgroundSaturation >= 0 ? config.BackgroundSaturation : config.Saturation);
+                ucBackgroundSettings.Brightness = Math.Max(0, config.BackgroundBrightness > 0 ? config.BackgroundBrightness : 25);
                 timerRotate.Interval = trackBarRotate.Value * 1000;
                 timerRotate.Enabled = chbRotate.Checked;
             }
@@ -128,18 +132,26 @@ namespace Ledqualizer
             config.Mode = GetSelectedMode();
             config.RotateModes = chbRotate.Checked;
             config.RotateIntervalSeconds = trackBarRotate.Value;
-            config.Brightness = trackBarBrightness.Value;
+            config.Brightness = ucColorRange.Brightness;
+            config.Saturation = ucColorRange.Saturation;
             config.Normalization = trackBarNormalizationLevel.Value;
-            config.HueMin = ucHueMinMax.HueStart;
-            config.HueMax = ucHueMinMax.HueEnd;
+            config.HueMin = ucColorRange.HueStart;
+            config.HueMax = ucColorRange.HueEnd;
             config.Reverse = chbReverse.Checked;
             config.HueReverse = chbHueReverse.Checked;
             config.White = chbWhite.Checked;
-            config.BackgroundWhite = chbBgWhite.Checked;
-            config.BackgroundHue = ucHueBg.Hue;
-            config.BackgroundBrightness = trackBarBgBrightness.Value;
+            config.BackgroundWhite = chbBackgroundEnabled.Checked && ucBackgroundSettings.Saturation == 0;
+            config.BackgroundHue = ucBackgroundSettings.Hue;
+            config.BackgroundSaturation = ucBackgroundSettings.Saturation;
+            config.BackgroundBrightness = chbBackgroundEnabled.Checked ? ucBackgroundSettings.Brightness : 0;
             timerRotate.Interval = trackBarRotate.Value * 1000;
             SceneChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void chbBackgroundEnabled_CheckedChanged(object? sender, EventArgs e)
+        {
+            pnlBackgroundSettings.Enabled = chbBackgroundEnabled.Checked;
+            ControlValueChanged(sender, e);
         }
 
         private AcVolume.AudioCaptureVolumeMode GetSelectedMode()

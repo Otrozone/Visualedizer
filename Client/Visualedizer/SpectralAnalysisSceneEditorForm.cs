@@ -20,13 +20,13 @@ namespace Ledqualizer
             FormBorderStyle = FormBorderStyle.None;
             TopLevel = false;
             Dock = DockStyle.Fill;
-            ucHueMinMax.ValueChanged += ControlValueChanged;
-            ucHueBg.ValueChanged += ControlValueChanged;
+            ucPrimaryColor.ValueChanged += ControlValueChanged;
+            ucBackgroundSettings.ValueChanged += ControlValueChanged;
         }
 
         public void LoadAudioDevices(string? selectedDeviceId)
         {
-            AcVolume.LoadAudioDevicesToComboBox(cbAudioDevices);
+            AcVolume.LoadAudioDevicesToComboBox(cmbAudioDevices);
             SelectAudioDevice(selectedDeviceId);
         }
 
@@ -37,11 +37,11 @@ namespace Ledqualizer
                 return;
             }
 
-            for (int i = 0; i < cbAudioDevices.Items.Count; i++)
+            for (int i = 0; i < cmbAudioDevices.Items.Count; i++)
             {
-                if (cbAudioDevices.Items[i] is DeviceDescriptor descriptor && string.Equals(descriptor.DeviceId, deviceId, StringComparison.Ordinal))
+                if (cmbAudioDevices.Items[i] is DeviceDescriptor descriptor && string.Equals(descriptor.DeviceId, deviceId, StringComparison.Ordinal))
                 {
-                    cbAudioDevices.SelectedIndex = i;
+                    cmbAudioDevices.SelectedIndex = i;
                     return;
                 }
             }
@@ -49,7 +49,7 @@ namespace Ledqualizer
 
         public string? GetSelectedAudioDeviceId()
         {
-            return (cbAudioDevices.SelectedItem as DeviceDescriptor)?.DeviceId;
+            return (cmbAudioDevices.SelectedItem as DeviceDescriptor)?.DeviceId;
         }
 
         public void UpdateProgress(int value)
@@ -60,7 +60,7 @@ namespace Ledqualizer
                 return;
             }
 
-            progressBar.Value = Math.Max(progressBar.Minimum, Math.Min(progressBar.Maximum, value));
+            prgAudioLevel.Value = Math.Max(prgAudioLevel.Minimum, Math.Min(prgAudioLevel.Maximum, value));
         }
 
         public void LoadScene(SceneConfig scene)
@@ -71,24 +71,28 @@ namespace Ledqualizer
             {
                 SpectralAnalysisSceneConfig config = scene.SpectralAnalysis;
                 SelectMode(config.Mode);
-                trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, config.Brightness));
-                trackBarNormalizationLevel.Value = Math.Max(trackBarNormalizationLevel.Minimum, Math.Min(trackBarNormalizationLevel.Maximum, config.Normalization));
-                ucHueMinMax.HueStart = (int)Math.Round(config.HueMin);
-                ucHueMinMax.HueEnd = (int)Math.Round(config.HueMax);
-                chbReverse.Checked = config.Reverse;
-                chbHueReverse.Checked = config.HueReverse;
-                chbWhite.Checked = config.White;
-                chbBgWhite.Checked = config.BackgroundWhite;
-                ucHueBg.Hue = (int)Math.Round(config.BackgroundHue);
-                trackBarBgBrightness.Value = Math.Max(trackBarBgBrightness.Minimum, Math.Min(trackBarBgBrightness.Maximum, config.BackgroundBrightness));
-                trackBarFrequencyLow.Value = ClampTrackBar(trackBarFrequencyLow, (int)Math.Round(config.FrequencyLowHz));
-                trackBarFrequencyHigh.Value = ClampTrackBar(trackBarFrequencyHigh, (int)Math.Round(config.FrequencyHighHz));
-                trackBarLevelLow.Value = ClampTrackBar(trackBarLevelLow, (int)Math.Round(config.LevelLowDb));
-                trackBarLevelHigh.Value = ClampTrackBar(trackBarLevelHigh, (int)Math.Round(config.LevelHighDb));
-                SyncNumericWithTrackBar(numFrequencyLow, trackBarFrequencyLow);
-                SyncNumericWithTrackBar(numFrequencyHigh, trackBarFrequencyHigh);
-                SyncNumericWithTrackBar(numLevelLow, trackBarLevelLow);
-                SyncNumericWithTrackBar(numLevelHigh, trackBarLevelHigh);
+                ucPrimaryColor.Brightness = config.Brightness;
+                ucPrimaryColor.Saturation = config.Saturation;
+                trkNormalizationLevel.Value = Math.Max(trkNormalizationLevel.Minimum, Math.Min(trkNormalizationLevel.Maximum, config.Normalization));
+                ucPrimaryColor.HueStart = (int)Math.Round(config.HueMin);
+                ucPrimaryColor.HueEnd = (int)Math.Round(config.HueMax);
+                chkReverseOutput.Checked = config.Reverse;
+                chkReverseHue.Checked = config.HueReverse;
+                chkWhiteCenter.Checked = config.White;
+                chkBackgroundEnabled.Checked = config.BackgroundBrightness > 0;
+                ucBackgroundSettings.Hue = (int)Math.Round(config.BackgroundHue);
+                ucBackgroundSettings.Saturation = config.BackgroundWhite
+                    ? 0
+                    : (config.BackgroundSaturation >= 0 ? config.BackgroundSaturation : config.Saturation);
+                ucBackgroundSettings.Brightness = Math.Max(0, config.BackgroundBrightness > 0 ? config.BackgroundBrightness : 25);
+                trkLowFrequency.Value = ClampTrackBar(trkLowFrequency, (int)Math.Round(config.FrequencyLowHz));
+                trkHighFrequency.Value = ClampTrackBar(trkHighFrequency, (int)Math.Round(config.FrequencyHighHz));
+                trkLowLevel.Value = ClampTrackBar(trkLowLevel, (int)Math.Round(config.LevelLowDb));
+                trkHighLevel.Value = ClampTrackBar(trkHighLevel, (int)Math.Round(config.LevelHighDb));
+                SyncNumericWithTrackBar(nudLowFrequency, trkLowFrequency);
+                SyncNumericWithTrackBar(nudHighFrequency, trkHighFrequency);
+                SyncNumericWithTrackBar(nudLowLevel, trkLowLevel);
+                SyncNumericWithTrackBar(nudHighLevel, trkHighLevel);
             }
             finally
             {
@@ -110,21 +114,29 @@ namespace Ledqualizer
 
             SpectralAnalysisSceneConfig config = CurrentScene.SpectralAnalysis;
             config.Mode = GetSelectedMode();
-            config.Brightness = trackBarBrightness.Value;
-            config.Normalization = trackBarNormalizationLevel.Value;
-            config.HueMin = ucHueMinMax.HueStart;
-            config.HueMax = ucHueMinMax.HueEnd;
-            config.Reverse = chbReverse.Checked;
-            config.HueReverse = chbHueReverse.Checked;
-            config.White = chbWhite.Checked;
-            config.BackgroundWhite = chbBgWhite.Checked;
-            config.BackgroundHue = ucHueBg.Hue;
-            config.BackgroundBrightness = trackBarBgBrightness.Value;
-            config.FrequencyLowHz = trackBarFrequencyLow.Value;
-            config.FrequencyHighHz = trackBarFrequencyHigh.Value;
-            config.LevelLowDb = trackBarLevelLow.Value;
-            config.LevelHighDb = trackBarLevelHigh.Value;
+            config.Brightness = ucPrimaryColor.Brightness;
+            config.Saturation = ucPrimaryColor.Saturation;
+            config.Normalization = trkNormalizationLevel.Value;
+            config.HueMin = ucPrimaryColor.HueStart;
+            config.HueMax = ucPrimaryColor.HueEnd;
+            config.Reverse = chkReverseOutput.Checked;
+            config.HueReverse = chkReverseHue.Checked;
+            config.White = chkWhiteCenter.Checked;
+            config.BackgroundWhite = chkBackgroundEnabled.Checked && ucBackgroundSettings.Saturation == 0;
+            config.BackgroundHue = ucBackgroundSettings.Hue;
+            config.BackgroundSaturation = ucBackgroundSettings.Saturation;
+            config.BackgroundBrightness = chkBackgroundEnabled.Checked ? ucBackgroundSettings.Brightness : 0;
+            config.FrequencyLowHz = trkLowFrequency.Value;
+            config.FrequencyHighHz = trkHighFrequency.Value;
+            config.LevelLowDb = trkLowLevel.Value;
+            config.LevelHighDb = trkHighLevel.Value;
             SceneChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void chkBackgroundEnabled_CheckedChanged(object? sender, EventArgs e)
+        {
+            pnlBackgroundSettings.Enabled = chkBackgroundEnabled.Checked;
+            ControlValueChanged(sender, e);
         }
 
         private static int ClampTrackBar(TrackBar trackBar, int value)
@@ -134,49 +146,49 @@ namespace Ledqualizer
 
         private void trackBarFrequencyLow_ValueChanged(object? sender, EventArgs e)
         {
-            SyncNumericWithTrackBar(numFrequencyLow, trackBarFrequencyLow);
+            SyncNumericWithTrackBar(nudLowFrequency, trkLowFrequency);
             ControlValueChanged(sender, e);
         }
 
         private void trackBarFrequencyHigh_ValueChanged(object? sender, EventArgs e)
         {
-            SyncNumericWithTrackBar(numFrequencyHigh, trackBarFrequencyHigh);
+            SyncNumericWithTrackBar(nudHighFrequency, trkHighFrequency);
             ControlValueChanged(sender, e);
         }
 
         private void trackBarLevelLow_ValueChanged(object? sender, EventArgs e)
         {
-            SyncNumericWithTrackBar(numLevelLow, trackBarLevelLow);
+            SyncNumericWithTrackBar(nudLowLevel, trkLowLevel);
             ControlValueChanged(sender, e);
         }
 
         private void trackBarLevelHigh_ValueChanged(object? sender, EventArgs e)
         {
-            SyncNumericWithTrackBar(numLevelHigh, trackBarLevelHigh);
+            SyncNumericWithTrackBar(nudHighLevel, trkHighLevel);
             ControlValueChanged(sender, e);
         }
 
         private void numFrequencyLow_ValueChanged(object? sender, EventArgs e)
         {
-            SyncTrackBarWithNumeric(trackBarFrequencyLow, numFrequencyLow);
+            SyncTrackBarWithNumeric(trkLowFrequency, nudLowFrequency);
             ControlValueChanged(sender, e);
         }
 
         private void numFrequencyHigh_ValueChanged(object? sender, EventArgs e)
         {
-            SyncTrackBarWithNumeric(trackBarFrequencyHigh, numFrequencyHigh);
+            SyncTrackBarWithNumeric(trkHighFrequency, nudHighFrequency);
             ControlValueChanged(sender, e);
         }
 
         private void numLevelLow_ValueChanged(object? sender, EventArgs e)
         {
-            SyncTrackBarWithNumeric(trackBarLevelLow, numLevelLow);
+            SyncTrackBarWithNumeric(trkLowLevel, nudLowLevel);
             ControlValueChanged(sender, e);
         }
 
         private void numLevelHigh_ValueChanged(object? sender, EventArgs e)
         {
-            SyncTrackBarWithNumeric(trackBarLevelHigh, numLevelHigh);
+            SyncTrackBarWithNumeric(trkHighLevel, nudHighLevel);
             ControlValueChanged(sender, e);
         }
 
@@ -200,27 +212,27 @@ namespace Ledqualizer
 
         private AcVolume.AudioCaptureVolumeMode GetSelectedMode()
         {
-            if (rbModeEndToStart.Checked)
+            if (rdoEndToStartMode.Checked)
             {
                 return AcVolume.AudioCaptureVolumeMode.ModeEndToStart;
             }
 
-            if (rbModeMidToOut.Checked)
+            if (rdoCenterOutMode.Checked)
             {
                 return AcVolume.AudioCaptureVolumeMode.ModeMidToOut;
             }
 
-            if (rbModeColorPush.Checked)
+            if (rdoColorPushMode.Checked)
             {
                 return AcVolume.AudioCaptureVolumeMode.ModeColorPush;
             }
 
-            if (rbModeMidToOutPoint.Checked)
+            if (rdoCenterPointMode.Checked)
             {
                 return AcVolume.AudioCaptureVolumeMode.ModeMidToOut_Point;
             }
 
-            if (rbBrightness.Checked)
+            if (rdoBrightnessMode.Checked)
             {
                 return AcVolume.AudioCaptureVolumeMode.ModeBrightness;
             }
@@ -230,12 +242,12 @@ namespace Ledqualizer
 
         private void SelectMode(AcVolume.AudioCaptureVolumeMode mode)
         {
-            rbModeStartToEnd.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeStartToEnd;
-            rbModeEndToStart.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeEndToStart;
-            rbModeMidToOut.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeMidToOut;
-            rbModeColorPush.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeColorPush;
-            rbModeMidToOutPoint.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeMidToOut_Point;
-            rbBrightness.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeBrightness;
+            rdoStartToEndMode.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeStartToEnd;
+            rdoEndToStartMode.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeEndToStart;
+            rdoCenterOutMode.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeMidToOut;
+            rdoColorPushMode.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeColorPush;
+            rdoCenterPointMode.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeMidToOut_Point;
+            rdoBrightnessMode.Checked = mode == AcVolume.AudioCaptureVolumeMode.ModeBrightness;
         }
     }
 }

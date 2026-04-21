@@ -14,21 +14,16 @@ namespace Ledqualizer
         private RadioButton rbBrightness;
         private CheckBox chbRotate;
         private TrackBar trackBarRotate;
-        private Label lblBrightness;
-        private TrackBar trackBarBrightness;
+        private Label lblColorRange;
         private Label lblNormalization;
         private TrackBar trackBarNormalizationLevel;
-        private Label lblHueRange;
-        private Visualedizer.UcHueMinMax ucHueMinMax;
+        private Visualedizer.UcHueRangeSaturationBrightness ucColorRange;
         private CheckBox chbReverse;
         private CheckBox chbHueReverse;
         private CheckBox chbWhite;
-        private GroupBox gbBackground;
-        private CheckBox chbBgWhite;
-        private Label lblBgHue;
-        private Visualedizer.UcHue ucHueBg;
-        private Label lblBgBrightness;
-        private TrackBar trackBarBgBrightness;
+        private CheckBox chbBackgroundEnabled;
+        private Panel pnlBackgroundSettings;
+        private Visualedizer.UcHueSaturationBrightness ucBackgroundSettings;
         private ProgressBar progressBar;
         private System.Windows.Forms.Timer timerRotate;
 
@@ -56,29 +51,22 @@ namespace Ledqualizer
             rbModeStartToEnd = new RadioButton();
             chbRotate = new CheckBox();
             trackBarRotate = new TrackBar();
-            lblBrightness = new Label();
-            trackBarBrightness = new TrackBar();
+            lblColorRange = new Label();
             lblNormalization = new Label();
             trackBarNormalizationLevel = new TrackBar();
-            lblHueRange = new Label();
-            ucHueMinMax = new Visualedizer.UcHueMinMax();
+            ucColorRange = new Visualedizer.UcHueRangeSaturationBrightness();
             chbReverse = new CheckBox();
             chbHueReverse = new CheckBox();
             chbWhite = new CheckBox();
-            gbBackground = new GroupBox();
-            chbBgWhite = new CheckBox();
-            lblBgHue = new Label();
-            ucHueBg = new Visualedizer.UcHue();
-            lblBgBrightness = new Label();
-            trackBarBgBrightness = new TrackBar();
+            chbBackgroundEnabled = new CheckBox();
+            pnlBackgroundSettings = new Panel();
+            ucBackgroundSettings = new Visualedizer.UcHueSaturationBrightness();
             progressBar = new ProgressBar();
             timerRotate = new System.Windows.Forms.Timer(components);
             gbModes.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trackBarRotate).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarBrightness).BeginInit();
             ((System.ComponentModel.ISupportInitialize)trackBarNormalizationLevel).BeginInit();
-            gbBackground.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)trackBarBgBrightness).BeginInit();
+            pnlBackgroundSettings.SuspendLayout();
             SuspendLayout();
             // 
             // lblAudioDevice
@@ -120,7 +108,7 @@ namespace Ledqualizer
             rbBrightness.AutoSize = true;
             rbBrightness.Location = new Point(520, 24);
             rbBrightness.Name = "rbBrightness";
-            rbBrightness.Size = new Size(79, 19);
+            rbBrightness.Size = new Size(80, 19);
             rbBrightness.TabIndex = 5;
             rbBrightness.TabStop = true;
             rbBrightness.Text = "Brightness";
@@ -132,7 +120,7 @@ namespace Ledqualizer
             rbModeColorPush.AutoSize = true;
             rbModeColorPush.Location = new Point(420, 24);
             rbModeColorPush.Name = "rbModeColorPush";
-            rbModeColorPush.Size = new Size(79, 19);
+            rbModeColorPush.Size = new Size(83, 19);
             rbModeColorPush.TabIndex = 4;
             rbModeColorPush.TabStop = true;
             rbModeColorPush.Text = "Color push";
@@ -144,7 +132,7 @@ namespace Ledqualizer
             rbModeMidToOutPoint.AutoSize = true;
             rbModeMidToOutPoint.Location = new Point(314, 24);
             rbModeMidToOutPoint.Name = "rbModeMidToOutPoint";
-            rbModeMidToOutPoint.Size = new Size(89, 19);
+            rbModeMidToOutPoint.Size = new Size(91, 19);
             rbModeMidToOutPoint.TabIndex = 3;
             rbModeMidToOutPoint.TabStop = true;
             rbModeMidToOutPoint.Text = "Center point";
@@ -156,7 +144,7 @@ namespace Ledqualizer
             rbModeMidToOut.AutoSize = true;
             rbModeMidToOut.Location = new Point(216, 24);
             rbModeMidToOut.Name = "rbModeMidToOut";
-            rbModeMidToOut.Size = new Size(78, 19);
+            rbModeMidToOut.Size = new Size(81, 19);
             rbModeMidToOut.TabIndex = 2;
             rbModeMidToOut.TabStop = true;
             rbModeMidToOut.Text = "Center out";
@@ -168,7 +156,7 @@ namespace Ledqualizer
             rbModeEndToStart.AutoSize = true;
             rbModeEndToStart.Location = new Point(114, 24);
             rbModeEndToStart.Name = "rbModeEndToStart";
-            rbModeEndToStart.Size = new Size(84, 19);
+            rbModeEndToStart.Size = new Size(85, 19);
             rbModeEndToStart.TabIndex = 1;
             rbModeEndToStart.TabStop = true;
             rbModeEndToStart.Text = "End to start";
@@ -180,7 +168,7 @@ namespace Ledqualizer
             rbModeStartToEnd.AutoSize = true;
             rbModeStartToEnd.Location = new Point(12, 24);
             rbModeStartToEnd.Name = "rbModeStartToEnd";
-            rbModeStartToEnd.Size = new Size(81, 19);
+            rbModeStartToEnd.Size = new Size(86, 19);
             rbModeStartToEnd.TabIndex = 0;
             rbModeStartToEnd.TabStop = true;
             rbModeStartToEnd.Text = "Start to end";
@@ -192,7 +180,7 @@ namespace Ledqualizer
             chbRotate.AutoSize = true;
             chbRotate.Location = new Point(12, 124);
             chbRotate.Name = "chbRotate";
-            chbRotate.Size = new Size(94, 19);
+            chbRotate.Size = new Size(99, 19);
             chbRotate.TabIndex = 3;
             chbRotate.Text = "Rotate modes";
             chbRotate.UseVisualStyleBackColor = true;
@@ -205,70 +193,52 @@ namespace Ledqualizer
             trackBarRotate.Maximum = 60;
             trackBarRotate.Minimum = 1;
             trackBarRotate.Name = "trackBarRotate";
-            trackBarRotate.Size = new Size(518, 36);
+            trackBarRotate.Size = new Size(518, 45);
             trackBarRotate.TabIndex = 4;
             trackBarRotate.Value = 20;
             trackBarRotate.ValueChanged += ControlValueChanged;
             // 
-            // lblBrightness
+            // lblColorRange
             // 
-            lblBrightness.AutoSize = true;
-            lblBrightness.Location = new Point(12, 154);
-            lblBrightness.Name = "lblBrightness";
-            lblBrightness.Size = new Size(62, 15);
-            lblBrightness.TabIndex = 5;
-            lblBrightness.Text = "Brightness";
+            lblColorRange.AutoSize = true;
+            lblColorRange.Location = new Point(12, 154);
+            lblColorRange.Name = "lblColorRange";
+            lblColorRange.Size = new Size(36, 15);
+            lblColorRange.TabIndex = 5;
+            lblColorRange.Text = "Color";
             // 
-            // trackBarBrightness
+            // ucColorRange
             // 
-            trackBarBrightness.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarBrightness.Location = new Point(12, 170);
-            trackBarBrightness.Maximum = 100;
-            trackBarBrightness.Name = "trackBarBrightness";
-            trackBarBrightness.Size = new Size(626, 36);
-            trackBarBrightness.TabIndex = 6;
-            trackBarBrightness.Value = 100;
-            trackBarBrightness.ValueChanged += ControlValueChanged;
+            ucColorRange.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            ucColorRange.Brightness = 100;
+            ucColorRange.HueEnd = 360;
+            ucColorRange.HueStart = 0;
+            ucColorRange.Location = new Point(12, 170);
+            ucColorRange.Name = "ucColorRange";
+            ucColorRange.Saturation = 100;
+            ucColorRange.Size = new Size(626, 84);
+            ucColorRange.TabIndex = 6;
             // 
             // lblNormalization
             // 
             lblNormalization.AutoSize = true;
-            lblNormalization.Location = new Point(12, 206);
+            lblNormalization.Location = new Point(12, 258);
             lblNormalization.Name = "lblNormalization";
-            lblNormalization.Size = new Size(114, 15);
+            lblNormalization.Size = new Size(109, 15);
             lblNormalization.TabIndex = 7;
             lblNormalization.Text = "Normalization level";
             // 
             // trackBarNormalizationLevel
             // 
             trackBarNormalizationLevel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarNormalizationLevel.Location = new Point(12, 222);
+            trackBarNormalizationLevel.Location = new Point(12, 274);
             trackBarNormalizationLevel.Maximum = 30;
             trackBarNormalizationLevel.Minimum = 1;
             trackBarNormalizationLevel.Name = "trackBarNormalizationLevel";
-            trackBarNormalizationLevel.Size = new Size(626, 36);
+            trackBarNormalizationLevel.Size = new Size(626, 45);
             trackBarNormalizationLevel.TabIndex = 8;
             trackBarNormalizationLevel.Value = 10;
             trackBarNormalizationLevel.ValueChanged += ControlValueChanged;
-            // 
-            // lblHueRange
-            // 
-            lblHueRange.AutoSize = true;
-            lblHueRange.Location = new Point(12, 258);
-            lblHueRange.Name = "lblHueRange";
-            lblHueRange.Size = new Size(59, 15);
-            lblHueRange.TabIndex = 9;
-            lblHueRange.Text = "Hue range";
-            // 
-            // ucHueMinMax
-            // 
-            ucHueMinMax.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            ucHueMinMax.HueEnd = 360;
-            ucHueMinMax.HueStart = 0;
-            ucHueMinMax.Location = new Point(12, 274);
-            ucHueMinMax.Name = "ucHueMinMax";
-            ucHueMinMax.Size = new Size(626, 52);
-            ucHueMinMax.TabIndex = 10;
             // 
             // chbReverse
             // 
@@ -286,7 +256,7 @@ namespace Ledqualizer
             chbHueReverse.AutoSize = true;
             chbHueReverse.Location = new Point(130, 330);
             chbHueReverse.Name = "chbHueReverse";
-            chbHueReverse.Size = new Size(90, 19);
+            chbHueReverse.Size = new Size(89, 19);
             chbHueReverse.TabIndex = 12;
             chbHueReverse.Text = "Reverse hue";
             chbHueReverse.UseVisualStyleBackColor = true;
@@ -297,83 +267,49 @@ namespace Ledqualizer
             chbWhite.AutoSize = true;
             chbWhite.Location = new Point(238, 330);
             chbWhite.Name = "chbWhite";
-            chbWhite.Size = new Size(95, 19);
+            chbWhite.Size = new Size(93, 19);
             chbWhite.TabIndex = 13;
             chbWhite.Text = "White center";
             chbWhite.UseVisualStyleBackColor = true;
             chbWhite.CheckedChanged += ControlValueChanged;
             // 
-            // gbBackground
+            // chbBackgroundEnabled
             // 
-            gbBackground.Controls.Add(chbBgWhite);
-            gbBackground.Controls.Add(lblBgHue);
-            gbBackground.Controls.Add(ucHueBg);
-            gbBackground.Controls.Add(lblBgBrightness);
-            gbBackground.Controls.Add(trackBarBgBrightness);
-            gbBackground.Location = new Point(12, 356);
-            gbBackground.Name = "gbBackground";
-            gbBackground.Size = new Size(626, 118);
-            gbBackground.TabIndex = 14;
-            gbBackground.TabStop = false;
-            gbBackground.Text = "Background";
+            chbBackgroundEnabled.AutoSize = true;
+            chbBackgroundEnabled.Location = new Point(12, 356);
+            chbBackgroundEnabled.Name = "chbBackgroundEnabled";
+            chbBackgroundEnabled.Size = new Size(118, 19);
+            chbBackgroundEnabled.TabIndex = 14;
+            chbBackgroundEnabled.Text = "Background color";
+            chbBackgroundEnabled.UseVisualStyleBackColor = true;
+            chbBackgroundEnabled.CheckedChanged += chbBackgroundEnabled_CheckedChanged;
             // 
-            // chbBgWhite
+            // pnlBackgroundSettings
             // 
-            chbBgWhite.AutoSize = true;
-            chbBgWhite.Location = new Point(12, 86);
-            chbBgWhite.Name = "chbBgWhite";
-            chbBgWhite.Size = new Size(102, 19);
-            chbBgWhite.TabIndex = 4;
-            chbBgWhite.Text = "White instead";
-            chbBgWhite.UseVisualStyleBackColor = true;
-            chbBgWhite.CheckedChanged += ControlValueChanged;
+            pnlBackgroundSettings.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            pnlBackgroundSettings.Controls.Add(ucBackgroundSettings);
+            pnlBackgroundSettings.Location = new Point(12, 381);
+            pnlBackgroundSettings.Name = "pnlBackgroundSettings";
+            pnlBackgroundSettings.Size = new Size(626, 84);
+            pnlBackgroundSettings.TabIndex = 15;
             // 
-            // lblBgHue
+            // ucBackgroundSettings
             // 
-            lblBgHue.AutoSize = true;
-            lblBgHue.Location = new Point(12, 18);
-            lblBgHue.Name = "lblBgHue";
-            lblBgHue.Size = new Size(29, 15);
-            lblBgHue.TabIndex = 0;
-            lblBgHue.Text = "Hue";
-            // 
-            // ucHueBg
-            // 
-            ucHueBg.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            ucHueBg.Hue = 0;
-            ucHueBg.Location = new Point(12, 30);
-            ucHueBg.MaxVal = 360;
-            ucHueBg.MinVal = 0;
-            ucHueBg.Name = "ucHueBg";
-            ucHueBg.Size = new Size(598, 42);
-            ucHueBg.TabIndex = 1;
-            // 
-            // lblBgBrightness
-            // 
-            lblBgBrightness.AutoSize = true;
-            lblBgBrightness.Location = new Point(128, 87);
-            lblBgBrightness.Name = "lblBgBrightness";
-            lblBgBrightness.Size = new Size(62, 15);
-            lblBgBrightness.TabIndex = 2;
-            lblBgBrightness.Text = "Brightness";
-            // 
-            // trackBarBgBrightness
-            // 
-            trackBarBgBrightness.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarBgBrightness.Location = new Point(194, 76);
-            trackBarBgBrightness.Maximum = 100;
-            trackBarBgBrightness.Name = "trackBarBgBrightness";
-            trackBarBgBrightness.Size = new Size(416, 36);
-            trackBarBgBrightness.TabIndex = 3;
-            trackBarBgBrightness.ValueChanged += ControlValueChanged;
+            ucBackgroundSettings.Dock = DockStyle.Fill;
+            ucBackgroundSettings.Location = new Point(0, 0);
+            ucBackgroundSettings.Margin = new Padding(0);
+            ucBackgroundSettings.MinimumSize = new Size(120, 84);
+            ucBackgroundSettings.Name = "ucBackgroundSettings";
+            ucBackgroundSettings.Size = new Size(626, 84);
+            ucBackgroundSettings.TabIndex = 0;
             // 
             // progressBar
             // 
             progressBar.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            progressBar.Location = new Point(12, 482);
+            progressBar.Location = new Point(12, 473);
             progressBar.Name = "progressBar";
             progressBar.Size = new Size(626, 16);
-            progressBar.TabIndex = 15;
+            progressBar.TabIndex = 16;
             // 
             // timerRotate
             // 
@@ -385,18 +321,17 @@ namespace Ledqualizer
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             AutoScroll = true;
-            ClientSize = new Size(654, 515);
+            ClientSize = new Size(654, 506);
             Controls.Add(progressBar);
-            Controls.Add(gbBackground);
+            Controls.Add(pnlBackgroundSettings);
+            Controls.Add(chbBackgroundEnabled);
             Controls.Add(chbWhite);
             Controls.Add(chbHueReverse);
             Controls.Add(chbReverse);
-            Controls.Add(ucHueMinMax);
-            Controls.Add(lblHueRange);
+            Controls.Add(ucColorRange);
             Controls.Add(trackBarNormalizationLevel);
             Controls.Add(lblNormalization);
-            Controls.Add(trackBarBrightness);
-            Controls.Add(lblBrightness);
+            Controls.Add(lblColorRange);
             Controls.Add(trackBarRotate);
             Controls.Add(chbRotate);
             Controls.Add(gbModes);
@@ -407,11 +342,8 @@ namespace Ledqualizer
             gbModes.ResumeLayout(false);
             gbModes.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trackBarRotate).EndInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarBrightness).EndInit();
             ((System.ComponentModel.ISupportInitialize)trackBarNormalizationLevel).EndInit();
-            gbBackground.ResumeLayout(false);
-            gbBackground.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)trackBarBgBrightness).EndInit();
+            pnlBackgroundSettings.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
         }

@@ -77,12 +77,14 @@ namespace Ledqualizer
     {
         public AcVolume.AudioCaptureVolumeMode Mode { get; set; } = AcVolume.AudioCaptureVolumeMode.ModeStartToEnd;
         public int Brightness { get; set; } = 100;
+        public int Saturation { get; set; } = 100;
         public int Normalization { get; set; } = 10;
         public bool Reverse { get; set; }
         public bool HueReverse { get; set; }
         public bool White { get; set; }
         public bool BackgroundWhite { get; set; }
         public int BackgroundBrightness { get; set; }
+        public int BackgroundSaturation { get; set; } = -1;
         public double BackgroundHue { get; set; }
         public double HueMin { get; set; }
         public double HueMax { get; set; } = 360;
@@ -98,12 +100,14 @@ namespace Ledqualizer
             {
                 Mode = Mode,
                 Brightness = Brightness,
+                Saturation = Saturation,
                 Normalization = Normalization,
                 Reverse = Reverse,
                 HueReverse = HueReverse,
                 White = White,
                 BackgroundWhite = BackgroundWhite,
                 BackgroundBrightness = BackgroundBrightness,
+                BackgroundSaturation = BackgroundSaturation,
                 BackgroundHue = BackgroundHue,
                 HueMin = HueMin,
                 HueMax = HueMax,
@@ -126,12 +130,14 @@ namespace Ledqualizer
             {
                 Mode = Mode,
                 Brightness = Brightness,
+                Saturation = Saturation,
                 Normalization = Normalization,
                 Reverse = Reverse,
                 HueReverse = HueReverse,
                 White = White,
                 BackgroundWhite = BackgroundWhite,
                 BackgroundBrightness = BackgroundBrightness,
+                BackgroundSaturation = BackgroundSaturation,
                 BackgroundHue = BackgroundHue,
                 HueMin = HueMin,
                 HueMax = HueMax,
@@ -295,10 +301,10 @@ namespace Ledqualizer
             return scene.Type switch
             {
                 SceneType.SolidColor => $"Hue {scene.SolidColor.Hue:F0}, Sat {scene.SolidColor.Saturation}%, Bright {scene.SolidColor.Brightness}%",
-                SceneType.Gradient => $"Hue {scene.Gradient.HueMin:F0}-{scene.Gradient.HueMax:F0}, Bright {scene.Gradient.Brightness}%",
-                SceneType.VolumeReactive => $"Mode {scene.VolumeReactive.Mode}, Norm {scene.VolumeReactive.Normalization}",
+                SceneType.Gradient => $"Hue {scene.Gradient.HueMin:F0}-{scene.Gradient.HueMax:F0}, Sat {scene.Gradient.Saturation}%, Bright {scene.Gradient.Brightness}%",
+                SceneType.VolumeReactive => $"Mode {scene.VolumeReactive.Mode}, Sat {scene.VolumeReactive.Saturation}%, Norm {scene.VolumeReactive.Normalization}",
                 SceneType.ScreenRowCapture => $"Display {scene.ScreenRowCapture.MonitorIndex + 1}, Row {scene.ScreenRowCapture.CaptureY}" + (scene.ScreenRowCapture.Reverse ? ", Reversed" : string.Empty),
-                SceneType.SpectralAnalysis => $"{scene.SpectralAnalysis.FrequencyLowHz:F0}-{scene.SpectralAnalysis.FrequencyHighHz:F0} Hz",
+                SceneType.SpectralAnalysis => $"{scene.SpectralAnalysis.FrequencyLowHz:F0}-{scene.SpectralAnalysis.FrequencyHighHz:F0} Hz, Sat {scene.SpectralAnalysis.Saturation}%",
                 _ => string.Empty
             };
         }

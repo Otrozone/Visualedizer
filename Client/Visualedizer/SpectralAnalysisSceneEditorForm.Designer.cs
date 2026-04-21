@@ -4,42 +4,37 @@ namespace Ledqualizer
     {
         private System.ComponentModel.IContainer components = null;
         private Label lblAudioDevice;
-        private ComboBox cbAudioDevices;
-        private GroupBox gbModes;
-        private RadioButton rbBrightness;
-        private RadioButton rbModeColorPush;
-        private RadioButton rbModeMidToOutPoint;
-        private RadioButton rbModeMidToOut;
-        private RadioButton rbModeEndToStart;
-        private RadioButton rbModeStartToEnd;
-        private Label lblBrightness;
-        private TrackBar trackBarBrightness;
-        private Label lblNormalization;
-        private TrackBar trackBarNormalizationLevel;
-        private Label lblHueRange;
-        private Visualedizer.UcHueMinMax ucHueMinMax;
-        private CheckBox chbReverse;
-        private CheckBox chbHueReverse;
-        private CheckBox chbWhite;
-        private GroupBox gbBackground;
-        private CheckBox chbBgWhite;
-        private Label lblBgHue;
-        private Visualedizer.UcHue ucHueBg;
-        private Label lblBgBrightness;
-        private TrackBar trackBarBgBrightness;
-        private Label lblFrequencyLow;
-        private TrackBar trackBarFrequencyLow;
-        private NumericUpDown numFrequencyLow;
-        private Label lblFrequencyHigh;
-        private TrackBar trackBarFrequencyHigh;
-        private NumericUpDown numFrequencyHigh;
-        private Label lblLevelLow;
-        private TrackBar trackBarLevelLow;
-        private NumericUpDown numLevelLow;
-        private Label lblLevelHigh;
-        private TrackBar trackBarLevelHigh;
-        private NumericUpDown numLevelHigh;
-        private ProgressBar progressBar;
+        private ComboBox cmbAudioDevices;
+        private GroupBox grpResponseMode;
+        private RadioButton rdoBrightnessMode;
+        private RadioButton rdoColorPushMode;
+        private RadioButton rdoCenterPointMode;
+        private RadioButton rdoCenterOutMode;
+        private RadioButton rdoEndToStartMode;
+        private RadioButton rdoStartToEndMode;
+        private Label lblColorSettings;
+        private Label lblNormalizationLevel;
+        private TrackBar trkNormalizationLevel;
+        private Visualedizer.UcHueRangeSaturationBrightness ucPrimaryColor;
+        private CheckBox chkReverseOutput;
+        private CheckBox chkReverseHue;
+        private CheckBox chkWhiteCenter;
+        private CheckBox chkBackgroundEnabled;
+        private Panel pnlBackgroundSettings;
+        private Visualedizer.UcHueSaturationBrightness ucBackgroundSettings;
+        private Label lblLowFrequency;
+        private TrackBar trkLowFrequency;
+        private NumericUpDown nudLowFrequency;
+        private Label lblHighFrequency;
+        private TrackBar trkHighFrequency;
+        private NumericUpDown nudHighFrequency;
+        private Label lblLowLevel;
+        private TrackBar trkLowLevel;
+        private NumericUpDown nudLowLevel;
+        private Label lblHighLevel;
+        private TrackBar trkHighLevel;
+        private NumericUpDown nudHighLevel;
+        private ProgressBar prgAudioLevel;
 
         protected override void Dispose(bool disposing)
         {
@@ -54,55 +49,60 @@ namespace Ledqualizer
         private void InitializeComponent()
         {
             lblAudioDevice = new Label();
-            cbAudioDevices = new ComboBox();
-            gbModes = new GroupBox();
-            rbBrightness = new RadioButton();
-            rbModeColorPush = new RadioButton();
-            rbModeMidToOutPoint = new RadioButton();
-            rbModeMidToOut = new RadioButton();
-            rbModeEndToStart = new RadioButton();
-            rbModeStartToEnd = new RadioButton();
-            lblBrightness = new Label();
-            trackBarBrightness = new TrackBar();
-            lblNormalization = new Label();
-            trackBarNormalizationLevel = new TrackBar();
-            lblHueRange = new Label();
-            ucHueMinMax = new Visualedizer.UcHueMinMax();
-            chbReverse = new CheckBox();
-            chbHueReverse = new CheckBox();
-            chbWhite = new CheckBox();
-            gbBackground = new GroupBox();
-            chbBgWhite = new CheckBox();
-            lblBgHue = new Label();
-            ucHueBg = new Visualedizer.UcHue();
-            lblBgBrightness = new Label();
-            trackBarBgBrightness = new TrackBar();
-            lblFrequencyLow = new Label();
-            trackBarFrequencyLow = new TrackBar();
-            numFrequencyLow = new NumericUpDown();
-            lblFrequencyHigh = new Label();
-            trackBarFrequencyHigh = new TrackBar();
-            numFrequencyHigh = new NumericUpDown();
-            lblLevelLow = new Label();
-            trackBarLevelLow = new TrackBar();
-            numLevelLow = new NumericUpDown();
-            lblLevelHigh = new Label();
-            trackBarLevelHigh = new TrackBar();
-            numLevelHigh = new NumericUpDown();
-            progressBar = new ProgressBar();
-            gbModes.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)trackBarBrightness).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarNormalizationLevel).BeginInit();
-            gbBackground.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)trackBarBgBrightness).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarFrequencyLow).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numFrequencyLow).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarFrequencyHigh).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numFrequencyHigh).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarLevelLow).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numLevelLow).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarLevelHigh).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numLevelHigh).BeginInit();
+            cmbAudioDevices = new ComboBox();
+            grpResponseMode = new GroupBox();
+            rdoBrightnessMode = new RadioButton();
+            rdoColorPushMode = new RadioButton();
+            rdoCenterPointMode = new RadioButton();
+            rdoCenterOutMode = new RadioButton();
+            rdoEndToStartMode = new RadioButton();
+            rdoStartToEndMode = new RadioButton();
+            lblColorSettings = new Label();
+            lblNormalizationLevel = new Label();
+            trkNormalizationLevel = new TrackBar();
+            ucPrimaryColor = new Visualedizer.UcHueRangeSaturationBrightness();
+            chkReverseOutput = new CheckBox();
+            chkReverseHue = new CheckBox();
+            chkWhiteCenter = new CheckBox();
+            chkBackgroundEnabled = new CheckBox();
+            pnlBackgroundSettings = new Panel();
+            ucBackgroundSettings = new Visualedizer.UcHueSaturationBrightness();
+            lblLowFrequency = new Label();
+            trkLowFrequency = new TrackBar();
+            nudLowFrequency = new NumericUpDown();
+            lblHighFrequency = new Label();
+            trkHighFrequency = new TrackBar();
+            nudHighFrequency = new NumericUpDown();
+            lblLowLevel = new Label();
+            trkLowLevel = new TrackBar();
+            nudLowLevel = new NumericUpDown();
+            lblHighLevel = new Label();
+            trkHighLevel = new TrackBar();
+            nudHighLevel = new NumericUpDown();
+            prgAudioLevel = new ProgressBar();
+            tblFrequencyRange = new TableLayoutPanel();
+            pnlLowFrequency = new Panel();
+            pnlHighFrequency = new Panel();
+            pnlHighLevel = new Panel();
+            pnlLowLevel = new Panel();
+            tblLevelRange = new TableLayoutPanel();
+            grpResponseMode.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)trkNormalizationLevel).BeginInit();
+            pnlBackgroundSettings.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)trkLowFrequency).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)nudLowFrequency).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)trkHighFrequency).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)nudHighFrequency).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)trkLowLevel).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)nudLowLevel).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)trkHighLevel).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)nudHighLevel).BeginInit();
+            tblFrequencyRange.SuspendLayout();
+            pnlLowFrequency.SuspendLayout();
+            pnlHighFrequency.SuspendLayout();
+            pnlHighLevel.SuspendLayout();
+            pnlLowLevel.SuspendLayout();
+            tblLevelRange.SuspendLayout();
             SuspendLayout();
             // 
             // lblAudioDevice
@@ -114,450 +114,487 @@ namespace Ledqualizer
             lblAudioDevice.TabIndex = 0;
             lblAudioDevice.Text = "Audio device";
             // 
-            // cbAudioDevices
-            // 
-            cbAudioDevices.DropDownStyle = ComboBoxStyle.DropDownList;
-            cbAudioDevices.Location = new Point(12, 26);
-            cbAudioDevices.Name = "cbAudioDevices";
-            cbAudioDevices.Size = new Size(297, 23);
-            cbAudioDevices.TabIndex = 1;
-            cbAudioDevices.SelectedIndexChanged += cbAudioDevices_SelectedIndexChanged;
-            // 
-            // gbModes
-            // 
-            gbModes.Controls.Add(rbBrightness);
-            gbModes.Controls.Add(rbModeColorPush);
-            gbModes.Controls.Add(rbModeMidToOutPoint);
-            gbModes.Controls.Add(rbModeMidToOut);
-            gbModes.Controls.Add(rbModeEndToStart);
-            gbModes.Controls.Add(rbModeStartToEnd);
-            gbModes.Location = new Point(12, 58);
-            gbModes.Name = "gbModes";
-            gbModes.Size = new Size(626, 58);
-            gbModes.TabIndex = 2;
-            gbModes.TabStop = false;
-            gbModes.Text = "Response mode";
-            // 
-            // rbBrightness
-            // 
-            rbBrightness.AutoSize = true;
-            rbBrightness.Location = new Point(520, 24);
-            rbBrightness.Name = "rbBrightness";
-            rbBrightness.Size = new Size(80, 19);
-            rbBrightness.TabIndex = 5;
-            rbBrightness.TabStop = true;
-            rbBrightness.Text = "Brightness";
-            rbBrightness.UseVisualStyleBackColor = true;
-            rbBrightness.CheckedChanged += ControlValueChanged;
-            // 
-            // rbModeColorPush
-            // 
-            rbModeColorPush.AutoSize = true;
-            rbModeColorPush.Location = new Point(420, 24);
-            rbModeColorPush.Name = "rbModeColorPush";
-            rbModeColorPush.Size = new Size(83, 19);
-            rbModeColorPush.TabIndex = 4;
-            rbModeColorPush.TabStop = true;
-            rbModeColorPush.Text = "Color push";
-            rbModeColorPush.UseVisualStyleBackColor = true;
-            rbModeColorPush.CheckedChanged += ControlValueChanged;
-            // 
-            // rbModeMidToOutPoint
-            // 
-            rbModeMidToOutPoint.AutoSize = true;
-            rbModeMidToOutPoint.Location = new Point(314, 24);
-            rbModeMidToOutPoint.Name = "rbModeMidToOutPoint";
-            rbModeMidToOutPoint.Size = new Size(91, 19);
-            rbModeMidToOutPoint.TabIndex = 3;
-            rbModeMidToOutPoint.TabStop = true;
-            rbModeMidToOutPoint.Text = "Center point";
-            rbModeMidToOutPoint.UseVisualStyleBackColor = true;
-            rbModeMidToOutPoint.CheckedChanged += ControlValueChanged;
-            // 
-            // rbModeMidToOut
-            // 
-            rbModeMidToOut.AutoSize = true;
-            rbModeMidToOut.Location = new Point(216, 24);
-            rbModeMidToOut.Name = "rbModeMidToOut";
-            rbModeMidToOut.Size = new Size(81, 19);
-            rbModeMidToOut.TabIndex = 2;
-            rbModeMidToOut.TabStop = true;
-            rbModeMidToOut.Text = "Center out";
-            rbModeMidToOut.UseVisualStyleBackColor = true;
-            rbModeMidToOut.CheckedChanged += ControlValueChanged;
-            // 
-            // rbModeEndToStart
-            // 
-            rbModeEndToStart.AutoSize = true;
-            rbModeEndToStart.Location = new Point(114, 24);
-            rbModeEndToStart.Name = "rbModeEndToStart";
-            rbModeEndToStart.Size = new Size(85, 19);
-            rbModeEndToStart.TabIndex = 1;
-            rbModeEndToStart.TabStop = true;
-            rbModeEndToStart.Text = "End to start";
-            rbModeEndToStart.UseVisualStyleBackColor = true;
-            rbModeEndToStart.CheckedChanged += ControlValueChanged;
-            // 
-            // rbModeStartToEnd
-            // 
-            rbModeStartToEnd.AutoSize = true;
-            rbModeStartToEnd.Location = new Point(12, 24);
-            rbModeStartToEnd.Name = "rbModeStartToEnd";
-            rbModeStartToEnd.Size = new Size(86, 19);
-            rbModeStartToEnd.TabIndex = 0;
-            rbModeStartToEnd.TabStop = true;
-            rbModeStartToEnd.Text = "Start to end";
-            rbModeStartToEnd.UseVisualStyleBackColor = true;
-            rbModeStartToEnd.CheckedChanged += ControlValueChanged;
-            // 
-            // lblBrightness
-            // 
-            lblBrightness.AutoSize = true;
-            lblBrightness.Location = new Point(12, 124);
-            lblBrightness.Name = "lblBrightness";
-            lblBrightness.Size = new Size(62, 15);
-            lblBrightness.TabIndex = 3;
-            lblBrightness.Text = "Brightness";
-            // 
-            // trackBarBrightness
-            // 
-            trackBarBrightness.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarBrightness.Location = new Point(12, 140);
-            trackBarBrightness.Maximum = 100;
-            trackBarBrightness.Name = "trackBarBrightness";
-            trackBarBrightness.Size = new Size(626, 45);
-            trackBarBrightness.TabIndex = 4;
-            trackBarBrightness.Value = 100;
-            trackBarBrightness.ValueChanged += ControlValueChanged;
-            // 
-            // lblNormalization
-            // 
-            lblNormalization.AutoSize = true;
-            lblNormalization.Location = new Point(12, 176);
-            lblNormalization.Name = "lblNormalization";
-            lblNormalization.Size = new Size(109, 15);
-            lblNormalization.TabIndex = 5;
-            lblNormalization.Text = "Normalization level";
-            // 
-            // trackBarNormalizationLevel
-            // 
-            trackBarNormalizationLevel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarNormalizationLevel.Location = new Point(12, 192);
-            trackBarNormalizationLevel.Maximum = 30;
-            trackBarNormalizationLevel.Minimum = 1;
-            trackBarNormalizationLevel.Name = "trackBarNormalizationLevel";
-            trackBarNormalizationLevel.Size = new Size(626, 45);
-            trackBarNormalizationLevel.TabIndex = 6;
-            trackBarNormalizationLevel.Value = 10;
-            trackBarNormalizationLevel.ValueChanged += ControlValueChanged;
-            // 
-            // lblHueRange
-            // 
-            lblHueRange.AutoSize = true;
-            lblHueRange.Location = new Point(12, 228);
-            lblHueRange.Name = "lblHueRange";
-            lblHueRange.Size = new Size(62, 15);
-            lblHueRange.TabIndex = 7;
-            lblHueRange.Text = "Hue range";
-            // 
-            // ucHueMinMax
-            // 
-            ucHueMinMax.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            ucHueMinMax.HueEnd = 360;
-            ucHueMinMax.HueStart = 0;
-            ucHueMinMax.Location = new Point(12, 244);
-            ucHueMinMax.Name = "ucHueMinMax";
-            ucHueMinMax.Size = new Size(626, 52);
-            ucHueMinMax.TabIndex = 8;
-            // 
-            // chbReverse
-            // 
-            chbReverse.AutoSize = true;
-            chbReverse.Location = new Point(12, 300);
-            chbReverse.Name = "chbReverse";
-            chbReverse.Size = new Size(105, 19);
-            chbReverse.TabIndex = 9;
-            chbReverse.Text = "Reverse output";
-            chbReverse.UseVisualStyleBackColor = true;
-            chbReverse.CheckedChanged += ControlValueChanged;
-            // 
-            // chbHueReverse
-            // 
-            chbHueReverse.AutoSize = true;
-            chbHueReverse.Location = new Point(130, 300);
-            chbHueReverse.Name = "chbHueReverse";
-            chbHueReverse.Size = new Size(89, 19);
-            chbHueReverse.TabIndex = 10;
-            chbHueReverse.Text = "Reverse hue";
-            chbHueReverse.UseVisualStyleBackColor = true;
-            chbHueReverse.CheckedChanged += ControlValueChanged;
-            // 
-            // chbWhite
-            // 
-            chbWhite.AutoSize = true;
-            chbWhite.Location = new Point(238, 300);
-            chbWhite.Name = "chbWhite";
-            chbWhite.Size = new Size(93, 19);
-            chbWhite.TabIndex = 11;
-            chbWhite.Text = "White center";
-            chbWhite.UseVisualStyleBackColor = true;
-            chbWhite.CheckedChanged += ControlValueChanged;
-            // 
-            // gbBackground
-            // 
-            gbBackground.Controls.Add(chbBgWhite);
-            gbBackground.Controls.Add(lblBgHue);
-            gbBackground.Controls.Add(ucHueBg);
-            gbBackground.Controls.Add(lblBgBrightness);
-            gbBackground.Controls.Add(trackBarBgBrightness);
-            gbBackground.Location = new Point(12, 326);
-            gbBackground.Name = "gbBackground";
-            gbBackground.Size = new Size(626, 118);
-            gbBackground.TabIndex = 12;
-            gbBackground.TabStop = false;
-            gbBackground.Text = "Background";
-            // 
-            // chbBgWhite
-            // 
-            chbBgWhite.AutoSize = true;
-            chbBgWhite.Location = new Point(12, 86);
-            chbBgWhite.Name = "chbBgWhite";
-            chbBgWhite.Size = new Size(98, 19);
-            chbBgWhite.TabIndex = 4;
-            chbBgWhite.Text = "White instead";
-            chbBgWhite.UseVisualStyleBackColor = true;
-            chbBgWhite.CheckedChanged += ControlValueChanged;
-            // 
-            // lblBgHue
-            // 
-            lblBgHue.AutoSize = true;
-            lblBgHue.Location = new Point(12, 18);
-            lblBgHue.Name = "lblBgHue";
-            lblBgHue.Size = new Size(29, 15);
-            lblBgHue.TabIndex = 0;
-            lblBgHue.Text = "Hue";
-            // 
-            // ucHueBg
-            // 
-            ucHueBg.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            ucHueBg.Hue = 0;
-            ucHueBg.Location = new Point(12, 30);
-            ucHueBg.MaxVal = 360;
-            ucHueBg.MinVal = 0;
-            ucHueBg.Name = "ucHueBg";
-            ucHueBg.Size = new Size(598, 42);
-            ucHueBg.TabIndex = 1;
-            // 
-            // lblBgBrightness
-            // 
-            lblBgBrightness.AutoSize = true;
-            lblBgBrightness.Location = new Point(128, 87);
-            lblBgBrightness.Name = "lblBgBrightness";
-            lblBgBrightness.Size = new Size(62, 15);
-            lblBgBrightness.TabIndex = 2;
-            lblBgBrightness.Text = "Brightness";
-            // 
-            // trackBarBgBrightness
-            // 
-            trackBarBgBrightness.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            trackBarBgBrightness.Location = new Point(194, 76);
-            trackBarBgBrightness.Maximum = 100;
-            trackBarBgBrightness.Name = "trackBarBgBrightness";
-            trackBarBgBrightness.Size = new Size(416, 45);
-            trackBarBgBrightness.TabIndex = 3;
-            trackBarBgBrightness.ValueChanged += ControlValueChanged;
-            // 
-            // lblFrequencyLow
-            // 
-            lblFrequencyLow.AutoSize = true;
-            lblFrequencyLow.Location = new Point(12, 450);
-            lblFrequencyLow.Name = "lblFrequencyLow";
-            lblFrequencyLow.Size = new Size(101, 15);
-            lblFrequencyLow.TabIndex = 13;
-            lblFrequencyLow.Text = "Frequency low Hz";
-            // 
-            // trackBarFrequencyLow
-            // 
-            trackBarFrequencyLow.Location = new Point(12, 466);
-            trackBarFrequencyLow.Maximum = 20000;
-            trackBarFrequencyLow.Minimum = 20;
-            trackBarFrequencyLow.Name = "trackBarFrequencyLow";
-            trackBarFrequencyLow.Size = new Size(214, 45);
-            trackBarFrequencyLow.TabIndex = 14;
-            trackBarFrequencyLow.TickFrequency = 1000;
-            trackBarFrequencyLow.Value = 60;
-            trackBarFrequencyLow.ValueChanged += trackBarFrequencyLow_ValueChanged;
-            // 
-            // numFrequencyLow
-            // 
-            numFrequencyLow.Location = new Point(232, 466);
-            numFrequencyLow.Maximum = new decimal(new int[] { 20000, 0, 0, 0 });
-            numFrequencyLow.Minimum = new decimal(new int[] { 20, 0, 0, 0 });
-            numFrequencyLow.Name = "numFrequencyLow";
-            numFrequencyLow.Size = new Size(88, 23);
-            numFrequencyLow.TabIndex = 15;
-            numFrequencyLow.Value = new decimal(new int[] { 60, 0, 0, 0 });
-            numFrequencyLow.ValueChanged += numFrequencyLow_ValueChanged;
-            // 
-            // lblFrequencyHigh
-            // 
-            lblFrequencyHigh.AutoSize = true;
-            lblFrequencyHigh.Location = new Point(332, 450);
-            lblFrequencyHigh.Name = "lblFrequencyHigh";
-            lblFrequencyHigh.Size = new Size(106, 15);
-            lblFrequencyHigh.TabIndex = 16;
-            lblFrequencyHigh.Text = "Frequency high Hz";
-            // 
-            // trackBarFrequencyHigh
-            // 
-            trackBarFrequencyHigh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            trackBarFrequencyHigh.Location = new Point(332, 466);
-            trackBarFrequencyHigh.Maximum = 20000;
-            trackBarFrequencyHigh.Minimum = 20;
-            trackBarFrequencyHigh.Name = "trackBarFrequencyHigh";
-            trackBarFrequencyHigh.Size = new Size(214, 45);
-            trackBarFrequencyHigh.TabIndex = 17;
-            trackBarFrequencyHigh.TickFrequency = 1000;
-            trackBarFrequencyHigh.Value = 250;
-            trackBarFrequencyHigh.ValueChanged += trackBarFrequencyHigh_ValueChanged;
-            // 
-            // numFrequencyHigh
-            // 
-            numFrequencyHigh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            numFrequencyHigh.Location = new Point(552, 466);
-            numFrequencyHigh.Maximum = new decimal(new int[] { 20000, 0, 0, 0 });
-            numFrequencyHigh.Minimum = new decimal(new int[] { 20, 0, 0, 0 });
-            numFrequencyHigh.Name = "numFrequencyHigh";
-            numFrequencyHigh.Size = new Size(86, 23);
-            numFrequencyHigh.TabIndex = 18;
-            numFrequencyHigh.Value = new decimal(new int[] { 250, 0, 0, 0 });
-            numFrequencyHigh.ValueChanged += numFrequencyHigh_ValueChanged;
-            // 
-            // lblLevelLow
-            // 
-            lblLevelLow.AutoSize = true;
-            lblLevelLow.Location = new Point(12, 506);
-            lblLevelLow.Name = "lblLevelLow";
-            lblLevelLow.Size = new Size(73, 15);
-            lblLevelLow.TabIndex = 19;
-            lblLevelLow.Text = "Level low dB";
-            // 
-            // trackBarLevelLow
-            // 
-            trackBarLevelLow.Location = new Point(12, 522);
-            trackBarLevelLow.Maximum = 0;
-            trackBarLevelLow.Minimum = -90;
-            trackBarLevelLow.Name = "trackBarLevelLow";
-            trackBarLevelLow.Size = new Size(214, 45);
-            trackBarLevelLow.TabIndex = 20;
-            trackBarLevelLow.TickFrequency = 10;
-            trackBarLevelLow.Value = -60;
-            trackBarLevelLow.ValueChanged += trackBarLevelLow_ValueChanged;
-            // 
-            // numLevelLow
-            // 
-            numLevelLow.Location = new Point(232, 522);
-            numLevelLow.Maximum = new decimal(new int[] { 0, 0, 0, 0 });
-            numLevelLow.Minimum = new decimal(new int[] { 90, 0, 0, int.MinValue });
-            numLevelLow.Name = "numLevelLow";
-            numLevelLow.Size = new Size(88, 23);
-            numLevelLow.TabIndex = 21;
-            numLevelLow.Value = new decimal(new int[] { 60, 0, 0, int.MinValue });
-            numLevelLow.ValueChanged += numLevelLow_ValueChanged;
-            // 
-            // lblLevelHigh
-            // 
-            lblLevelHigh.AutoSize = true;
-            lblLevelHigh.Location = new Point(332, 506);
-            lblLevelHigh.Name = "lblLevelHigh";
-            lblLevelHigh.Size = new Size(78, 15);
-            lblLevelHigh.TabIndex = 22;
-            lblLevelHigh.Text = "Level high dB";
-            // 
-            // trackBarLevelHigh
-            // 
-            trackBarLevelHigh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            trackBarLevelHigh.Location = new Point(332, 522);
-            trackBarLevelHigh.Maximum = 0;
-            trackBarLevelHigh.Minimum = -90;
-            trackBarLevelHigh.Name = "trackBarLevelHigh";
-            trackBarLevelHigh.Size = new Size(214, 45);
-            trackBarLevelHigh.TabIndex = 23;
-            trackBarLevelHigh.TickFrequency = 10;
-            trackBarLevelHigh.Value = -20;
-            trackBarLevelHigh.ValueChanged += trackBarLevelHigh_ValueChanged;
-            // 
-            // numLevelHigh
-            // 
-            numLevelHigh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            numLevelHigh.Location = new Point(552, 522);
-            numLevelHigh.Maximum = new decimal(new int[] { 0, 0, 0, 0 });
-            numLevelHigh.Minimum = new decimal(new int[] { 90, 0, 0, int.MinValue });
-            numLevelHigh.Name = "numLevelHigh";
-            numLevelHigh.Size = new Size(86, 23);
-            numLevelHigh.TabIndex = 24;
-            numLevelHigh.Value = new decimal(new int[] { 20, 0, 0, int.MinValue });
-            numLevelHigh.ValueChanged += numLevelHigh_ValueChanged;
-            // 
-            // progressBar
-            // 
-            progressBar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            progressBar.Location = new Point(326, 28);
-            progressBar.Name = "progressBar";
-            progressBar.Size = new Size(316, 21);
-            progressBar.TabIndex = 25;
+            // cmbAudioDevices
+            // 
+            cmbAudioDevices.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbAudioDevices.Location = new Point(12, 26);
+            cmbAudioDevices.Name = "cmbAudioDevices";
+            cmbAudioDevices.Size = new Size(297, 23);
+            cmbAudioDevices.TabIndex = 1;
+            cmbAudioDevices.SelectedIndexChanged += cbAudioDevices_SelectedIndexChanged;
+            // 
+            // grpResponseMode
+            // 
+            grpResponseMode.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            grpResponseMode.Controls.Add(rdoBrightnessMode);
+            grpResponseMode.Controls.Add(rdoColorPushMode);
+            grpResponseMode.Controls.Add(rdoCenterPointMode);
+            grpResponseMode.Controls.Add(rdoCenterOutMode);
+            grpResponseMode.Controls.Add(rdoEndToStartMode);
+            grpResponseMode.Controls.Add(rdoStartToEndMode);
+            grpResponseMode.Location = new Point(14, 145);
+            grpResponseMode.Name = "grpResponseMode";
+            grpResponseMode.Size = new Size(626, 58);
+            grpResponseMode.TabIndex = 2;
+            grpResponseMode.TabStop = false;
+            grpResponseMode.Text = "Response mode";
+            // 
+            // rdoBrightnessMode
+            // 
+            rdoBrightnessMode.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            rdoBrightnessMode.AutoSize = true;
+            rdoBrightnessMode.Location = new Point(520, 24);
+            rdoBrightnessMode.Name = "rdoBrightnessMode";
+            rdoBrightnessMode.Size = new Size(80, 19);
+            rdoBrightnessMode.TabIndex = 5;
+            rdoBrightnessMode.TabStop = true;
+            rdoBrightnessMode.Text = "Brightness";
+            rdoBrightnessMode.UseVisualStyleBackColor = true;
+            rdoBrightnessMode.CheckedChanged += ControlValueChanged;
+            // 
+            // rdoColorPushMode
+            // 
+            rdoColorPushMode.AutoSize = true;
+            rdoColorPushMode.Location = new Point(420, 24);
+            rdoColorPushMode.Name = "rdoColorPushMode";
+            rdoColorPushMode.Size = new Size(83, 19);
+            rdoColorPushMode.TabIndex = 4;
+            rdoColorPushMode.TabStop = true;
+            rdoColorPushMode.Text = "Color push";
+            rdoColorPushMode.UseVisualStyleBackColor = true;
+            rdoColorPushMode.CheckedChanged += ControlValueChanged;
+            // 
+            // rdoCenterPointMode
+            // 
+            rdoCenterPointMode.AutoSize = true;
+            rdoCenterPointMode.Location = new Point(314, 24);
+            rdoCenterPointMode.Name = "rdoCenterPointMode";
+            rdoCenterPointMode.Size = new Size(91, 19);
+            rdoCenterPointMode.TabIndex = 3;
+            rdoCenterPointMode.TabStop = true;
+            rdoCenterPointMode.Text = "Center point";
+            rdoCenterPointMode.UseVisualStyleBackColor = true;
+            rdoCenterPointMode.CheckedChanged += ControlValueChanged;
+            // 
+            // rdoCenterOutMode
+            // 
+            rdoCenterOutMode.AutoSize = true;
+            rdoCenterOutMode.Location = new Point(216, 24);
+            rdoCenterOutMode.Name = "rdoCenterOutMode";
+            rdoCenterOutMode.Size = new Size(81, 19);
+            rdoCenterOutMode.TabIndex = 2;
+            rdoCenterOutMode.TabStop = true;
+            rdoCenterOutMode.Text = "Center out";
+            rdoCenterOutMode.UseVisualStyleBackColor = true;
+            rdoCenterOutMode.CheckedChanged += ControlValueChanged;
+            // 
+            // rdoEndToStartMode
+            // 
+            rdoEndToStartMode.AutoSize = true;
+            rdoEndToStartMode.Location = new Point(114, 24);
+            rdoEndToStartMode.Name = "rdoEndToStartMode";
+            rdoEndToStartMode.Size = new Size(85, 19);
+            rdoEndToStartMode.TabIndex = 1;
+            rdoEndToStartMode.TabStop = true;
+            rdoEndToStartMode.Text = "End to start";
+            rdoEndToStartMode.UseVisualStyleBackColor = true;
+            rdoEndToStartMode.CheckedChanged += ControlValueChanged;
+            // 
+            // rdoStartToEndMode
+            // 
+            rdoStartToEndMode.AutoSize = true;
+            rdoStartToEndMode.Location = new Point(12, 24);
+            rdoStartToEndMode.Name = "rdoStartToEndMode";
+            rdoStartToEndMode.Size = new Size(86, 19);
+            rdoStartToEndMode.TabIndex = 0;
+            rdoStartToEndMode.TabStop = true;
+            rdoStartToEndMode.Text = "Start to end";
+            rdoStartToEndMode.UseVisualStyleBackColor = true;
+            rdoStartToEndMode.CheckedChanged += ControlValueChanged;
+            // 
+            // lblColorSettings
+            // 
+            lblColorSettings.AutoSize = true;
+            lblColorSettings.Location = new Point(14, 211);
+            lblColorSettings.Name = "lblColorSettings";
+            lblColorSettings.Size = new Size(36, 15);
+            lblColorSettings.TabIndex = 3;
+            lblColorSettings.Text = "Color";
+            // 
+            // lblNormalizationLevel
+            // 
+            lblNormalizationLevel.AutoSize = true;
+            lblNormalizationLevel.Location = new Point(14, 411);
+            lblNormalizationLevel.Name = "lblNormalizationLevel";
+            lblNormalizationLevel.Size = new Size(109, 15);
+            lblNormalizationLevel.TabIndex = 5;
+            lblNormalizationLevel.Text = "Normalization level";
+            // 
+            // trkNormalizationLevel
+            // 
+            trkNormalizationLevel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            trkNormalizationLevel.Location = new Point(14, 427);
+            trkNormalizationLevel.Maximum = 30;
+            trkNormalizationLevel.Minimum = 1;
+            trkNormalizationLevel.Name = "trkNormalizationLevel";
+            trkNormalizationLevel.Size = new Size(623, 45);
+            trkNormalizationLevel.TabIndex = 6;
+            trkNormalizationLevel.Value = 10;
+            trkNormalizationLevel.ValueChanged += ControlValueChanged;
+            // 
+            // ucPrimaryColor
+            // 
+            ucPrimaryColor.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            ucPrimaryColor.Location = new Point(14, 227);
+            ucPrimaryColor.Margin = new Padding(0);
+            ucPrimaryColor.MinimumSize = new Size(120, 84);
+            ucPrimaryColor.Name = "ucPrimaryColor";
+            ucPrimaryColor.Size = new Size(623, 84);
+            ucPrimaryColor.TabIndex = 4;
+            // 
+            // chkReverseOutput
+            // 
+            chkReverseOutput.AutoSize = true;
+            chkReverseOutput.Location = new Point(14, 479);
+            chkReverseOutput.Name = "chkReverseOutput";
+            chkReverseOutput.Size = new Size(105, 19);
+            chkReverseOutput.TabIndex = 9;
+            chkReverseOutput.Text = "Reverse output";
+            chkReverseOutput.UseVisualStyleBackColor = true;
+            chkReverseOutput.CheckedChanged += ControlValueChanged;
+            // 
+            // chkReverseHue
+            // 
+            chkReverseHue.AutoSize = true;
+            chkReverseHue.Location = new Point(132, 479);
+            chkReverseHue.Name = "chkReverseHue";
+            chkReverseHue.Size = new Size(89, 19);
+            chkReverseHue.TabIndex = 10;
+            chkReverseHue.Text = "Reverse hue";
+            chkReverseHue.UseVisualStyleBackColor = true;
+            chkReverseHue.CheckedChanged += ControlValueChanged;
+            // 
+            // chkWhiteCenter
+            // 
+            chkWhiteCenter.AutoSize = true;
+            chkWhiteCenter.Location = new Point(240, 479);
+            chkWhiteCenter.Name = "chkWhiteCenter";
+            chkWhiteCenter.Size = new Size(93, 19);
+            chkWhiteCenter.TabIndex = 11;
+            chkWhiteCenter.Text = "White center";
+            chkWhiteCenter.UseVisualStyleBackColor = true;
+            chkWhiteCenter.CheckedChanged += ControlValueChanged;
+            // 
+            // chkBackgroundEnabled
+            // 
+            chkBackgroundEnabled.AutoSize = true;
+            chkBackgroundEnabled.Location = new Point(14, 505);
+            chkBackgroundEnabled.Name = "chkBackgroundEnabled";
+            chkBackgroundEnabled.Size = new Size(118, 19);
+            chkBackgroundEnabled.TabIndex = 12;
+            chkBackgroundEnabled.Text = "Background color";
+            chkBackgroundEnabled.UseVisualStyleBackColor = true;
+            chkBackgroundEnabled.CheckedChanged += chkBackgroundEnabled_CheckedChanged;
+            // 
+            // pnlBackgroundSettings
+            // 
+            pnlBackgroundSettings.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            pnlBackgroundSettings.Controls.Add(ucBackgroundSettings);
+            pnlBackgroundSettings.Location = new Point(14, 530);
+            pnlBackgroundSettings.Name = "pnlBackgroundSettings";
+            pnlBackgroundSettings.Size = new Size(623, 84);
+            pnlBackgroundSettings.TabIndex = 13;
+            // 
+            // ucBackgroundSettings
+            // 
+            ucBackgroundSettings.Dock = DockStyle.Fill;
+            ucBackgroundSettings.Location = new Point(0, 0);
+            ucBackgroundSettings.Margin = new Padding(0);
+            ucBackgroundSettings.MinimumSize = new Size(120, 84);
+            ucBackgroundSettings.Name = "ucBackgroundSettings";
+            ucBackgroundSettings.Size = new Size(623, 84);
+            ucBackgroundSettings.TabIndex = 0;
+            // 
+            // lblLowFrequency
+            // 
+            lblLowFrequency.AutoSize = true;
+            lblLowFrequency.Location = new Point(0, 8);
+            lblLowFrequency.Name = "lblLowFrequency";
+            lblLowFrequency.Size = new Size(101, 15);
+            lblLowFrequency.TabIndex = 14;
+            lblLowFrequency.Text = "Frequency low Hz";
+            // 
+            // trkLowFrequency
+            // 
+            trkLowFrequency.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            trkLowFrequency.Location = new Point(0, 24);
+            trkLowFrequency.Maximum = 20000;
+            trkLowFrequency.Minimum = 20;
+            trkLowFrequency.Name = "trkLowFrequency";
+            trkLowFrequency.Size = new Size(218, 45);
+            trkLowFrequency.TabIndex = 15;
+            trkLowFrequency.TickFrequency = 1000;
+            trkLowFrequency.Value = 60;
+            trkLowFrequency.ValueChanged += trackBarFrequencyLow_ValueChanged;
+            // 
+            // nudLowFrequency
+            // 
+            nudLowFrequency.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            nudLowFrequency.Location = new Point(224, 35);
+            nudLowFrequency.Maximum = new decimal(new int[] { 20000, 0, 0, 0 });
+            nudLowFrequency.Minimum = new decimal(new int[] { 20, 0, 0, 0 });
+            nudLowFrequency.Name = "nudLowFrequency";
+            nudLowFrequency.Size = new Size(80, 23);
+            nudLowFrequency.TabIndex = 16;
+            nudLowFrequency.Value = new decimal(new int[] { 60, 0, 0, 0 });
+            nudLowFrequency.ValueChanged += numFrequencyLow_ValueChanged;
+            // 
+            // lblHighFrequency
+            // 
+            lblHighFrequency.AutoSize = true;
+            lblHighFrequency.Location = new Point(0, 8);
+            lblHighFrequency.Name = "lblHighFrequency";
+            lblHighFrequency.Size = new Size(106, 15);
+            lblHighFrequency.TabIndex = 17;
+            lblHighFrequency.Text = "Frequency high Hz";
+            // 
+            // trkHighFrequency
+            // 
+            trkHighFrequency.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            trkHighFrequency.Location = new Point(0, 24);
+            trkHighFrequency.Maximum = 20000;
+            trkHighFrequency.Minimum = 20;
+            trkHighFrequency.Name = "trkHighFrequency";
+            trkHighFrequency.Size = new Size(217, 45);
+            trkHighFrequency.TabIndex = 18;
+            trkHighFrequency.TickFrequency = 1000;
+            trkHighFrequency.Value = 250;
+            trkHighFrequency.ValueChanged += trackBarFrequencyHigh_ValueChanged;
+            // 
+            // nudHighFrequency
+            // 
+            nudHighFrequency.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            nudHighFrequency.Location = new Point(223, 35);
+            nudHighFrequency.Maximum = new decimal(new int[] { 20000, 0, 0, 0 });
+            nudHighFrequency.Minimum = new decimal(new int[] { 20, 0, 0, 0 });
+            nudHighFrequency.Name = "nudHighFrequency";
+            nudHighFrequency.Size = new Size(78, 23);
+            nudHighFrequency.TabIndex = 19;
+            nudHighFrequency.Value = new decimal(new int[] { 250, 0, 0, 0 });
+            nudHighFrequency.ValueChanged += numFrequencyHigh_ValueChanged;
+            // 
+            // lblLowLevel
+            // 
+            lblLowLevel.AutoSize = true;
+            lblLowLevel.Location = new Point(0, 8);
+            lblLowLevel.Name = "lblLowLevel";
+            lblLowLevel.Size = new Size(73, 15);
+            lblLowLevel.TabIndex = 20;
+            lblLowLevel.Text = "Level low dB";
+            // 
+            // trkLowLevel
+            // 
+            trkLowLevel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            trkLowLevel.Location = new Point(0, 24);
+            trkLowLevel.Maximum = 0;
+            trkLowLevel.Minimum = -90;
+            trkLowLevel.Name = "trkLowLevel";
+            trkLowLevel.Size = new Size(218, 45);
+            trkLowLevel.TabIndex = 21;
+            trkLowLevel.TickFrequency = 10;
+            trkLowLevel.Value = -60;
+            trkLowLevel.ValueChanged += trackBarLevelLow_ValueChanged;
+            // 
+            // nudLowLevel
+            // 
+            nudLowLevel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            nudLowLevel.Location = new Point(224, 35);
+            nudLowLevel.Maximum = new decimal(new int[] { 0, 0, 0, 0 });
+            nudLowLevel.Minimum = new decimal(new int[] { 90, 0, 0, int.MinValue });
+            nudLowLevel.Name = "nudLowLevel";
+            nudLowLevel.Size = new Size(80, 23);
+            nudLowLevel.TabIndex = 22;
+            nudLowLevel.Value = new decimal(new int[] { 60, 0, 0, int.MinValue });
+            nudLowLevel.ValueChanged += numLevelLow_ValueChanged;
+            // 
+            // lblHighLevel
+            // 
+            lblHighLevel.AutoSize = true;
+            lblHighLevel.Location = new Point(0, 8);
+            lblHighLevel.Name = "lblHighLevel";
+            lblHighLevel.Size = new Size(78, 15);
+            lblHighLevel.TabIndex = 23;
+            lblHighLevel.Text = "Level high dB";
+            // 
+            // trkHighLevel
+            // 
+            trkHighLevel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            trkHighLevel.Location = new Point(0, 24);
+            trkHighLevel.Maximum = 0;
+            trkHighLevel.Minimum = -90;
+            trkHighLevel.Name = "trkHighLevel";
+            trkHighLevel.Size = new Size(217, 45);
+            trkHighLevel.TabIndex = 24;
+            trkHighLevel.TickFrequency = 10;
+            trkHighLevel.Value = -20;
+            trkHighLevel.ValueChanged += trackBarLevelHigh_ValueChanged;
+            // 
+            // nudHighLevel
+            // 
+            nudHighLevel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            nudHighLevel.Location = new Point(223, 35);
+            nudHighLevel.Maximum = new decimal(new int[] { 0, 0, 0, 0 });
+            nudHighLevel.Minimum = new decimal(new int[] { 90, 0, 0, int.MinValue });
+            nudHighLevel.Name = "nudHighLevel";
+            nudHighLevel.Size = new Size(78, 23);
+            nudHighLevel.TabIndex = 25;
+            nudHighLevel.Value = new decimal(new int[] { 20, 0, 0, int.MinValue });
+            nudHighLevel.ValueChanged += numLevelHigh_ValueChanged;
+            // 
+            // prgAudioLevel
+            // 
+            prgAudioLevel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            prgAudioLevel.Location = new Point(326, 28);
+            prgAudioLevel.Name = "prgAudioLevel";
+            prgAudioLevel.Size = new Size(313, 21);
+            prgAudioLevel.TabIndex = 25;
+            // 
+            // tblFrequencyRange
+            // 
+            tblFrequencyRange.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            tblFrequencyRange.CellBorderStyle = TableLayoutPanelCellBorderStyle.Single;
+            tblFrequencyRange.ColumnCount = 2;
+            tblFrequencyRange.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            tblFrequencyRange.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            tblFrequencyRange.Controls.Add(pnlLowFrequency, 0, 0);
+            tblFrequencyRange.Controls.Add(pnlHighFrequency, 1, 0);
+            tblFrequencyRange.Location = new Point(13, 56);
+            tblFrequencyRange.Margin = new Padding(0);
+            tblFrequencyRange.Name = "tblFrequencyRange";
+            tblFrequencyRange.RowCount = 1;
+            tblFrequencyRange.RowStyles.Add(new RowStyle(SizeType.Absolute, 74F));
+            tblFrequencyRange.Size = new Size(623, 82);
+            tblFrequencyRange.TabIndex = 26;
+            // 
+            // pnlLowFrequency
+            // 
+            pnlLowFrequency.Controls.Add(trkLowFrequency);
+            pnlLowFrequency.Controls.Add(lblLowFrequency);
+            pnlLowFrequency.Controls.Add(nudLowFrequency);
+            pnlLowFrequency.Dock = DockStyle.Fill;
+            pnlLowFrequency.Location = new Point(1, 1);
+            pnlLowFrequency.Margin = new Padding(0, 0, 6, 0);
+            pnlLowFrequency.Name = "pnlLowFrequency";
+            pnlLowFrequency.Size = new Size(304, 80);
+            pnlLowFrequency.TabIndex = 27;
+            // 
+            // pnlHighFrequency
+            // 
+            pnlHighFrequency.Controls.Add(lblHighFrequency);
+            pnlHighFrequency.Controls.Add(trkHighFrequency);
+            pnlHighFrequency.Controls.Add(nudHighFrequency);
+            pnlHighFrequency.Dock = DockStyle.Fill;
+            pnlHighFrequency.Location = new Point(318, 1);
+            pnlHighFrequency.Margin = new Padding(6, 0, 0, 0);
+            pnlHighFrequency.Name = "pnlHighFrequency";
+            pnlHighFrequency.Size = new Size(304, 80);
+            pnlHighFrequency.TabIndex = 28;
+            // 
+            // pnlHighLevel
+            // 
+            pnlHighLevel.Controls.Add(lblHighLevel);
+            pnlHighLevel.Controls.Add(trkHighLevel);
+            pnlHighLevel.Controls.Add(nudHighLevel);
+            pnlHighLevel.Dock = DockStyle.Fill;
+            pnlHighLevel.Location = new Point(318, 1);
+            pnlHighLevel.Margin = new Padding(6, 0, 0, 0);
+            pnlHighLevel.Name = "pnlHighLevel";
+            pnlHighLevel.Size = new Size(304, 80);
+            pnlHighLevel.TabIndex = 27;
+            // 
+            // pnlLowLevel
+            // 
+            pnlLowLevel.Controls.Add(lblLowLevel);
+            pnlLowLevel.Controls.Add(trkLowLevel);
+            pnlLowLevel.Controls.Add(nudLowLevel);
+            pnlLowLevel.Dock = DockStyle.Fill;
+            pnlLowLevel.Location = new Point(1, 1);
+            pnlLowLevel.Margin = new Padding(0, 0, 6, 0);
+            pnlLowLevel.Name = "pnlLowLevel";
+            pnlLowLevel.Size = new Size(304, 80);
+            pnlLowLevel.TabIndex = 29;
+            // 
+            // tblLevelRange
+            // 
+            tblLevelRange.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            tblLevelRange.CellBorderStyle = TableLayoutPanelCellBorderStyle.Single;
+            tblLevelRange.ColumnCount = 2;
+            tblLevelRange.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            tblLevelRange.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            tblLevelRange.Controls.Add(pnlLowLevel, 0, 0);
+            tblLevelRange.Controls.Add(pnlHighLevel, 1, 0);
+            tblLevelRange.Location = new Point(14, 319);
+            tblLevelRange.Margin = new Padding(0);
+            tblLevelRange.Name = "tblLevelRange";
+            tblLevelRange.RowCount = 1;
+            tblLevelRange.RowStyles.Add(new RowStyle(SizeType.Absolute, 74F));
+            tblLevelRange.Size = new Size(623, 82);
+            tblLevelRange.TabIndex = 30;
             // 
             // SpectralAnalysisSceneEditorForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             AutoScroll = true;
-            ClientSize = new Size(654, 601);
-            Controls.Add(progressBar);
-            Controls.Add(numLevelHigh);
-            Controls.Add(trackBarLevelHigh);
-            Controls.Add(lblLevelHigh);
-            Controls.Add(numLevelLow);
-            Controls.Add(trackBarLevelLow);
-            Controls.Add(lblLevelLow);
-            Controls.Add(numFrequencyHigh);
-            Controls.Add(trackBarFrequencyHigh);
-            Controls.Add(lblFrequencyHigh);
-            Controls.Add(numFrequencyLow);
-            Controls.Add(trackBarFrequencyLow);
-            Controls.Add(lblFrequencyLow);
-            Controls.Add(gbBackground);
-            Controls.Add(chbWhite);
-            Controls.Add(chbHueReverse);
-            Controls.Add(chbReverse);
-            Controls.Add(ucHueMinMax);
-            Controls.Add(lblHueRange);
-            Controls.Add(trackBarNormalizationLevel);
-            Controls.Add(lblNormalization);
-            Controls.Add(trackBarBrightness);
-            Controls.Add(lblBrightness);
-            Controls.Add(gbModes);
-            Controls.Add(cbAudioDevices);
+            ClientSize = new Size(654, 641);
+            Controls.Add(tblLevelRange);
+            Controls.Add(tblFrequencyRange);
+            Controls.Add(prgAudioLevel);
+            Controls.Add(pnlBackgroundSettings);
+            Controls.Add(chkBackgroundEnabled);
+            Controls.Add(chkWhiteCenter);
+            Controls.Add(chkReverseHue);
+            Controls.Add(chkReverseOutput);
+            Controls.Add(ucPrimaryColor);
+            Controls.Add(trkNormalizationLevel);
+            Controls.Add(lblNormalizationLevel);
+            Controls.Add(lblColorSettings);
+            Controls.Add(grpResponseMode);
+            Controls.Add(cmbAudioDevices);
             Controls.Add(lblAudioDevice);
             Name = "SpectralAnalysisSceneEditorForm";
             Text = "Spectral Analysis";
-            gbModes.ResumeLayout(false);
-            gbModes.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)trackBarBrightness).EndInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarNormalizationLevel).EndInit();
-            gbBackground.ResumeLayout(false);
-            gbBackground.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)trackBarBgBrightness).EndInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarFrequencyLow).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numFrequencyLow).EndInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarFrequencyHigh).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numFrequencyHigh).EndInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarLevelLow).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numLevelLow).EndInit();
-            ((System.ComponentModel.ISupportInitialize)trackBarLevelHigh).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numLevelHigh).EndInit();
+            grpResponseMode.ResumeLayout(false);
+            grpResponseMode.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)trkNormalizationLevel).EndInit();
+            pnlBackgroundSettings.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)trkLowFrequency).EndInit();
+            ((System.ComponentModel.ISupportInitialize)nudLowFrequency).EndInit();
+            ((System.ComponentModel.ISupportInitialize)trkHighFrequency).EndInit();
+            ((System.ComponentModel.ISupportInitialize)nudHighFrequency).EndInit();
+            ((System.ComponentModel.ISupportInitialize)trkLowLevel).EndInit();
+            ((System.ComponentModel.ISupportInitialize)nudLowLevel).EndInit();
+            ((System.ComponentModel.ISupportInitialize)trkHighLevel).EndInit();
+            ((System.ComponentModel.ISupportInitialize)nudHighLevel).EndInit();
+            tblFrequencyRange.ResumeLayout(false);
+            pnlLowFrequency.ResumeLayout(false);
+            pnlLowFrequency.PerformLayout();
+            pnlHighFrequency.ResumeLayout(false);
+            pnlHighFrequency.PerformLayout();
+            pnlHighLevel.ResumeLayout(false);
+            pnlHighLevel.PerformLayout();
+            pnlLowLevel.ResumeLayout(false);
+            pnlLowLevel.PerformLayout();
+            tblLevelRange.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
         }
+
+        private TableLayoutPanel tblFrequencyRange;
+        private Panel pnlLowFrequency;
+        private Panel pnlHighFrequency;
+        private Panel pnlHighLevel;
+        private Panel pnlLowLevel;
+        private TableLayoutPanel tblLevelRange;
     }
 }

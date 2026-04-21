@@ -16,7 +16,7 @@ namespace Ledqualizer
             FormBorderStyle = FormBorderStyle.None;
             TopLevel = false;
             Dock = DockStyle.Fill;
-            ucHueSolid.ValueChanged += ControlValueChanged;
+            ucColor.ValueChanged += ControlValueChanged;
         }
 
         public void LoadScene(SceneConfig scene)
@@ -25,11 +25,11 @@ namespace Ledqualizer
             isLoading = true;
             try
             {
-            ucHueSolid.Hue = (int)Math.Round(scene.SolidColor.Hue);
-            ucHueSolid.MinVal = (int)Math.Round(scene.SolidColor.MinHue);
-            ucHueSolid.MaxVal = (int)Math.Round(scene.SolidColor.MaxHue);
-            trackBarSaturation.Value = Math.Max(trackBarSaturation.Minimum, Math.Min(trackBarSaturation.Maximum, scene.SolidColor.Saturation));
-            trackBarBrightness.Value = Math.Max(trackBarBrightness.Minimum, Math.Min(trackBarBrightness.Maximum, scene.SolidColor.Brightness));
+                ucColor.Hue = (int)Math.Round(scene.SolidColor.Hue);
+                ucColor.MinHue = (int)Math.Round(scene.SolidColor.MinHue);
+                ucColor.MaxHue = (int)Math.Round(scene.SolidColor.MaxHue);
+                ucColor.Saturation = scene.SolidColor.Saturation;
+                ucColor.Brightness = scene.SolidColor.Brightness;
             }
             finally
             {
@@ -44,11 +44,11 @@ namespace Ledqualizer
                 return;
             }
 
-            CurrentScene.SolidColor.Hue = ucHueSolid.Hue;
-            CurrentScene.SolidColor.MinHue = ucHueSolid.MinVal;
-            CurrentScene.SolidColor.MaxHue = ucHueSolid.MaxVal;
-            CurrentScene.SolidColor.Saturation = trackBarSaturation.Value;
-            CurrentScene.SolidColor.Brightness = trackBarBrightness.Value;
+            CurrentScene.SolidColor.Hue = ucColor.Hue;
+            CurrentScene.SolidColor.MinHue = ucColor.MinHue;
+            CurrentScene.SolidColor.MaxHue = ucColor.MaxHue;
+            CurrentScene.SolidColor.Saturation = ucColor.Saturation;
+            CurrentScene.SolidColor.Brightness = ucColor.Brightness;
             SceneChanged?.Invoke(this, EventArgs.Empty);
         }
     }

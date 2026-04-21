@@ -183,12 +183,14 @@ namespace Ledqualizer
         {
             section[$"{prefix}Mode"] = config.Mode.ToString();
             section[$"{prefix}Brightness"] = config.Brightness.ToString(CultureInfo.InvariantCulture);
+            section[$"{prefix}Saturation"] = config.Saturation.ToString(CultureInfo.InvariantCulture);
             section[$"{prefix}Normalization"] = config.Normalization.ToString(CultureInfo.InvariantCulture);
             section[$"{prefix}Reverse"] = config.Reverse.ToString(CultureInfo.InvariantCulture);
             section[$"{prefix}HueReverse"] = config.HueReverse.ToString(CultureInfo.InvariantCulture);
             section[$"{prefix}White"] = config.White.ToString(CultureInfo.InvariantCulture);
             section[$"{prefix}BackgroundWhite"] = config.BackgroundWhite.ToString(CultureInfo.InvariantCulture);
             section[$"{prefix}BackgroundBrightness"] = config.BackgroundBrightness.ToString(CultureInfo.InvariantCulture);
+            section[$"{prefix}BackgroundSaturation"] = config.BackgroundSaturation.ToString(CultureInfo.InvariantCulture);
             section[$"{prefix}BackgroundHue"] = config.BackgroundHue.ToString(CultureInfo.InvariantCulture);
             section[$"{prefix}HueMin"] = config.HueMin.ToString(CultureInfo.InvariantCulture);
             section[$"{prefix}HueMax"] = config.HueMax.ToString(CultureInfo.InvariantCulture);
@@ -243,12 +245,14 @@ namespace Ledqualizer
         {
             config.Mode = ParseAudioMode(section.Keys[$"{prefix}Mode"], config.Mode);
             config.Brightness = ParseInt(section.Keys[$"{prefix}Brightness"], config.Brightness);
+            config.Saturation = ParseInt(section.Keys[$"{prefix}Saturation"], config.Saturation);
             config.Normalization = ParseInt(section.Keys[$"{prefix}Normalization"], config.Normalization);
             config.Reverse = ParseBool(section.Keys[$"{prefix}Reverse"], config.Reverse);
             config.HueReverse = ParseBool(section.Keys[$"{prefix}HueReverse"], config.HueReverse);
             config.White = ParseBool(section.Keys[$"{prefix}White"], config.White);
             config.BackgroundWhite = ParseBool(section.Keys[$"{prefix}BackgroundWhite"], config.BackgroundWhite);
             config.BackgroundBrightness = ParseInt(section.Keys[$"{prefix}BackgroundBrightness"], config.BackgroundBrightness);
+            config.BackgroundSaturation = ParseInt(section.Keys[$"{prefix}BackgroundSaturation"], config.BackgroundSaturation);
             config.BackgroundHue = ParseDouble(section.Keys[$"{prefix}BackgroundHue"], config.BackgroundHue);
             config.HueMin = ParseDouble(section.Keys[$"{prefix}HueMin"], config.HueMin);
             config.HueMax = ParseDouble(section.Keys[$"{prefix}HueMax"], config.HueMax);

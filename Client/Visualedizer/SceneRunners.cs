@@ -27,6 +27,7 @@ namespace Ledqualizer
         public AcVolume.AudioCaptureVolumeMode Mode { get; set; }
         public int Delay { get; set; }
         public int BrightnessValue { get; set; }
+        public int SaturationValue { get; set; } = 100;
         public int BrightnessMaximum { get; set; } = 100;
         public int NormalizationValue { get; set; }
         public bool Reverse { get; set; }
@@ -34,6 +35,7 @@ namespace Ledqualizer
         public bool White { get; set; }
         public bool BackgroundWhite { get; set; }
         public int BackgroundBrightnessValue { get; set; }
+        public int BackgroundSaturationValue { get; set; } = -1;
         public double BackgroundHue { get; set; }
         public double HueMin { get; set; }
         public double HueMax { get; set; }
@@ -368,6 +370,7 @@ namespace Ledqualizer
 
         private static void ComputeColorsStartToEnd(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
+            double saturation = GetActiveSaturation(settings);
             for (int i = 0; i < ledCount; i++)
             {
                 int idx = i * 3;
@@ -375,7 +378,7 @@ namespace Ledqualizer
                 {
                     double hue = 360 * ((float)i / ledCount);
                     hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                    Color rgbColor = Common.HSVToRGB(hue, 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
+                    Color rgbColor = Common.HSVToRGB(hue, saturation, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                     ledConfigArray[idx] = rgbColor.R;
                     ledConfigArray[idx + 1] = rgbColor.G;
                     ledConfigArray[idx + 2] = rgbColor.B;
@@ -389,6 +392,7 @@ namespace Ledqualizer
 
         private static void ComputeColorsEndToStart(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
+            double saturation = GetActiveSaturation(settings);
             for (int i = ledCount - 1; i >= 0; i--)
             {
                 int idx = i * 3;
@@ -396,7 +400,7 @@ namespace Ledqualizer
                 {
                     double hue = 360 - (360 * ((float)i / ledCount));
                     hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                    Color rgbColor = Common.HSVToRGB(hue, 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
+                    Color rgbColor = Common.HSVToRGB(hue, saturation, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                     ledConfigArray[idx] = rgbColor.R;
                     ledConfigArray[idx + 1] = rgbColor.G;
                     ledConfigArray[idx + 2] = rgbColor.B;
@@ -411,6 +415,7 @@ namespace Ledqualizer
         private static void ComputeColorsMidToOut(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             int center = ledCount / 2;
+            double saturation = GetActiveSaturation(settings);
             for (int i = 0; i < ledCount; i++)
             {
                 int idx = i * 3;
@@ -420,7 +425,7 @@ namespace Ledqualizer
                 {
                     double hue = 360 * (settings.HueReverse ? 1 - distanceFactor : distanceFactor);
                     hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                    Color rgbColor = Common.HSVToRGB(hue, settings.White ? 0 : 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
+                    Color rgbColor = Common.HSVToRGB(hue, saturation, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                     ledConfigArray[idx] = rgbColor.R;
                     ledConfigArray[idx + 1] = rgbColor.G;
                     ledConfigArray[idx + 2] = rgbColor.B;
@@ -436,6 +441,7 @@ namespace Ledqualizer
         {
             int center = ledCount / 2;
             const int pointSize = 10;
+            double saturation = GetActiveSaturation(settings);
             for (int i = 0; i < ledCount; i++)
             {
                 int idx = i * 3;
@@ -445,7 +451,7 @@ namespace Ledqualizer
                 {
                     double hue = 360 * (settings.HueReverse ? 1 - distanceFactor : distanceFactor);
                     hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                    Color rgbColor = Common.HSVToRGB(hue, 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
+                    Color rgbColor = Common.HSVToRGB(hue, saturation, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                     ledConfigArray[idx] = rgbColor.R;
                     ledConfigArray[idx + 1] = rgbColor.G;
                     ledConfigArray[idx + 2] = rgbColor.B;
@@ -460,13 +466,14 @@ namespace Ledqualizer
         private static void ComputeColorsColorPush(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             int center = ledCount / 2;
+            double saturation = GetActiveSaturation(settings);
             for (int i = 0; i < ledCount; i++)
             {
                 int idx = i * 3;
                 int distance = Math.Abs(i - center);
                 float distanceFactor = center == 0 ? 0 : (float)distance / center;
                 float adjustedVol = vol * (1.0f - distanceFactor);
-                Color rgbColor = Common.HSVToRGB(360 * adjustedVol, 1.0, settings.BrightnessValue / (double)settings.BrightnessMaximum);
+                Color rgbColor = Common.HSVToRGB(360 * adjustedVol, saturation, settings.BrightnessValue / (double)settings.BrightnessMaximum);
                 ledConfigArray[idx] = rgbColor.R;
                 ledConfigArray[idx + 1] = rgbColor.G;
                 ledConfigArray[idx + 2] = rgbColor.B;
@@ -476,6 +483,7 @@ namespace Ledqualizer
         private static void ComputeColorsBrightness(byte[] ledConfigArray, int ledCount, float vol, AudioReactiveSceneSettings settings)
         {
             int center = ledCount / 2;
+            double saturation = GetActiveSaturation(settings);
             for (int i = 0; i < ledCount; i++)
             {
                 int idx = i * 3;
@@ -484,7 +492,7 @@ namespace Ledqualizer
                 float adjustedVol = vol * (1.0f - distanceFactor);
                 double hue = 360 * (settings.HueReverse ? 1 - distanceFactor : distanceFactor);
                 hue = Common.MapValue(hue, 0, 360, settings.HueMin, settings.HueMax);
-                Color rgbColor = Common.HSVToRGB(hue, 1.0, adjustedVol * (settings.BrightnessValue / (double)settings.BrightnessMaximum));
+                Color rgbColor = Common.HSVToRGB(hue, saturation, adjustedVol * (settings.BrightnessValue / (double)settings.BrightnessMaximum));
                 ledConfigArray[idx] = rgbColor.R;
                 ledConfigArray[idx + 1] = rgbColor.G;
                 ledConfigArray[idx + 2] = rgbColor.B;
@@ -493,12 +501,19 @@ namespace Ledqualizer
 
         private static void ApplyBackground(byte[] ledConfigArray, int idx, AudioReactiveSceneSettings settings)
         {
-            double saturation = settings.BackgroundWhite ? 0 : 1.0;
+            double saturation = settings.BackgroundWhite
+                ? 0
+                : (settings.BackgroundSaturationValue >= 0 ? settings.BackgroundSaturationValue : settings.SaturationValue) / 100.0;
             double brightness = settings.BackgroundBrightnessValue / 100.0;
             Color bgColor = Common.HSVToRGB(settings.BackgroundHue, saturation, brightness);
             ledConfigArray[idx] = bgColor.R;
             ledConfigArray[idx + 1] = bgColor.G;
             ledConfigArray[idx + 2] = bgColor.B;
+        }
+
+        private static double GetActiveSaturation(AudioReactiveSceneSettings settings)
+        {
+            return settings.White ? 0 : settings.SaturationValue / 100.0;
         }
     }
 
@@ -860,12 +875,14 @@ namespace Ledqualizer
             {
                 Mode = scene.VolumeReactive.Mode,
                 BrightnessValue = scene.VolumeReactive.Brightness,
+                SaturationValue = scene.VolumeReactive.Saturation,
                 NormalizationValue = scene.VolumeReactive.Normalization,
                 Reverse = scene.VolumeReactive.Reverse,
                 HueReverse = scene.VolumeReactive.HueReverse,
                 White = scene.VolumeReactive.White,
                 BackgroundWhite = scene.VolumeReactive.BackgroundWhite,
                 BackgroundBrightnessValue = scene.VolumeReactive.BackgroundBrightness,
+                BackgroundSaturationValue = scene.VolumeReactive.BackgroundSaturation,
                 BackgroundHue = scene.VolumeReactive.BackgroundHue,
                 HueMin = scene.VolumeReactive.HueMin,
                 HueMax = scene.VolumeReactive.HueMax
@@ -892,12 +909,14 @@ namespace Ledqualizer
             {
                 Mode = scene.SpectralAnalysis.Mode,
                 BrightnessValue = scene.SpectralAnalysis.Brightness,
+                SaturationValue = scene.SpectralAnalysis.Saturation,
                 NormalizationValue = scene.SpectralAnalysis.Normalization,
                 Reverse = scene.SpectralAnalysis.Reverse,
                 HueReverse = scene.SpectralAnalysis.HueReverse,
                 White = scene.SpectralAnalysis.White,
                 BackgroundWhite = scene.SpectralAnalysis.BackgroundWhite,
                 BackgroundBrightnessValue = scene.SpectralAnalysis.BackgroundBrightness,
+                BackgroundSaturationValue = scene.SpectralAnalysis.BackgroundSaturation,
                 BackgroundHue = scene.SpectralAnalysis.BackgroundHue,
                 HueMin = scene.SpectralAnalysis.HueMin,
                 HueMax = scene.SpectralAnalysis.HueMax

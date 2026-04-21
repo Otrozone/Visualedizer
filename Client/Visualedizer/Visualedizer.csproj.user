@@ -28,6 +28,15 @@
     <Compile Update="UcHueMinMax.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Update="UcHueRangeSaturationBrightness.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UcHueSaturationBrightness.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="UcValueSlider.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Update="VolumeReactiveSceneEditorForm.cs">
       <SubType>Form</SubType>
     </Compile>
