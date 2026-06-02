@@ -80,11 +80,10 @@ namespace Ledqualizer
             // 
             // cbAudioDevices
             // 
-            cbAudioDevices.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             cbAudioDevices.DropDownStyle = ComboBoxStyle.DropDownList;
             cbAudioDevices.Location = new Point(12, 26);
             cbAudioDevices.Name = "cbAudioDevices";
-            cbAudioDevices.Size = new Size(626, 23);
+            cbAudioDevices.Size = new Size(269, 23);
             cbAudioDevices.TabIndex = 1;
             cbAudioDevices.SelectedIndexChanged += cbAudioDevices_SelectedIndexChanged;
             // 
@@ -207,18 +206,6 @@ namespace Ledqualizer
             lblColorRange.TabIndex = 5;
             lblColorRange.Text = "Color";
             // 
-            // ucColorRange
-            // 
-            ucColorRange.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            ucColorRange.Brightness = 100;
-            ucColorRange.HueEnd = 360;
-            ucColorRange.HueStart = 0;
-            ucColorRange.Location = new Point(12, 170);
-            ucColorRange.Name = "ucColorRange";
-            ucColorRange.Saturation = 100;
-            ucColorRange.Size = new Size(626, 84);
-            ucColorRange.TabIndex = 6;
-            // 
             // lblNormalization
             // 
             lblNormalization.AutoSize = true;
@@ -239,6 +226,16 @@ namespace Ledqualizer
             trackBarNormalizationLevel.TabIndex = 8;
             trackBarNormalizationLevel.Value = 10;
             trackBarNormalizationLevel.ValueChanged += ControlValueChanged;
+            // 
+            // ucColorRange
+            // 
+            ucColorRange.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            ucColorRange.Location = new Point(12, 170);
+            ucColorRange.Margin = new Padding(0);
+            ucColorRange.MinimumSize = new Size(120, 84);
+            ucColorRange.Name = "ucColorRange";
+            ucColorRange.Size = new Size(626, 84);
+            ucColorRange.TabIndex = 6;
             // 
             // chbReverse
             // 
@@ -278,7 +275,7 @@ namespace Ledqualizer
             chbBackgroundEnabled.AutoSize = true;
             chbBackgroundEnabled.Location = new Point(12, 356);
             chbBackgroundEnabled.Name = "chbBackgroundEnabled";
-            chbBackgroundEnabled.Size = new Size(118, 19);
+            chbBackgroundEnabled.Size = new Size(120, 19);
             chbBackgroundEnabled.TabIndex = 14;
             chbBackgroundEnabled.Text = "Background color";
             chbBackgroundEnabled.UseVisualStyleBackColor = true;
@@ -305,10 +302,10 @@ namespace Ledqualizer
             // 
             // progressBar
             // 
-            progressBar.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            progressBar.Location = new Point(12, 473);
+            progressBar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            progressBar.Location = new Point(300, 30);
             progressBar.Name = "progressBar";
-            progressBar.Size = new Size(626, 16);
+            progressBar.Size = new Size(338, 16);
             progressBar.TabIndex = 16;
             // 
             // timerRotate
