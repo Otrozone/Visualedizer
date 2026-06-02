@@ -1,9 +1,0 @@
-set rootPath=%~dp0
-cd %rootPath%Visualedizer_furniture
-start Visualedizer.exe
-cd %rootPath%Visualedizer_desk
-start Visualedizer.exe
-cd %rootPath%Visualedizer_ceiling
-start Visualedizer.exe
-cd %rootPath%Visualedizer_other
-start Visualedizer.exe
