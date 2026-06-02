@@ -132,6 +132,68 @@
       );
     }
 
+    @media (max-width: 540px) {
+      #stripTableWrapper {
+        overflow-x: visible;
+      }
+
+      #stripConfigTable thead {
+        display: none;
+      }
+
+      #stripConfigTable,
+      #stripConfigTable tbody,
+      #stripConfigTable tr,
+      #stripConfigTable td {
+        display: block;
+        width: 100%;
+      }
+
+      #stripConfigTable tr {
+        border-top: 1px solid rgba(255, 255, 255, 0.14);
+        padding: 0.75rem 0;
+      }
+
+      #stripConfigTable tr:first-child {
+        border-top: 0;
+      }
+
+      #stripConfigTable td {
+        border-bottom: 0;
+        padding: 0.35rem 0;
+      }
+
+      #stripConfigTable td[data-label] {
+        align-items: center;
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: minmax(108px, 38%) minmax(0, 1fr);
+      }
+
+      #stripConfigTable td[data-label]::before {
+        color: rgba(255, 255, 255, 0.72);
+        content: attr(data-label);
+        font-size: 0.875rem;
+      }
+
+      #stripConfigTable .strip-action-cell {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: 0.5rem;
+      }
+
+      #stripConfigTable .strip-action-cell::before {
+        content: none;
+      }
+
+      #stripConfigTable .strip-led-count,
+      #stripConfigTable .strip-led-offset,
+      #stripConfigTable .strip-led-shift {
+        min-width: 0;
+        width: 100%;
+      }
+    }
+
   </style>
 </head>
 
@@ -337,19 +399,21 @@
                     </button>
                   </div>
 
-                  <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-2">
+                  <div id="stripTableWrapper" class="table-responsive">
+                    <table id="stripConfigTable" class="table table-sm align-middle mb-2">
                       <thead>
                         <tr>
                           <th scope="col">Strip</th>
                           <th scope="col">LED count</th>
+                          <th scope="col">Physical offset</th>
+                          <th scope="col">Circular shift</th>
                           <th scope="col">Data pin</th>
                           <th scope="col"></th>
                         </tr>
                       </thead>
                       <tbody id="stripTableBody">
                         <tr id="stripEmptyState">
-                          <td colspan="4" class="text-muted">No active strips configured.</td>
+                          <td colspan="6" class="text-muted">No active strips configured.</td>
                         </tr>
                       </tbody>
                     </table>
@@ -459,8 +523,8 @@
 
                 <li class="list-group-item px-3">
                   <div class="form-check">
-                    <input class="form-check-input" type="checkbox" value="" id="webUiUseWebSockets" checked>
-                    <label class="form-check-label" for="webUiUseWebSockets">
+                    <input class="form-check-input" type="checkbox" value="" id="chbUseWebSockets" data-conf-name="webUiUseWebSockets" checked>
+                    <label class="form-check-label" for="chbUseWebSockets">
                       Use WebSockets from web UI
                     </label>
                   </div>
@@ -587,7 +651,6 @@
     const passwordFieldIds = ['wifiPassword', 'wifiApPassword'];
     const stripTableBody = document.getElementById('stripTableBody');
     const btnAddStrip = document.getElementById('btnAddStrip');
-    const chbUseWebSockets = document.getElementById('webUiUseWebSockets');
     const chbTurnOffOnLeave = document.getElementById('turnOffOnLeave');
     let availableStripSlots = [];
     let runtimeConfig = {
@@ -601,6 +664,7 @@
     document.addEventListener("DOMContentLoaded", () => {
       getConf().then(config => {
         applyRuntimeConfig(config);
+        applyConfigToElements(config);
         if (config.deviceName) {
           document.getElementById("deviceNameLabel").innerHTML = config.deviceName;
           
@@ -649,27 +713,7 @@
       getConf().then(config => {
         renderConfiguredStrips(config.strips || []);
         updatePasswordHints(config);
-        Object.keys(config).forEach((key) => {
-          if (key === 'strips') {
-            return;
-          }
-
-          const val = config[key];
-          const element = document.getElementById(key);
-
-          if (!element) {
-            console.log(`Configuration - Element with id=${key} not found`);
-            return;
-          }
-
-          if (typeof val == "boolean") {
-            element.checked = val;
-          } else {
-            element.value = val;
-          }
-          var event = new Event('input', { bubbles: true });
-          element.dispatchEvent(event);
-        });
+        applyConfigToElements(config);
 
         passwordFieldIds.forEach((fieldId) => {
           const element = document.getElementById(fieldId);
@@ -691,15 +735,17 @@
           return;
         }
 
+        const configKey = input.dataset.confName || input.id;
+
         switch (input.getAttribute("type")) {
           case "checkbox":
-            confObj[input.id] = input.checked;
+            confObj[configKey] = input.checked;
             break;
           case "number":
-            confObj[input.id] = parseInt(input.value);
+            confObj[configKey] = parseInt(input.value);
             break;
           default:
-            confObj[input.id] = input.value;
+            confObj[configKey] = input.value;
             break;
         }        
       });
@@ -714,6 +760,34 @@
         }, 10000);
       });
     });
+
+    function getConfigElement(configKey) {
+      return document.querySelector(`[data-conf-name="${configKey}"]`) || document.getElementById(configKey);
+    }
+
+    function applyConfigToElements(config) {
+      Object.keys(config).forEach((key) => {
+        if (key === 'strips') {
+          return;
+        }
+
+        const val = config[key];
+        const element = getConfigElement(key);
+
+        if (!element) {
+          console.log(`Configuration - Element with id=${key} not found`);
+          return;
+        }
+
+        if (typeof val == "boolean") {
+          element.checked = val;
+        } else {
+          element.value = val;
+        }
+        var event = new Event('input', { bubbles: true });
+        element.dispatchEvent(event);
+      });
+    }
 
     function updatePasswordHints(config) {
       const wifiPasswordHint = document.getElementById('wifiPasswordHint');
@@ -734,6 +808,8 @@
             .map(strip => ({
               index: Number.parseInt(strip.index, 10),
               ledCount: Number.parseInt(strip.ledCount, 10) || 0,
+              ledOffset: Math.max(0, Number.parseInt(strip.ledOffset, 10) || 0),
+              ledShift: Math.max(0, Number.parseInt(strip.ledShift, 10) || 0),
               dataPin: strip.dataPin ?? ''
             }))
             .filter(strip => Number.isInteger(strip.index) && strip.index >= 0)
@@ -747,7 +823,7 @@
         renderStripEmptyState();
       } else {
         activeStrips.forEach(strip => {
-          stripTableBody.appendChild(createStripRow(strip.index, strip.ledCount, strip.dataPin));
+          stripTableBody.appendChild(createStripRow(strip.index, strip.ledCount, strip.ledOffset, strip.ledShift, strip.dataPin));
         });
       }
 
@@ -757,19 +833,21 @@
     function renderStripEmptyState() {
       const row = document.createElement('tr');
       row.id = 'stripEmptyState';
-      row.innerHTML = '<td colspan="4" class="text-muted">No active strips configured.</td>';
+      row.innerHTML = '<td colspan="6" class="text-muted">No active strips configured.</td>';
       stripTableBody.appendChild(row);
     }
 
-    function createStripRow(index, ledCount, dataPin) {
+    function createStripRow(index, ledCount, ledOffset, ledShift, dataPin) {
       const row = document.createElement('tr');
       row.dataset.index = index;
 
       const stripCell = document.createElement('td');
+      stripCell.dataset.label = 'Strip';
       stripCell.textContent = `Strip ${index}`;
       row.appendChild(stripCell);
 
       const ledCountCell = document.createElement('td');
+      ledCountCell.dataset.label = 'LED count';
       const ledCountInput = document.createElement('input');
       ledCountInput.type = 'number';
       ledCountInput.min = '1';
@@ -779,12 +857,55 @@
       ledCountCell.appendChild(ledCountInput);
       row.appendChild(ledCountCell);
 
+      const ledOffsetCell = document.createElement('td');
+      ledOffsetCell.dataset.label = 'Physical offset';
+      const ledOffsetInput = document.createElement('input');
+      ledOffsetInput.type = 'number';
+      ledOffsetInput.min = '0';
+      ledOffsetInput.step = '1';
+      ledOffsetInput.value = ledOffset;
+      ledOffsetInput.className = 'form-control strip-led-offset';
+      ledOffsetCell.appendChild(ledOffsetInput);
+      row.appendChild(ledOffsetCell);
+
+      function normalizeLedOffset() {
+        const currentOffset = Number.parseInt(ledOffsetInput.value, 10) || 0;
+        if (currentOffset < 0) {
+          ledOffsetInput.value = 0;
+        }
+      }
+
+      ledOffsetInput.addEventListener('input', normalizeLedOffset);
+      normalizeLedOffset();
+
+      const ledShiftCell = document.createElement('td');
+      ledShiftCell.dataset.label = 'Circular shift';
+      const ledShiftInput = document.createElement('input');
+      ledShiftInput.type = 'number';
+      ledShiftInput.min = '0';
+      ledShiftInput.step = '1';
+      ledShiftInput.value = ledShift;
+      ledShiftInput.className = 'form-control strip-led-shift';
+      ledShiftCell.appendChild(ledShiftInput);
+      row.appendChild(ledShiftCell);
+
+      function normalizeLedShift() {
+        const currentShift = Number.parseInt(ledShiftInput.value, 10) || 0;
+        if (currentShift < 0) {
+          ledShiftInput.value = 0;
+        }
+      }
+
+      ledShiftInput.addEventListener('input', normalizeLedShift);
+      normalizeLedShift();
+
       const dataPinCell = document.createElement('td');
+      dataPinCell.dataset.label = 'Data pin';
       dataPinCell.textContent = dataPin === '' ? 'Fixed' : dataPin;
       row.appendChild(dataPinCell);
 
       const actionCell = document.createElement('td');
-      actionCell.className = 'text-end';
+      actionCell.className = 'text-end strip-action-cell';
       const removeButton = document.createElement('button');
       removeButton.type = 'button';
       removeButton.className = 'btn btn-outline-danger btn-sm';
@@ -820,9 +941,13 @@
       return Array.from(stripTableBody.querySelectorAll('tr[data-index]'))
         .map(row => {
           const ledCountInput = row.querySelector('.strip-led-count');
+          const ledOffsetInput = row.querySelector('.strip-led-offset');
+          const ledShiftInput = row.querySelector('.strip-led-shift');
           return {
             index: Number.parseInt(row.dataset.index, 10),
-            ledCount: Number.parseInt(ledCountInput.value, 10) || 0
+            ledCount: Number.parseInt(ledCountInput.value, 10) || 0,
+            ledOffset: Math.max(0, Number.parseInt(ledOffsetInput.value, 10) || 0),
+            ledShift: Math.max(0, Number.parseInt(ledShiftInput.value, 10) || 0)
           };
         })
         .filter(strip => Number.isInteger(strip.index) && strip.index >= 0 && strip.ledCount > 0);
@@ -840,7 +965,7 @@
       }
 
       const defaultLedCount = nextStrip.ledCount > 0 ? nextStrip.ledCount : 60;
-      stripTableBody.appendChild(createStripRow(nextStrip.index, defaultLedCount, nextStrip.dataPin));
+      stripTableBody.appendChild(createStripRow(nextStrip.index, defaultLedCount, nextStrip.ledOffset, nextStrip.ledShift, nextStrip.dataPin));
       updateAddStripButtonState();
     });
 
@@ -890,7 +1015,7 @@
     // API calling
     function updateColors(params) {
       if (runtimeConfig.webUiUseWebSockets && socketReady && socket !== null) {
-        sendMessage(`?${params}`);
+        sendMessage(`update?${params}`);
       } else {
         const apiUrl = `/update?${params}`;
 

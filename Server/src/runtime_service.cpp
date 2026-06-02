@@ -20,7 +20,7 @@ static void startBootFadeIn() {
   Serial.println("Starting boot fade in");
   CRGB warmWhite = htmlColor2Crgb(bootColor);
   forEachLedStrip([&](LedStripDvc& dvc) {
-    Serial.printf("Starting fade-in effect on strip %d\n", dvc.ledIdx);
+    Serial.printf("Starting fade-in effect on strip %d [%d]\n", dvc.ledIdx, DVC_DATA_PIN_LIST[dvc.ledIdx]);
     requestEffectFadeIn(dvc.ledIdx, warmWhite, 3000);
   });
 }
@@ -54,7 +54,7 @@ void checkActivityTimeout() {
   tmpActivityTimeout = 0;
 
   forEachLedStrip([&](LedStripDvc& dvc) {
-    Serial.printf("Running fade-out effect on strip %d\n", dvc.ledIdx);
+    Serial.printf("Running fade-out effect on strip %d [%d]\n", dvc.ledIdx, DVC_DATA_PIN_LIST[dvc.ledIdx]);
     requestEffectFadeOut(dvc.ledIdx, fadeOutDuration);
   });
 }

@@ -9,6 +9,8 @@
 
 #define NVM_NAMESPACE "visualedizer"
 #define NVM_LED_COUNT "ledCount"
+#define NVM_LED_OFFSET "ledOffset"
+#define NVM_LED_SHIFT "ledShift"
 #define NVM_DATA_PIN "dataPin"
 #define NVM_WIFI_MODE "wifiMode"
 #define NVM_WIFI_SSID "wifiSsid"
@@ -21,7 +23,8 @@
 #define NVM_DMX_UNICAST "dmxUnicast"
 #define NVM_DMX_UNIVERSE "dmxUniverse"
 #define NVM_DMX_UNIVERSE_COUNT "dmxUniCount"
-#define NVM_WEB_UI_USE_WEB_SOCKETS "webUiUseWebSockets"
+#define CONF_WEB_UI_USE_WEB_SOCKETS "webUiUseWebSockets"
+#define NVM_WEB_UI_USE_WEB_SOCKETS "webUiUseWs"
 #define NVM_WEB_SOCK_ENABLED_LEGACY "webSockEnabled"
 #define NVM_TURN_OFF_ON_LEAVE "turnOffOnLeave"
 #define NVM_DEVICE_NAME "deviceName"

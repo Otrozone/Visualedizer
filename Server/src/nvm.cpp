@@ -12,9 +12,27 @@ String getStripLedCountKey(int stripIdx) {
   return "strip" + String(stripIdx) + "LedCount";
 }
 
+String getStripLedOffsetKey(int stripIdx) {
+  return "strip" + String(stripIdx) + "LedOffset";
+}
+
+String getStripLedShiftKey(int stripIdx) {
+  return "strip" + String(stripIdx) + "LedShift";
+}
+
 uint16_t getStoredStripLedCount(int stripIdx) {
   String key = getStripLedCountKey(stripIdx);
   return preferences.getUInt(key.c_str(), DVC_NUM_LEDS_LIST[stripIdx]);
+}
+
+uint16_t getStoredStripLedOffset(int stripIdx) {
+  String key = getStripLedOffsetKey(stripIdx);
+  return preferences.getUInt(key.c_str(), DVC_LED_OFFSET_LIST[stripIdx]);
+}
+
+uint16_t getStoredStripLedShift(int stripIdx) {
+  String key = getStripLedShiftKey(stripIdx);
+  return preferences.getUInt(key.c_str(), DVC_LED_SHIFT_LIST[stripIdx]);
 }
 }
 
@@ -51,6 +69,15 @@ void initConf() {
   irUnrecognizedAsOnOff = preferences.getBool(NVM_IR_UNRECOGNIZED_AS_ONOFF, irUnrecognizedAsOnOff);
 
   preferences.end();
+
+  Serial.println("Configuration loaded: wifiMode=" + String(wifiMode) +
+    " wifiSsid=" + wifiSsid +
+    " wifiApSsid=" + wifiApSsid +
+    " bootFadeIn=" + String(bootFadeIn) +
+    " bootColor=" + bootColor +
+    " deviceName=" + deviceName +
+    " dmxEnabled=" + String(dmxEnabled) +
+    " irEnabled=" + String(irEnabled));
 }
 
 void handleGetConf(AsyncWebServerRequest *request) {
@@ -61,10 +88,14 @@ void handleGetConf(AsyncWebServerRequest *request) {
   preferences.begin(NVM_NAMESPACE, true);
   for (int i = 0; i < DVC_STRIP_COUNT; i++) {
     const int ledCount = getStoredStripLedCount(i);
+    const int ledOffset = getStoredStripLedOffset(i);
+    const int ledShift = getStoredStripLedShift(i);
 
     JsonObject strip = strips.add<JsonObject>();
     strip["index"] = i;
     strip[NVM_LED_COUNT] = ledCount;
+    strip[NVM_LED_OFFSET] = ledOffset;
+    strip[NVM_LED_SHIFT] = ledShift;
     strip[NVM_DATA_PIN] = DVC_DATA_PIN_LIST[i];
   }
   preferences.end();
@@ -84,7 +115,7 @@ void handleGetConf(AsyncWebServerRequest *request) {
   jsonDoc[NVM_ACTIVITY_TIMEOUT] = activityTimeout;
 
   jsonDoc[NVM_DEVICE_NAME] = deviceName;
-  jsonDoc[NVM_WEB_UI_USE_WEB_SOCKETS] = webUiUseWebSockets;
+  jsonDoc[CONF_WEB_UI_USE_WEB_SOCKETS] = webUiUseWebSockets;
   jsonDoc[NVM_TURN_OFF_ON_LEAVE] = turnOffOnLeave;
   jsonDoc[NVM_DMX_ENABLED] = dmxEnabled;
   jsonDoc[NVM_DMX_UNICAST] = dmxUnicast;
@@ -106,7 +137,8 @@ void handleGetConf(AsyncWebServerRequest *request) {
 }
 
 void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-  // Serial.println("handleSetConf");
+  Serial.println("handleSetConf - jsonData: " + String((const char*)data));
+
   JsonDocument jsonDoc;
   DeserializationError error = deserializeJson(jsonDoc, (const char*)data);
 
@@ -130,7 +162,7 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   const bool paramActivityTimeoutEnabled = jsonDoc[NVM_ACTIVITY_TIMEOUT_ENABLED].as<bool>();
   const int paramActivityTimeout = jsonDoc[NVM_ACTIVITY_TIMEOUT].as<uint>();
 
-  const bool paramWebUiUseWebSockets = jsonDoc[NVM_WEB_UI_USE_WEB_SOCKETS].as<bool>();
+  const bool paramWebUiUseWebSockets = jsonDoc[CONF_WEB_UI_USE_WEB_SOCKETS].as<bool>();
   const bool paramTurnOffOnLeave = jsonDoc[NVM_TURN_OFF_ON_LEAVE].as<bool>();
   
   const bool paramDmxEnabled = jsonDoc[NVM_DMX_ENABLED].as<bool>();
@@ -171,7 +203,10 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   preferences.putBool(NVM_ACTIVITY_TIMEOUT_ENABLED, paramActivityTimeoutEnabled);
   preferences.putUInt(NVM_ACTIVITY_TIMEOUT, paramActivityTimeout);
   
-  preferences.putBool(NVM_WEB_UI_USE_WEB_SOCKETS, paramWebUiUseWebSockets);
+  if (preferences.putBool(NVM_WEB_UI_USE_WEB_SOCKETS, paramWebUiUseWebSockets) == 0) {
+    Serial.println("Failed to store webUiUseWebSockets in NVM");
+  }
+  webUiUseWebSockets = paramWebUiUseWebSockets;
   preferences.putBool(NVM_TURN_OFF_ON_LEAVE, paramTurnOffOnLeave);
   
   preferences.putBool(NVM_DMX_ENABLED, paramDmxEnabled);
@@ -185,20 +220,30 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
 
   if (jsonDoc[DEVICE_STRIPS].is<JsonArray>()) {
     for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-      String key = getStripLedCountKey(i);
-      preferences.putUInt(key.c_str(), 0);
+      String ledCountKey = getStripLedCountKey(i);
+      String ledOffsetKey = getStripLedOffsetKey(i);
+      String ledShiftKey = getStripLedShiftKey(i);
+      preferences.putUInt(ledCountKey.c_str(), 0);
+      preferences.putUInt(ledOffsetKey.c_str(), DVC_LED_OFFSET_LIST[i]);
+      preferences.putUInt(ledShiftKey.c_str(), DVC_LED_SHIFT_LIST[i]);
     }
 
     JsonArray strips = jsonDoc[DEVICE_STRIPS].as<JsonArray>();
     for (JsonObject strip : strips) {
       const int stripIdx = strip["index"] | -1;
-      const int ledCount = std::max(0, strip[NVM_LED_COUNT] | 0);
       if (stripIdx < 0 || stripIdx >= DVC_STRIP_COUNT) {
         continue;
       }
 
-      String key = getStripLedCountKey(stripIdx);
-      preferences.putUInt(key.c_str(), ledCount);
+      const int ledCount = std::max(0, strip[NVM_LED_COUNT] | 0);
+      const int ledOffset = std::max(0, strip[NVM_LED_OFFSET] | static_cast<int>(DVC_LED_OFFSET_LIST[stripIdx]));
+      const int ledShift = std::max(0, strip[NVM_LED_SHIFT] | static_cast<int>(DVC_LED_SHIFT_LIST[stripIdx]));
+      String ledCountKey = getStripLedCountKey(stripIdx);
+      String ledOffsetKey = getStripLedOffsetKey(stripIdx);
+      String ledShiftKey = getStripLedShiftKey(stripIdx);
+      preferences.putUInt(ledCountKey.c_str(), ledCount);
+      preferences.putUInt(ledOffsetKey.c_str(), ledOffset);
+      preferences.putUInt(ledShiftKey.c_str(), ledShift);
     }
   }
 

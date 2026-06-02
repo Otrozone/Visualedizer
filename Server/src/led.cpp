@@ -13,6 +13,14 @@ String getStripLedCountKey(int stripIdx) {
   return "strip" + String(stripIdx) + "LedCount";
 }
 
+String getStripLedOffsetKey(int stripIdx) {
+  return "strip" + String(stripIdx) + "LedOffset";
+}
+
+String getStripLedShiftKey(int stripIdx) {
+  return "strip" + String(stripIdx) + "LedShift";
+}
+
 uint16_t getConfiguredStripLedCount(int stripIdx) {
   preferences.begin(NVM_NAMESPACE, true);
   String key = getStripLedCountKey(stripIdx);
@@ -21,16 +29,36 @@ uint16_t getConfiguredStripLedCount(int stripIdx) {
   return ledCount;
 }
 
+uint16_t getConfiguredStripLedOffset(int stripIdx) {
+  preferences.begin(NVM_NAMESPACE, true);
+  String key = getStripLedOffsetKey(stripIdx);
+  const uint16_t ledOffset = preferences.getUInt(key.c_str(), DVC_LED_OFFSET_LIST[stripIdx]);
+  preferences.end();
+  return ledOffset;
+}
+
+uint16_t getConfiguredStripLedShift(int stripIdx) {
+  preferences.begin(NVM_NAMESPACE, true);
+  String key = getStripLedShiftKey(stripIdx);
+  const uint16_t ledShift = preferences.getUInt(key.c_str(), DVC_LED_SHIFT_LIST[stripIdx]);
+  preferences.end();
+  return ledShift;
+}
+
 template <uint16_t DataPin>
 void initStripSlot(int stripIdx) {
   const uint16_t ledCount = getConfiguredStripLedCount(stripIdx);
+  const uint16_t ledOffset = getConfiguredStripLedOffset(stripIdx);
+  const uint16_t ledShift = getConfiguredStripLedShift(stripIdx);
   if (ledCount == 0) {
     ledStrips[stripIdx] = nullptr;
     return;
   }
 
-  ledStrips[stripIdx] = new LedStripDvc(stripIdx, ledCount);
-  FastLED.addLeds<DVC_LED_TYPE, DataPin, DVC_LED_COLOR_ORDER>(ledStrips[stripIdx]->leds, ledStrips[stripIdx]->ledCount);
+  ledStrips[stripIdx] = new LedStripDvc(stripIdx, ledCount, ledOffset, ledShift);
+  FastLED.addLeds<DVC_LED_TYPE, DataPin, DVC_LED_COLOR_ORDER>(
+      ledStrips[stripIdx]->physicalLeds,
+      ledStrips[stripIdx]->physicalLedCount);
 }
 }
 
@@ -67,19 +95,17 @@ void initLeds() {
   initRenderService();
 }
 
-static void circularShift(LedStripDvc* dvc) {
-  if (dvc == nullptr || dvc->ledCount == 0) {
+static void preparePhysicalLeds(LedStripDvc* dvc) {
+  if (dvc == nullptr || dvc->ledCount == 0 || dvc->physicalLedCount == 0) {
     return;
   }
 
-  CRGB tempArray[dvc->ledCount];
+  fill_solid(dvc->physicalLeds, dvc->physicalLedCount, CRGB::Black);
 
+  const uint16_t ledShift = dvc->ledShift % dvc->ledCount;
   for (int i = 0; i < dvc->ledCount; i++) {
-    tempArray[(i + DVC_OFFSET) % dvc->ledCount] = dvc->leds[i];
-  }
-
-  for (int i = 0; i < dvc->ledCount; i++) {
-    dvc->leds[i] = tempArray[i];
+    const uint16_t shiftedIndex = (i + ledShift) % dvc->ledCount;
+    dvc->physicalLeds[dvc->ledOffset + shiftedIndex] = dvc->leds[i];
   }
 }
 
@@ -90,10 +116,8 @@ void FastLedShow() {
     xSemaphoreTake(renderMutex, portMAX_DELAY);
   }
 
-  if (DVC_OFFSET > 0) {
-    for (int i = 0; i < DVC_STRIP_COUNT; i++) {
-      circularShift(ledStrips[i]);
-    }
+  for (int i = 0; i < DVC_STRIP_COUNT; i++) {
+    preparePhysicalLeds(ledStrips[i]);
   }
 
   FastLED.show();

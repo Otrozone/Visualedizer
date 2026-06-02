@@ -182,7 +182,7 @@ GET /wol?mac=<mac-address> - Send magic packet
 
 Connect to `ws://<device-ip>:81`
 
-Message format: `?command=<command>&<params>` (same as HTTP update endpoint)
+Message format: `update?command=<command>&<params>` (same as HTTP update endpoint)
 
 ## Project Structure
 
