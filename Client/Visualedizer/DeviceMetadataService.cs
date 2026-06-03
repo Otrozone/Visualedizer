@@ -130,6 +130,15 @@ namespace Ledqualizer
 
             [JsonPropertyName("ledCount")]
             public int LedCount { get; set; }
+
+            [JsonPropertyName("ledOffset")]
+            public int LedOffset { get; set; }
+
+            [JsonPropertyName("ledShift")]
+            public int LedShift { get; set; }
+
+            [JsonPropertyName("dataPin")]
+            public int DataPin { get; set; }
         }
     }
 }

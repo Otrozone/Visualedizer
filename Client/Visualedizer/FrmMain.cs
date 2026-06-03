@@ -1464,7 +1464,8 @@ namespace Ledqualizer
 
                 SafeUi(() =>
                 {
-                    requiresRestart = row.LedCount > 0 && (row.LedCount != metadata.TotalLedCount || row.StripCount != metadata.StripCount);
+                    requiresRestart = row.LedCount > 0
+                        && (row.LedCount != metadata.TotalLedCount || row.StripCount != metadata.StripCount);
                     row.Name = metadata.Name;
                     row.LedCount = metadata.TotalLedCount;
                     row.StripCount = metadata.StripCount;

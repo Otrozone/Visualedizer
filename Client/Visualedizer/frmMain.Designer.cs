@@ -149,7 +149,7 @@ namespace Ledqualizer
             colName.FillWeight = 18F;
             colName.HeaderText = "Name";
             colName.Name = "colName";
-            colName.ReadOnly = true;
+            colName.ReadOnly = false;
             // 
             // colAssignedScene
             // 
