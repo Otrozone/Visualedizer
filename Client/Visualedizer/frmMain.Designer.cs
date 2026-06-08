@@ -149,7 +149,6 @@ namespace Ledqualizer
             colName.FillWeight = 18F;
             colName.HeaderText = "Name";
             colName.Name = "colName";
-            colName.ReadOnly = false;
             // 
             // colAssignedScene
             // 
@@ -377,7 +376,7 @@ namespace Ledqualizer
             panelSceneEditorHost.BorderStyle = BorderStyle.FixedSingle;
             panelSceneEditorHost.Location = new Point(13, 36);
             panelSceneEditorHost.Name = "panelSceneEditorHost";
-            panelSceneEditorHost.Size = new Size(687, 442);
+            panelSceneEditorHost.Size = new Size(689, 442);
             panelSceneEditorHost.TabIndex = 1;
             // 
             // lblEditorTitle

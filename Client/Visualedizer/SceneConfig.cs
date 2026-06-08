@@ -6,7 +6,33 @@ namespace Ledqualizer
         Gradient,
         VolumeReactive,
         ScreenRowCapture,
-        SpectralAnalysis
+        SpectralAnalysis,
+        ImageRowCapture,
+        LaserDmxLive,
+        StrobeLive
+    }
+
+    public enum ImageSourceMode
+    {
+        SingleImage,
+        Folder
+    }
+
+    public enum ImageScanDirection
+    {
+        TopToBottom,
+        BottomToTop,
+        LeftToRight,
+        RightToLeft,
+        Random
+    }
+
+    public enum LaserDmxValueMode
+    {
+        Constant,
+        RandomRange,
+        ValueList,
+        RandomValueFromList
     }
 
     public sealed class SceneConfig
@@ -19,6 +45,9 @@ namespace Ledqualizer
         public VolumeReactiveSceneConfig VolumeReactive { get; set; } = new();
         public ScreenRowCaptureSceneConfig ScreenRowCapture { get; set; } = new();
         public SpectralAnalysisSceneConfig SpectralAnalysis { get; set; } = new();
+        public ImageRowCaptureSceneConfig ImageRowCapture { get; set; } = new();
+        public LaserDmxLiveSceneConfig LaserDmxLive { get; set; } = new();
+        public StrobeLiveSceneConfig StrobeLive { get; set; } = new();
 
         public SceneConfig Clone()
         {
@@ -31,7 +60,10 @@ namespace Ledqualizer
                 Gradient = Gradient.Clone(),
                 VolumeReactive = VolumeReactive.Clone(),
                 ScreenRowCapture = ScreenRowCapture.Clone(),
-                SpectralAnalysis = SpectralAnalysis.Clone()
+                SpectralAnalysis = SpectralAnalysis.Clone(),
+                ImageRowCapture = ImageRowCapture.Clone(),
+                LaserDmxLive = LaserDmxLive.Clone(),
+                StrobeLive = StrobeLive.Clone()
             };
         }
 
@@ -163,6 +195,87 @@ namespace Ledqualizer
         }
     }
 
+    public sealed class ImageRowCaptureSceneConfig
+    {
+        public ImageSourceMode SourceMode { get; set; } = ImageSourceMode.SingleImage;
+        public string ImagePath { get; set; } = string.Empty;
+        public string FolderPath { get; set; } = string.Empty;
+        public bool Recursive { get; set; }
+        public bool Loop { get; set; } = true;
+        public ImageScanDirection Direction { get; set; } = ImageScanDirection.TopToBottom;
+        public double SpeedMin { get; set; } = 1.0;
+        public double SpeedMax { get; set; } = 1.0;
+        public bool IsPaused { get; set; }
+        public int RequestedSampleIndex { get; set; } = -1;
+        public int RequestedSeekRevision { get; set; }
+
+        public ImageRowCaptureSceneConfig Clone()
+        {
+            return new ImageRowCaptureSceneConfig
+            {
+                SourceMode = SourceMode,
+                ImagePath = ImagePath,
+                FolderPath = FolderPath,
+                Recursive = Recursive,
+                Loop = Loop,
+                Direction = Direction,
+                SpeedMin = SpeedMin,
+                SpeedMax = SpeedMax
+            };
+        }
+    }
+
+    public sealed class LaserDmxLiveSceneConfig
+    {
+        public List<LaserDmxChannelRow> Channels { get; set; } = new();
+
+        public LaserDmxLiveSceneConfig Clone()
+        {
+            return new LaserDmxLiveSceneConfig
+            {
+                Channels = Channels.Select(channel => channel.Clone()).ToList()
+            };
+        }
+    }
+
+    public sealed class LaserDmxChannelRow
+    {
+        public int Channel { get; set; } = 1;
+        public LaserDmxValueMode Mode { get; set; } = LaserDmxValueMode.Constant;
+        public int ConstantValue { get; set; }
+        public int RangeMin { get; set; }
+        public int RangeMax { get; set; } = 255;
+        public List<int> Values { get; set; } = new();
+        public bool RefreshEnabled { get; set; }
+        public double RefreshIntervalSeconds { get; set; } = 1.0;
+
+        public LaserDmxChannelRow Clone()
+        {
+            return new LaserDmxChannelRow
+            {
+                Channel = Channel,
+                Mode = Mode,
+                ConstantValue = ConstantValue,
+                RangeMin = RangeMin,
+                RangeMax = RangeMax,
+                Values = new List<int>(Values),
+                RefreshEnabled = RefreshEnabled,
+                RefreshIntervalSeconds = RefreshIntervalSeconds
+            };
+        }
+    }
+
+    public sealed class StrobeLiveSceneConfig
+    {
+        public int TriggerX { get; set; }
+        public int TriggerY { get; set; }
+
+        public StrobeLiveSceneConfig Clone()
+        {
+            return (StrobeLiveSceneConfig)MemberwiseClone();
+        }
+    }
+
     internal sealed class DeviceConfig
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -289,8 +402,24 @@ namespace Ledqualizer
                 SceneType.VolumeReactive => "Volume Reactive",
                 SceneType.ScreenRowCapture => "Screen Row Capture",
                 SceneType.SpectralAnalysis => "Spectral Analysis",
+                SceneType.ImageRowCapture => "Image Row Capture",
+                SceneType.LaserDmxLive => "Laser DMX",
+                SceneType.StrobeLive => "Strobe",
                 _ => type.ToString()
             };
+        }
+    }
+
+    internal static class SceneTypeRules
+    {
+        public static bool IsAuxiliary(SceneType type)
+        {
+            return type is SceneType.LaserDmxLive or SceneType.StrobeLive;
+        }
+
+        public static bool SupportsStripAssignment(SceneType type)
+        {
+            return !IsAuxiliary(type);
         }
     }
 
@@ -305,8 +434,27 @@ namespace Ledqualizer
                 SceneType.VolumeReactive => $"Mode {scene.VolumeReactive.Mode}, Sat {scene.VolumeReactive.Saturation}%, Norm {scene.VolumeReactive.Normalization}",
                 SceneType.ScreenRowCapture => $"Display {scene.ScreenRowCapture.MonitorIndex + 1}, Row {scene.ScreenRowCapture.CaptureY}" + (scene.ScreenRowCapture.Reverse ? ", Reversed" : string.Empty),
                 SceneType.SpectralAnalysis => $"{scene.SpectralAnalysis.FrequencyLowHz:F0}-{scene.SpectralAnalysis.FrequencyHighHz:F0} Hz, Sat {scene.SpectralAnalysis.Saturation}%",
+                SceneType.ImageRowCapture => BuildImageRowSummary(scene.ImageRowCapture),
+                SceneType.LaserDmxLive => BuildLaserDmxSummary(scene.LaserDmxLive),
+                SceneType.StrobeLive => "Activation on/off",
                 _ => string.Empty
             };
+        }
+
+        private static string BuildImageRowSummary(ImageRowCaptureSceneConfig config)
+        {
+            string source = config.SourceMode == ImageSourceMode.Folder ? "Folder" : "Image";
+            string speed = Math.Abs(config.SpeedMin - config.SpeedMax) < 0.0001
+                ? $"{config.SpeedMin:F2} row/tick"
+                : $"{config.SpeedMin:F2}-{config.SpeedMax:F2} row/tick";
+            string loop = config.Loop ? ", Loop" : string.Empty;
+            return $"{source}, {config.Direction}, {speed}{loop}";
+        }
+
+        private static string BuildLaserDmxSummary(LaserDmxLiveSceneConfig config)
+        {
+            int refreshCount = config.Channels.Count(channel => channel.RefreshEnabled);
+            return $"{config.Channels.Count} channels" + (refreshCount > 0 ? $", {refreshCount} refreshing" : string.Empty);
         }
     }
 }

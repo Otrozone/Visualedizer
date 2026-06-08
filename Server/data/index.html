@@ -587,6 +587,42 @@
                 </li>
                 <li class="list-group-item px-3">
                   <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" value="" id="laserEnabled" checked>
+                    <label class="form-check-label" for="laserEnabled">
+                      Laser DMX enabled
+                    </label>
+                  </div>
+
+                  <div class="form-outline mb-3" data-mdb-input-init>
+                    <input type="number" id="laserTxPin" class="form-control" />
+                    <label class="form-label" for="laserTxPin">Laser DMX TX pin</label>
+                  </div>
+
+                  <div class="form-outline mb-3" data-mdb-input-init>
+                    <input type="number" id="laserRxPin" class="form-control" />
+                    <label class="form-label" for="laserRxPin">Laser DMX RX pin</label>
+                  </div>
+
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="number" id="laserEnPin" class="form-control" />
+                    <label class="form-label" for="laserEnPin">Laser DMX enable pin</label>
+                  </div>
+                </li>
+                <li class="list-group-item px-3">
+                  <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" value="" id="strobeEnabled" checked>
+                    <label class="form-check-label" for="strobeEnabled">
+                      Strobe enabled
+                    </label>
+                  </div>
+
+                  <div class="form-outline" data-mdb-input-init>
+                    <input type="number" id="strobePin" class="form-control" />
+                    <label class="form-label" for="strobePin">Strobe pin</label>
+                  </div>
+                </li>
+                <li class="list-group-item px-3">
+                  <div class="form-check mb-3">
                     <input class="form-check-input" type="checkbox" value="" id="irEnabled" checked>
                     <label class="form-check-label" for="irEnabled">
                       IR enabled

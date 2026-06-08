@@ -4,6 +4,7 @@
 
 #include <SPIFFS.h>
 #include <WiFi.h>
+#include "auxiliary_output.h"
 #include "controller_ir.h"
 #include "dmx.h"
 #include "http_service.h"
@@ -51,6 +52,7 @@ void setup() {
   initWifi();
   initHttpServer();
   initWebSockets();
+  initAuxiliaryOutputs();
   initIr();
   initOnBoardLed();
 

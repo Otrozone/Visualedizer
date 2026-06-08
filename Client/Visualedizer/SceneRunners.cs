@@ -74,6 +74,15 @@ namespace Ledqualizer
         public int LaserColorY { get; set; }
     }
 
+    internal sealed class LaserDmxLiveSceneSettings
+    {
+        public List<LaserDmxChannelRow> Channels { get; set; } = new();
+    }
+
+    internal sealed class StrobeLiveSceneSettings
+    {
+    }
+
     internal sealed class DeviceSceneAssignment
     {
         public required SceneConfig Scene { get; init; }
@@ -517,6 +526,103 @@ namespace Ledqualizer
         }
     }
 
+    internal static class PixelFrameHelpers
+    {
+        public static List<Color> ReducePixels(IReadOnlyList<Color> pixelColors, int ledCount)
+        {
+            var reducedPixelColors = new List<Color>(Math.Max(ledCount, 0));
+            if (ledCount <= 0)
+            {
+                return reducedPixelColors;
+            }
+
+            if (pixelColors.Count == 0)
+            {
+                return CreateBlackPixels(ledCount);
+            }
+
+            for (int i = 0; i < ledCount; i++)
+            {
+                double start = i * pixelColors.Count / (double)ledCount;
+                double end = (i + 1) * pixelColors.Count / (double)ledCount;
+                int startIndex = Math.Clamp((int)Math.Floor(start), 0, pixelColors.Count - 1);
+                int endExclusive = Math.Clamp((int)Math.Ceiling(end), startIndex + 1, pixelColors.Count);
+                reducedPixelColors.Add(CalculateAverageColor(pixelColors, startIndex, endExclusive));
+            }
+
+            return reducedPixelColors;
+        }
+
+        public static List<Color> CreateBlackPixels(int ledCount)
+        {
+            var colors = new List<Color>(Math.Max(ledCount, 0));
+            for (int i = 0; i < ledCount; i++)
+            {
+                colors.Add(Color.Black);
+            }
+
+            return colors;
+        }
+
+        public static byte[] ColorListToByteArray(IReadOnlyList<Color> colorList)
+        {
+            byte[] bytes = new byte[colorList.Count * 3];
+            for (int i = 0; i < colorList.Count; i++)
+            {
+                bytes[i * 3] = colorList[i].R;
+                bytes[i * 3 + 1] = colorList[i].G;
+                bytes[i * 3 + 2] = colorList[i].B;
+            }
+
+            return bytes;
+        }
+
+        public static List<Color> GetBitmapRowColors(Bitmap bitmap, int rowIndex)
+        {
+            int y = Math.Clamp(rowIndex, 0, Math.Max(bitmap.Height - 1, 0));
+            var colors = new List<Color>(bitmap.Width);
+            for (int x = 0; x < bitmap.Width; x++)
+            {
+                colors.Add(bitmap.GetPixel(x, y));
+            }
+
+            return colors;
+        }
+
+        public static List<Color> GetBitmapColumnColors(Bitmap bitmap, int columnIndex)
+        {
+            int x = Math.Clamp(columnIndex, 0, Math.Max(bitmap.Width - 1, 0));
+            var colors = new List<Color>(bitmap.Height);
+            for (int y = 0; y < bitmap.Height; y++)
+            {
+                colors.Add(bitmap.GetPixel(x, y));
+            }
+
+            return colors;
+        }
+
+        private static Color CalculateAverageColor(IReadOnlyList<Color> colors, int startIndex, int endExclusive)
+        {
+            int totalRed = 0;
+            int totalGreen = 0;
+            int totalBlue = 0;
+            int count = 0;
+
+            for (int i = startIndex; i < endExclusive; i++)
+            {
+                Color color = colors[i];
+                totalRed += color.R;
+                totalGreen += color.G;
+                totalBlue += color.B;
+                count++;
+            }
+
+            return count == 0
+                ? Color.Black
+                : Color.FromArgb(totalRed / count, totalGreen / count, totalBlue / count);
+        }
+    }
+
     internal sealed class ScreenCaptureSceneRunner : ISceneRunner
     {
         private readonly Func<ScreenCaptureSceneSettings> settingsProvider;
@@ -546,11 +652,7 @@ namespace Ledqualizer
                 using Graphics graphics = Graphics.FromImage(screenCapture);
                 graphics.CopyFromScreen(bounds.Left, bounds.Top + captureY, 0, 0, new Size(bounds.Width, 1));
 
-                List<Color> pixelColors = new(bounds.Width);
-                for (int x = 0; x < bounds.Width; x++)
-                {
-                    pixelColors.Add(screenCapture.GetPixel(x, 0));
-                }
+                List<Color> pixelColors = PixelFrameHelpers.GetBitmapRowColors(screenCapture, 0);
 
                 if (settings.Reverse)
                 {
@@ -561,8 +663,8 @@ namespace Ledqualizer
                 bool anySent = false;
                 foreach (DeviceTarget device in devices)
                 {
-                    List<Color> reducedColors = ReducePixels(pixelColors, device.Config.LedCount, bounds.Width);
-                    anySent |= await device.Session.SendFrameAsync(ColorListToByteArray(reducedColors), token).ConfigureAwait(false);
+                    List<Color> reducedColors = PixelFrameHelpers.ReducePixels(pixelColors, device.Config.LedCount);
+                    anySent |= await device.Session.SendFrameAsync(PixelFrameHelpers.ColorListToByteArray(reducedColors), token).ConfigureAwait(false);
 
                     if (!previewUpdated)
                     {
@@ -707,21 +809,323 @@ namespace Ledqualizer
         }
     }
 
+    internal sealed class LaserDmxRuntimeState
+    {
+        private readonly Dictionary<int, int> listIndexes = new();
+        private readonly Dictionary<int, int> currentValues = new();
+
+        public Dictionary<int, DateTime> NextRefreshByChannel { get; } = new();
+        public string Signature { get; set; } = string.Empty;
+
+        public int GetOrResolveValue(LaserDmxChannelRow row, bool forceRefresh)
+        {
+            if (!forceRefresh && currentValues.TryGetValue(row.Channel, out int storedValue))
+            {
+                return storedValue;
+            }
+
+            int value = row.Mode switch
+            {
+                LaserDmxValueMode.RandomRange => ResolveRandomRange(row),
+                LaserDmxValueMode.ValueList => ResolveSequentialList(row),
+                LaserDmxValueMode.RandomValueFromList => ResolveRandomList(row),
+                _ => Math.Clamp(row.ConstantValue, 0, 255)
+            };
+            currentValues[row.Channel] = value;
+            return value;
+        }
+
+        public void Reset()
+        {
+            listIndexes.Clear();
+            currentValues.Clear();
+            NextRefreshByChannel.Clear();
+            Signature = string.Empty;
+        }
+
+        private int ResolveRandomRange(LaserDmxChannelRow row)
+        {
+            int min = Math.Clamp(Math.Min(row.RangeMin, row.RangeMax), 0, 255);
+            int max = Math.Clamp(Math.Max(row.RangeMin, row.RangeMax), 0, 255);
+            return Random.Shared.Next(min, max + 1);
+        }
+
+        private int ResolveSequentialList(LaserDmxChannelRow row)
+        {
+            List<int> values = NormalizeValues(row.Values);
+            if (values.Count == 0)
+            {
+                return 0;
+            }
+
+            int index = listIndexes.TryGetValue(row.Channel, out int currentIndex) ? currentIndex : 0;
+            int resolved = values[index % values.Count];
+            listIndexes[row.Channel] = (index + 1) % values.Count;
+            return resolved;
+        }
+
+        private static int ResolveRandomList(LaserDmxChannelRow row)
+        {
+            List<int> values = NormalizeValues(row.Values);
+            return values.Count == 0 ? 0 : values[Random.Shared.Next(values.Count)];
+        }
+
+        private static List<int> NormalizeValues(List<int> values)
+        {
+            return values.Select(value => Math.Clamp(value, 0, 255)).ToList();
+        }
+    }
+
+    internal static class AuxiliaryPayloadBuilder
+    {
+        private static readonly byte[] Magic = { (byte)'V', (byte)'A', (byte)'U', (byte)'X' };
+        private const byte Version = 1;
+
+        public static byte[] BuildLaserPayload(
+            LaserDmxLiveSceneSettings settings,
+            LaserDmxRuntimeState state,
+            bool refreshAll,
+            ISet<int>? refreshChannels = null)
+        {
+            string signature = BuildLaserSignature(settings);
+            if (!string.Equals(signature, state.Signature, StringComparison.Ordinal))
+            {
+                state.Reset();
+                state.Signature = signature;
+                refreshAll = true;
+            }
+
+            List<(int Channel, int Value)> resolvedChannels = settings.Channels
+                .Select(channel =>
+                {
+                    bool shouldRefresh = refreshAll
+                        || refreshChannels == null
+                        || refreshChannels.Contains(channel.Channel);
+                    return (Channel: Math.Clamp(channel.Channel, 1, 512), Value: state.GetOrResolveValue(channel, shouldRefresh));
+                })
+                .OrderBy(item => item.Channel)
+                .ToList();
+
+            return BuildPayload(resolvedChannels, false);
+        }
+
+        public static byte[] BuildStrobePayload(bool enabled)
+        {
+            return BuildPayload(new List<(int Channel, int Value)>(), enabled);
+        }
+
+        public static byte[] BuildOffPayload()
+        {
+            return BuildPayload(new List<(int Channel, int Value)>(), false);
+        }
+
+        private static byte[] BuildPayload(IReadOnlyList<(int Channel, int Value)> channels, bool strobeEnabled)
+        {
+            int channelCount = Math.Min(channels.Count, byte.MaxValue);
+            byte[] payload = new byte[7 + channelCount * 3];
+            Array.Copy(Magic, payload, Magic.Length);
+            payload[4] = Version;
+            payload[5] = strobeEnabled ? (byte)1 : (byte)0;
+            payload[6] = (byte)channelCount;
+
+            for (int i = 0; i < channelCount; i++)
+            {
+                int offset = 7 + i * 3;
+                payload[offset] = (byte)(channels[i].Channel & 0xFF);
+                payload[offset + 1] = (byte)((channels[i].Channel >> 8) & 0xFF);
+                payload[offset + 2] = (byte)Math.Clamp(channels[i].Value, 0, 255);
+            }
+
+            return payload;
+        }
+
+        private static string BuildLaserSignature(LaserDmxLiveSceneSettings settings)
+        {
+            return string.Join("|", settings.Channels.Select(channel =>
+                $"{channel.Channel}:{channel.Mode}:{channel.ConstantValue}:{channel.RangeMin}:{channel.RangeMax}:{string.Join(",", channel.Values)}:{channel.RefreshEnabled}:{channel.RefreshIntervalSeconds:F3}"));
+        }
+    }
+
+    internal sealed class LaserDmxLiveSceneRunner : ISceneRunner
+    {
+        private readonly Func<LaserDmxLiveSceneSettings> settingsProvider;
+        private readonly Func<int> delayProvider;
+        private readonly LaserDmxRuntimeState runtimeState = new();
+
+        public LaserDmxLiveSceneRunner(Func<LaserDmxLiveSceneSettings> settingsProvider, Func<int> delayProvider)
+        {
+            this.settingsProvider = settingsProvider;
+            this.delayProvider = delayProvider;
+        }
+
+        public async Task RunAsync(IReadOnlyList<DeviceTarget> devices, CancellationToken token)
+        {
+            try
+            {
+                LaserDmxLiveSceneSettings settings = settingsProvider();
+                bool anySent = await SendResolvedPayloadAsync(devices, token, settings, true, null).ConfigureAwait(false);
+                if (!anySent)
+                {
+                    return;
+                }
+
+                while (!token.IsCancellationRequested)
+                {
+                    settings = settingsProvider();
+                    DateTime nowUtc = DateTime.UtcNow;
+                    HashSet<int> refreshChannels = new();
+                    foreach (LaserDmxChannelRow channel in settings.Channels.Where(channel => channel.RefreshEnabled))
+                    {
+                        DateTime nextRefresh = runtimeState.NextRefreshByChannel.TryGetValue(channel.Channel, out DateTime stored)
+                            ? stored
+                            : DateTime.MinValue;
+                        if (nextRefresh == DateTime.MinValue || nowUtc >= nextRefresh)
+                        {
+                            refreshChannels.Add(channel.Channel);
+                            runtimeState.NextRefreshByChannel[channel.Channel] = nowUtc.AddSeconds(Math.Max(0.1, channel.RefreshIntervalSeconds));
+                        }
+                    }
+
+                    if (refreshChannels.Count > 0)
+                    {
+                        anySent = await SendResolvedPayloadAsync(devices, token, settings, false, refreshChannels).ConfigureAwait(false);
+                        if (!anySent)
+                        {
+                            return;
+                        }
+                    }
+
+                    await Task.Delay(Math.Max(delayProvider(), 100), token).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await SendOffFrameAsync(devices).ConfigureAwait(false);
+            }
+        }
+
+        private async Task<bool> SendResolvedPayloadAsync(
+            IReadOnlyList<DeviceTarget> devices,
+            CancellationToken token,
+            LaserDmxLiveSceneSettings settings,
+            bool refreshAll,
+            ISet<int>? refreshChannels)
+        {
+            byte[] data = AuxiliaryPayloadBuilder.BuildLaserPayload(settings, runtimeState, refreshAll, refreshChannels);
+            DateTime nowUtc = DateTime.UtcNow;
+            foreach (LaserDmxChannelRow channel in settings.Channels.Where(channel => channel.RefreshEnabled))
+            {
+                runtimeState.NextRefreshByChannel[channel.Channel] = nowUtc.AddSeconds(Math.Max(0.1, channel.RefreshIntervalSeconds));
+            }
+
+            bool anySent = false;
+            foreach (DeviceTarget device in devices)
+            {
+                anySent |= await device.Session.SendFrameAsync(data, token).ConfigureAwait(false);
+            }
+
+            return anySent;
+        }
+
+        private static async Task SendOffFrameAsync(IReadOnlyList<DeviceTarget> devices)
+        {
+            byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
+            foreach (DeviceTarget device in devices)
+            {
+                await device.Session.SendFrameAsync(offFrame, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+    }
+
+    internal sealed class StrobeLiveSceneRunner : ISceneRunner
+    {
+        private readonly Func<StrobeLiveSceneSettings> settingsProvider;
+
+        public StrobeLiveSceneRunner(Func<StrobeLiveSceneSettings> settingsProvider)
+        {
+            this.settingsProvider = settingsProvider;
+        }
+
+        public async Task RunAsync(IReadOnlyList<DeviceTarget> devices, CancellationToken token)
+        {
+            try
+            {
+                _ = settingsProvider();
+                bool anySent = false;
+                byte[] payload = AuxiliaryPayloadBuilder.BuildStrobePayload(true);
+                foreach (DeviceTarget device in devices)
+                {
+                    anySent |= await device.Session.SendFrameAsync(payload, token).ConfigureAwait(false);
+                }
+
+                if (!anySent)
+                {
+                    return;
+                }
+
+                while (!token.IsCancellationRequested)
+                {
+                    await Task.Delay(250, token).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await SendOffFrameAsync(devices).ConfigureAwait(false);
+            }
+        }
+
+        private static async Task SendOffFrameAsync(IReadOnlyList<DeviceTarget> devices)
+        {
+            byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
+            foreach (DeviceTarget device in devices)
+            {
+                await device.Session.SendFrameAsync(offFrame, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+    }
+
     internal sealed class CompositeSceneRunner : ISceneRunner
     {
+        private sealed class ImageScenePlaybackState
+        {
+            public object SyncRoot { get; } = new();
+            public string ConfigSignature { get; set; } = string.Empty;
+            public List<string> Files { get; set; } = new();
+            public int CurrentFileIndex { get; set; }
+            public string? CurrentFilePath { get; set; }
+            public Bitmap? CurrentBitmap { get; set; }
+            public double ScanPosition { get; set; }
+            public ImageScanDirection ActiveDirection { get; set; } = ImageScanDirection.TopToBottom;
+            public double ActiveSpeed { get; set; } = 1.0;
+            public bool IsStopped { get; set; }
+            public int LastAppliedSeekRevision { get; set; }
+            public DateTime LastAdvanceUtc { get; set; } = DateTime.MinValue;
+
+            public void DisposeBitmap()
+            {
+                CurrentBitmap?.Dispose();
+                CurrentBitmap = null;
+                CurrentFilePath = null;
+            }
+        }
+
         private readonly Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider;
         private readonly Func<string?> audioDeviceIdProvider;
         private readonly Func<int> delayProvider;
-        private readonly Action<IReadOnlyList<Color>> previewUpdater;
+        private readonly Action<CaptureScenePreview> previewUpdater;
         private readonly Action<int> volumeProgressReporter;
         private readonly Action<int> spectralProgressReporter;
         private readonly Action<string> rateReporter;
+        private readonly HashSet<string> registeredImageSceneIds = new(StringComparer.Ordinal);
+        private static readonly object SharedImageSceneStatesLock = new();
+        private static readonly Dictionary<string, ImageScenePlaybackState> SharedImageSceneStates = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, int> SharedImageSceneUsageCounts = new(StringComparer.Ordinal);
 
         public CompositeSceneRunner(
             Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider,
             Func<string?> audioDeviceIdProvider,
             Func<int> delayProvider,
-            Action<IReadOnlyList<Color>> previewUpdater,
+            Action<CaptureScenePreview> previewUpdater,
             Action<int> volumeProgressReporter,
             Action<int> spectralProgressReporter,
             Action<string> rateReporter)
@@ -747,76 +1151,113 @@ namespace Ledqualizer
             Stopwatch stopwatch = Stopwatch.StartNew();
             using AcSpectralAnalysis spectralAnalysis = new();
 
-            while (!token.IsCancellationRequested)
+            try
             {
-                IReadOnlyList<DeviceSceneAssignment> assignments = assignmentsProvider();
-                if (assignments.Count == 0)
+                while (!token.IsCancellationRequested)
                 {
-                    return;
-                }
-
-                bool needsSpectral = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysis);
-                if (needsSpectral)
-                {
-                    string? requestedDeviceId = audioDeviceIdProvider();
-                    if (!string.Equals(activeAudioDeviceId, requestedDeviceId, StringComparison.Ordinal))
-                    {
-                        spectralAnalysis.Start(requestedDeviceId);
-                        activeAudioDeviceId = requestedDeviceId;
-                    }
-                }
-
-                float? sharedVolume = null;
-                bool previewUpdated = false;
-                double? lastSpectralDb = null;
-
-                foreach (DeviceTarget device in devices)
-                {
-                    byte[] composedFrame = new byte[device.Config.LedCount * 3];
-                    foreach (DeviceSceneAssignment assignment in assignments)
-                    {
-                        byte[] segmentFrame = BuildAssignmentFrame(
-                            assignment,
-                            audioDeviceIdProvider,
-                            ref sharedVolume,
-                            spectralAnalysis,
-                            ref lastSpectralDb,
-                            previewUpdated ? null : previewUpdater,
-                            volumeProgressReporter,
-                            spectralProgressReporter);
-                        OverlayFrame(composedFrame, segmentFrame, assignment.StartIndex);
-                        previewUpdated = previewUpdated || assignment.Scene.Type == SceneType.ScreenRowCapture;
-                    }
-
-                    bool sent = await device.Session.SendFrameAsync(composedFrame, token).ConfigureAwait(false);
-                    if (!sent)
+                    IReadOnlyList<DeviceSceneAssignment> assignments = assignmentsProvider();
+                    if (assignments.Count == 0)
                     {
                         return;
                     }
-                }
 
-                iterations++;
-                if (stopwatch.ElapsedMilliseconds >= 1000)
+                    CleanupImageSceneStates(assignments);
+
+                    bool needsSpectral = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysis);
+                    if (needsSpectral)
+                    {
+                        string? requestedDeviceId = audioDeviceIdProvider();
+                        if (!string.Equals(activeAudioDeviceId, requestedDeviceId, StringComparison.Ordinal))
+                        {
+                            spectralAnalysis.Start(requestedDeviceId);
+                            activeAudioDeviceId = requestedDeviceId;
+                        }
+                    }
+
+                    float? sharedVolume = null;
+                    double? lastSpectralDb = null;
+
+                    for (int deviceIndex = 0; deviceIndex < devices.Count; deviceIndex++)
+                    {
+                        DeviceTarget device = devices[deviceIndex];
+                        byte[] composedFrame = new byte[device.Config.LedCount * 3];
+                        Action<CaptureScenePreview>? devicePreviewUpdater = deviceIndex == 0 ? previewUpdater : null;
+
+                        foreach (DeviceSceneAssignment assignment in assignments)
+                        {
+                            byte[] segmentFrame = BuildAssignmentFrame(
+                                assignment,
+                                audioDeviceIdProvider,
+                                ref sharedVolume,
+                                spectralAnalysis,
+                                ref lastSpectralDb,
+                                devicePreviewUpdater,
+                                volumeProgressReporter,
+                                spectralProgressReporter);
+                            OverlayFrame(composedFrame, segmentFrame, assignment.StartIndex);
+                        }
+
+                        bool sent = await device.Session.SendFrameAsync(composedFrame, token).ConfigureAwait(false);
+                        if (!sent)
+                        {
+                            return;
+                        }
+                    }
+
+                    iterations++;
+                    if (stopwatch.ElapsedMilliseconds >= 1000)
+                    {
+                        string rateText = needsSpectral && lastSpectralDb.HasValue
+                            ? $"Rate: {iterations} | Band: {lastSpectralDb.Value:F1} dB"
+                            : $"Rate: {iterations}";
+                        rateReporter(rateText);
+                        iterations = 0;
+                        stopwatch.Restart();
+                    }
+
+                    await Task.Delay(Math.Max(delayProvider(), 1), token).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                foreach (string sceneId in registeredImageSceneIds.ToList())
                 {
-                    string rateText = needsSpectral && lastSpectralDb.HasValue
-                        ? $"Rate: {iterations} | Band: {lastSpectralDb.Value:F1} dB"
-                        : $"Rate: {iterations}";
-                    rateReporter(rateText);
-                    iterations = 0;
-                    stopwatch.Restart();
+                    ReleaseSharedImageSceneState(sceneId);
                 }
 
-                await Task.Delay(Math.Max(delayProvider(), 1), token).ConfigureAwait(false);
+                registeredImageSceneIds.Clear();
             }
         }
 
-        private static byte[] BuildAssignmentFrame(
+        private void CleanupImageSceneStates(IReadOnlyList<DeviceSceneAssignment> assignments)
+        {
+            HashSet<string> activeIds = assignments
+                .Where(assignment => assignment.Scene.Type == SceneType.ImageRowCapture)
+                .Select(assignment => assignment.Scene.Id)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (string sceneId in registeredImageSceneIds.Where(sceneId => !activeIds.Contains(sceneId)).ToList())
+            {
+                ReleaseSharedImageSceneState(sceneId);
+                registeredImageSceneIds.Remove(sceneId);
+            }
+
+            foreach (string sceneId in activeIds)
+            {
+                if (registeredImageSceneIds.Add(sceneId))
+                {
+                    AcquireSharedImageSceneState(sceneId);
+                }
+            }
+        }
+
+        private byte[] BuildAssignmentFrame(
             DeviceSceneAssignment assignment,
             Func<string?> audioDeviceIdProvider,
             ref float? sharedVolume,
             AcSpectralAnalysis spectralAnalysis,
             ref double? lastSpectralDb,
-            Action<IReadOnlyList<Color>>? previewUpdater,
+            Action<CaptureScenePreview>? capturePreviewUpdater,
             Action<int> volumeProgressReporter,
             Action<int> spectralProgressReporter)
         {
@@ -824,8 +1265,11 @@ namespace Ledqualizer
             {
                 SceneType.Gradient => BuildGradientFrame(assignment.LedCount, assignment.Scene.Gradient),
                 SceneType.VolumeReactive => BuildVolumeFrame(assignment.Scene, assignment.LedCount, audioDeviceIdProvider, ref sharedVolume, volumeProgressReporter),
-                SceneType.ScreenRowCapture => BuildScreenCaptureFrame(assignment.Scene.ScreenRowCapture, assignment.LedCount, previewUpdater),
+                SceneType.ScreenRowCapture => BuildScreenCaptureFrame(assignment.Scene.Id, assignment.Scene.ScreenRowCapture, assignment.LedCount, capturePreviewUpdater),
                 SceneType.SpectralAnalysis => BuildSpectralFrame(assignment.Scene, assignment.LedCount, spectralAnalysis, ref lastSpectralDb, spectralProgressReporter),
+                SceneType.ImageRowCapture => BuildImageCaptureFrame(assignment.Scene.Id, assignment.Scene.ImageRowCapture, assignment.LedCount, capturePreviewUpdater),
+                SceneType.LaserDmxLive => new byte[assignment.LedCount * 3],
+                SceneType.StrobeLive => new byte[assignment.LedCount * 3],
                 _ => BuildSolidFrame(assignment.LedCount, assignment.Scene.SolidColor),
             };
         }
@@ -923,7 +1367,11 @@ namespace Ledqualizer
             });
         }
 
-        private static byte[] BuildScreenCaptureFrame(ScreenRowCaptureSceneConfig config, int ledCount, Action<IReadOnlyList<Color>>? previewUpdater)
+        private static byte[] BuildScreenCaptureFrame(
+            string sceneId,
+            ScreenRowCaptureSceneConfig config,
+            int ledCount,
+            Action<CaptureScenePreview>? previewUpdater)
         {
             Screen targetScreen = ResolveScreen(config.MonitorIndex);
             Rectangle bounds = targetScreen.Bounds;
@@ -937,20 +1385,427 @@ namespace Ledqualizer
             using Graphics graphics = Graphics.FromImage(screenCapture);
             graphics.CopyFromScreen(bounds.Left, bounds.Top + captureY, 0, 0, new Size(bounds.Width, 1));
 
-            List<Color> pixelColors = new(bounds.Width);
-            for (int x = 0; x < bounds.Width; x++)
-            {
-                pixelColors.Add(screenCapture.GetPixel(x, 0));
-            }
-
+            List<Color> pixelColors = PixelFrameHelpers.GetBitmapRowColors(screenCapture, 0);
             if (config.Reverse)
             {
                 pixelColors.Reverse();
             }
 
-            List<Color> reducedColors = ReducePixels(pixelColors, ledCount, bounds.Width);
-            previewUpdater?.Invoke(reducedColors);
-            return ColorListToByteArray(reducedColors);
+            List<Color> reducedColors = PixelFrameHelpers.ReducePixels(pixelColors, ledCount);
+            previewUpdater?.Invoke(new CaptureScenePreview
+            {
+                SceneId = sceneId,
+                Colors = new List<Color>(reducedColors),
+                SourceSize = new Size(bounds.Width, bounds.Height),
+                SampleIndex = captureY,
+                Direction = ImageScanDirection.TopToBottom
+            });
+
+            return PixelFrameHelpers.ColorListToByteArray(reducedColors);
+        }
+
+        private byte[] BuildImageCaptureFrame(
+            string sceneId,
+            ImageRowCaptureSceneConfig config,
+            int ledCount,
+            Action<CaptureScenePreview>? previewUpdater)
+        {
+            ImageScenePlaybackState state = GetOrCreateImageState(sceneId, config);
+            lock (state.SyncRoot)
+            {
+                string signature = BuildImageSceneSignature(config);
+                if (!string.Equals(state.ConfigSignature, signature, StringComparison.Ordinal))
+                {
+                    ResetImageState(state, config, signature);
+                }
+
+                if (!TryEnsureImageLoaded(state, config))
+                {
+                    List<Color> blackPixels = PixelFrameHelpers.CreateBlackPixels(ledCount);
+                    previewUpdater?.Invoke(new CaptureScenePreview
+                    {
+                        SceneId = sceneId,
+                        Colors = new List<Color>(blackPixels),
+                        SampleIndex = -1,
+                        Direction = state.ActiveDirection
+                    });
+
+                    return PixelFrameHelpers.ColorListToByteArray(blackPixels);
+                }
+
+                Bitmap bitmap = state.CurrentBitmap!;
+                int scanLength = GetScanLength(bitmap, state.ActiveDirection);
+                if (scanLength <= 0)
+                {
+                    return new byte[ledCount * 3];
+                }
+
+                ApplyPendingSeekRequest(state, config, scanLength);
+                int progressIndex = Math.Clamp((int)Math.Floor(state.ScanPosition), 0, scanLength - 1);
+                int sampleIndex = MapSampleIndex(progressIndex, scanLength, state.ActiveDirection);
+                List<Color> sampledPixels = GetSampledPixels(bitmap, sampleIndex, state.ActiveDirection);
+                List<Color> reducedColors = PixelFrameHelpers.ReducePixels(sampledPixels, ledCount);
+
+                previewUpdater?.Invoke(new CaptureScenePreview
+                {
+                    SceneId = sceneId,
+                    Colors = new List<Color>(reducedColors),
+                    SourcePath = state.CurrentFilePath,
+                    SourceSize = bitmap.Size,
+                    SampleIndex = sampleIndex,
+                    Direction = state.ActiveDirection
+                });
+
+                AdvanceImageState(state, config, scanLength, delayProvider());
+                return PixelFrameHelpers.ColorListToByteArray(reducedColors);
+            }
+        }
+
+        private ImageScenePlaybackState GetOrCreateImageState(string sceneId, ImageRowCaptureSceneConfig config)
+        {
+            lock (SharedImageSceneStatesLock)
+            {
+                if (!SharedImageSceneStates.TryGetValue(sceneId, out ImageScenePlaybackState? state))
+                {
+                    state = new ImageScenePlaybackState();
+                    SharedImageSceneStates[sceneId] = state;
+                }
+
+                return state;
+            }
+        }
+
+        private static void AcquireSharedImageSceneState(string sceneId)
+        {
+            lock (SharedImageSceneStatesLock)
+            {
+                SharedImageSceneUsageCounts[sceneId] = SharedImageSceneUsageCounts.TryGetValue(sceneId, out int count)
+                    ? count + 1
+                    : 1;
+            }
+        }
+
+        private static void ReleaseSharedImageSceneState(string sceneId)
+        {
+            lock (SharedImageSceneStatesLock)
+            {
+                if (!SharedImageSceneUsageCounts.TryGetValue(sceneId, out int count))
+                {
+                    return;
+                }
+
+                if (count > 1)
+                {
+                    SharedImageSceneUsageCounts[sceneId] = count - 1;
+                    return;
+                }
+
+                SharedImageSceneUsageCounts.Remove(sceneId);
+                if (SharedImageSceneStates.TryGetValue(sceneId, out ImageScenePlaybackState? state))
+                {
+                    lock (state.SyncRoot)
+                    {
+                        state.DisposeBitmap();
+                    }
+
+                    SharedImageSceneStates.Remove(sceneId);
+                }
+            }
+        }
+
+        private static string BuildImageSceneSignature(ImageRowCaptureSceneConfig config)
+        {
+            return string.Join("|",
+                config.SourceMode,
+                config.ImagePath,
+                config.FolderPath,
+                config.Recursive,
+                config.Loop,
+                config.Direction,
+                config.SpeedMin.ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                config.SpeedMax.ToString("F4", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        private static void ResetImageState(ImageScenePlaybackState state, ImageRowCaptureSceneConfig config, string signature)
+        {
+            state.DisposeBitmap();
+            state.ConfigSignature = signature;
+            state.Files = ResolveImageFiles(config);
+            state.CurrentFileIndex = 0;
+            state.ScanPosition = 0;
+            state.ActiveDirection = ResolvePassDirection(config.Direction);
+            state.ActiveSpeed = ResolvePassSpeed(config);
+            state.IsStopped = false;
+            state.LastAppliedSeekRevision = config.RequestedSeekRevision;
+            state.LastAdvanceUtc = DateTime.MinValue;
+        }
+
+        private static List<string> ResolveImageFiles(ImageRowCaptureSceneConfig config)
+        {
+            if (config.SourceMode == ImageSourceMode.SingleImage)
+            {
+                return IsSupportedImageFile(config.ImagePath) && File.Exists(config.ImagePath)
+                    ? new List<string> { config.ImagePath }
+                    : new List<string>();
+            }
+
+            if (string.IsNullOrWhiteSpace(config.FolderPath) || !Directory.Exists(config.FolderPath))
+            {
+                return new List<string>();
+            }
+
+            SearchOption searchOption = config.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            return Directory.EnumerateFiles(config.FolderPath, "*.*", searchOption)
+                .Where(IsSupportedImageFile)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static bool IsSupportedImageFile(string path)
+        {
+            string extension = Path.GetExtension(path);
+            return extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".gif", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static ImageScanDirection ResolvePassDirection(ImageScanDirection configuredDirection)
+        {
+            return configuredDirection != ImageScanDirection.Random
+                ? configuredDirection
+                : Random.Shared.Next(4) switch
+                {
+                    0 => ImageScanDirection.TopToBottom,
+                    1 => ImageScanDirection.BottomToTop,
+                    2 => ImageScanDirection.LeftToRight,
+                    _ => ImageScanDirection.RightToLeft
+                };
+        }
+
+        private static double ResolvePassSpeed(ImageRowCaptureSceneConfig config)
+        {
+            double min = Math.Max(0.01, Math.Min(config.SpeedMin, config.SpeedMax));
+            double max = Math.Max(min, Math.Max(config.SpeedMin, config.SpeedMax));
+            return Math.Abs(max - min) < 0.0001
+                ? min
+                : min + (Random.Shared.NextDouble() * (max - min));
+        }
+
+        private static bool TryEnsureImageLoaded(ImageScenePlaybackState state, ImageRowCaptureSceneConfig config)
+        {
+            if (state.CurrentBitmap != null)
+            {
+                return true;
+            }
+
+            if (state.Files.Count == 0)
+            {
+                return false;
+            }
+
+            bool allowWrap = config.SourceMode == ImageSourceMode.SingleImage || config.Loop;
+            return TryLoadAvailableBitmap(state, allowWrap);
+        }
+
+        private static bool TryLoadAvailableBitmap(ImageScenePlaybackState state, bool allowWrap)
+        {
+            if (state.Files.Count == 0)
+            {
+                return false;
+            }
+
+            int attempts = allowWrap ? state.Files.Count : Math.Max(state.Files.Count - state.CurrentFileIndex, 0);
+            for (int offset = 0; offset < attempts; offset++)
+            {
+                int index = state.CurrentFileIndex + offset;
+                if (allowWrap)
+                {
+                    index %= state.Files.Count;
+                }
+                else if (index >= state.Files.Count)
+                {
+                    break;
+                }
+
+                if (TryLoadBitmapAtIndex(state, index))
+                {
+                    return true;
+                }
+            }
+
+            state.DisposeBitmap();
+            return false;
+        }
+
+        private static bool TryLoadBitmapAtIndex(ImageScenePlaybackState state, int index)
+        {
+            if (index < 0 || index >= state.Files.Count)
+            {
+                return false;
+            }
+
+            try
+            {
+                using Image image = Image.FromFile(state.Files[index]);
+                state.DisposeBitmap();
+                state.CurrentBitmap = new Bitmap(image);
+                state.CurrentFileIndex = index;
+                state.CurrentFilePath = state.Files[index];
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static int GetScanLength(Bitmap bitmap, ImageScanDirection direction)
+        {
+            return direction is ImageScanDirection.TopToBottom or ImageScanDirection.BottomToTop
+                ? bitmap.Height
+                : bitmap.Width;
+        }
+
+        private static int MapSampleIndex(int progressIndex, int scanLength, ImageScanDirection direction)
+        {
+            return direction is ImageScanDirection.BottomToTop or ImageScanDirection.RightToLeft
+                ? Math.Max(0, scanLength - 1 - progressIndex)
+                : progressIndex;
+        }
+
+        private static List<Color> GetSampledPixels(Bitmap bitmap, int sampleIndex, ImageScanDirection direction)
+        {
+            return direction is ImageScanDirection.TopToBottom or ImageScanDirection.BottomToTop
+                ? PixelFrameHelpers.GetBitmapRowColors(bitmap, sampleIndex)
+                : PixelFrameHelpers.GetBitmapColumnColors(bitmap, sampleIndex);
+        }
+
+        private static void ApplyPendingSeekRequest(ImageScenePlaybackState state, ImageRowCaptureSceneConfig config, int scanLength)
+        {
+            if (config.RequestedSampleIndex < 0 || config.RequestedSeekRevision == state.LastAppliedSeekRevision)
+            {
+                return;
+            }
+
+            int clampedSampleIndex = Math.Clamp(config.RequestedSampleIndex, 0, scanLength - 1);
+            int progressIndex = MapProgressIndex(clampedSampleIndex, scanLength, state.ActiveDirection);
+            state.ScanPosition = progressIndex;
+            state.IsStopped = false;
+            state.LastAppliedSeekRevision = config.RequestedSeekRevision;
+        }
+
+        private static int MapProgressIndex(int sampleIndex, int scanLength, ImageScanDirection direction)
+        {
+            return direction is ImageScanDirection.BottomToTop or ImageScanDirection.RightToLeft
+                ? Math.Max(0, scanLength - 1 - sampleIndex)
+                : sampleIndex;
+        }
+
+        private static void AdvanceImageState(ImageScenePlaybackState state, ImageRowCaptureSceneConfig config, int scanLength, int delayMs)
+        {
+            if (config.IsPaused || state.IsStopped || scanLength <= 0)
+            {
+                return;
+            }
+
+            int effectiveDelayMs = Math.Max(delayMs, 1);
+            DateTime nowUtc = DateTime.UtcNow;
+            if (state.LastAdvanceUtc != DateTime.MinValue
+                && (nowUtc - state.LastAdvanceUtc).TotalMilliseconds < effectiveDelayMs * 0.8)
+            {
+                return;
+            }
+
+            double maxProgress = Math.Max(scanLength - 1, 0);
+            state.ScanPosition += state.ActiveSpeed;
+            state.LastAdvanceUtc = nowUtc;
+            if (state.ScanPosition <= maxProgress)
+            {
+                return;
+            }
+
+            if (config.SourceMode == ImageSourceMode.SingleImage)
+            {
+                CompleteSingleImagePass(state, config, maxProgress);
+                return;
+            }
+
+            CompleteFolderImagePass(state, config, maxProgress);
+        }
+
+        private static void CompleteSingleImagePass(ImageScenePlaybackState state, ImageRowCaptureSceneConfig config, double maxProgress)
+        {
+            if (!config.Loop)
+            {
+                state.ScanPosition = maxProgress;
+                state.IsStopped = true;
+                return;
+            }
+
+            state.ScanPosition = 0;
+            state.ActiveSpeed = ResolvePassSpeed(config);
+            state.ActiveDirection = config.Direction == ImageScanDirection.Random
+                ? ResolvePassDirection(config.Direction)
+                : GetOppositeDirection(state.ActiveDirection);
+        }
+
+        private static void CompleteFolderImagePass(ImageScenePlaybackState state, ImageRowCaptureSceneConfig config, double maxProgress)
+        {
+            if (TryAdvanceToNextFolderImage(state, config))
+            {
+                state.ScanPosition = 0;
+                state.IsStopped = false;
+                state.ActiveSpeed = ResolvePassSpeed(config);
+                state.ActiveDirection = ResolvePassDirection(config.Direction);
+                return;
+            }
+
+            state.ScanPosition = maxProgress;
+            state.IsStopped = true;
+        }
+
+        private static bool TryAdvanceToNextFolderImage(ImageScenePlaybackState state, ImageRowCaptureSceneConfig config)
+        {
+            if (state.Files.Count == 0)
+            {
+                return false;
+            }
+
+            int startIndex = state.CurrentFileIndex;
+            int attempts = config.Loop ? state.Files.Count : Math.Max(state.Files.Count - startIndex - 1, 0);
+            for (int step = 1; step <= attempts; step++)
+            {
+                int nextIndex = startIndex + step;
+                if (config.Loop)
+                {
+                    nextIndex %= state.Files.Count;
+                }
+                else if (nextIndex >= state.Files.Count)
+                {
+                    break;
+                }
+
+                if (TryLoadBitmapAtIndex(state, nextIndex))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static ImageScanDirection GetOppositeDirection(ImageScanDirection direction)
+        {
+            return direction switch
+            {
+                ImageScanDirection.TopToBottom => ImageScanDirection.BottomToTop,
+                ImageScanDirection.BottomToTop => ImageScanDirection.TopToBottom,
+                ImageScanDirection.LeftToRight => ImageScanDirection.RightToLeft,
+                ImageScanDirection.RightToLeft => ImageScanDirection.LeftToRight,
+                _ => ImageScanDirection.TopToBottom
+            };
         }
 
         private static void OverlayFrame(byte[] composedFrame, byte[] segmentFrame, int startLedIndex)
@@ -977,54 +1832,6 @@ namespace Ledqualizer
             }
 
             return Screen.PrimaryScreen ?? screens[0];
-        }
-
-        private static List<Color> ReducePixels(List<Color> pixelColors, int ledCount, int screenWidth)
-        {
-            var reducedPixelColors = new List<Color>(ledCount);
-            int segmentSize = Math.Max(screenWidth / Math.Max(ledCount, 1), 1);
-            for (int i = 0; i < ledCount; i++)
-            {
-                int startIndex = i * segmentSize;
-                if (startIndex >= pixelColors.Count)
-                {
-                    reducedPixelColors.Add(Color.Black);
-                    continue;
-                }
-
-                int endIndex = Math.Min((i + 1) * segmentSize, pixelColors.Count) - 1;
-                reducedPixelColors.Add(CalculateAverageColor(pixelColors.GetRange(startIndex, endIndex - startIndex + 1)));
-            }
-
-            return reducedPixelColors;
-        }
-
-        private static Color CalculateAverageColor(List<Color> colors)
-        {
-            int totalRed = 0;
-            int totalGreen = 0;
-            int totalBlue = 0;
-            foreach (Color color in colors)
-            {
-                totalRed += color.R;
-                totalGreen += color.G;
-                totalBlue += color.B;
-            }
-
-            return Color.FromArgb(totalRed / colors.Count, totalGreen / colors.Count, totalBlue / colors.Count);
-        }
-
-        private static byte[] ColorListToByteArray(List<Color> colorList)
-        {
-            byte[] bytes = new byte[colorList.Count * 3];
-            for (int i = 0; i < colorList.Count; i++)
-            {
-                bytes[i * 3] = colorList[i].R;
-                bytes[i * 3 + 1] = colorList[i].G;
-                bytes[i * 3 + 2] = colorList[i].B;
-            }
-
-            return bytes;
         }
     }
 }

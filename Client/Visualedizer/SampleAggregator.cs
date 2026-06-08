@@ -12,7 +12,6 @@ namespace Ledqualizer
         public event EventHandler<FftEventArgs> FftCalculated;
         public bool PerformFFT { get; set; }
         private Complex[] fftBuffer;
-        private FftEventArgs fftArgs;
         private int fftPos;
         private int fftLength;
         private int m;
@@ -26,7 +25,6 @@ namespace Ledqualizer
             this.m = (int)Math.Log(fftLength, 2.0);
             this.fftLength = fftLength;
             this.fftBuffer = new Complex[fftLength];
-            this.fftArgs = new FftEventArgs(fftBuffer);
         }
 
         bool IsPowerOfTwo(int x)
@@ -41,17 +39,24 @@ namespace Ledqualizer
 
         public void Add(float value)
         {
-            if (PerformFFT && FftCalculated != null)
+            var fftCalculated = FftCalculated;
+            if (!PerformFFT || fftCalculated == null)
             {
-                fftBuffer[fftPos].X = (float)(value * FastFourierTransform.HammingWindow(fftPos, fftLength));
-                fftBuffer[fftPos].Y = 0;
-                fftPos++;
-                if (fftPos >= fftLength)
-                {
-                    fftPos = 0;
-                    FastFourierTransform.FFT(true, m, fftBuffer);
-                    FftCalculated(this, fftArgs);
-                }
+                return;
+            }
+
+            fftBuffer[fftPos].X = (float)(value * FastFourierTransform.HammingWindow(fftPos, fftLength));
+            fftBuffer[fftPos].Y = 0;
+            fftPos++;
+            if (fftPos >= fftLength)
+            {
+                fftPos = 0;
+
+                var fftFrame = new Complex[fftLength];
+                Array.Copy(fftBuffer, fftFrame, fftLength);
+                FastFourierTransform.FFT(true, m, fftFrame);
+
+                fftCalculated(this, new FftEventArgs(fftFrame));
             }
         }
     }

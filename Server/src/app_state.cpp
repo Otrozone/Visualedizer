@@ -19,6 +19,12 @@ String bootWolMac = "00:00:00:00:00:00";
 
 bool webUiUseWebSockets = true;
 bool turnOffOnLeave = false;
+bool laserEnabled = true;
+int laserTxPin = 0;
+int laserRxPin = 10;
+int laserEnablePin = 1;
+bool strobeEnabled = true;
+int strobePin = 4;
 
 unsigned long lastActivity = 0;
 bool activityTimeoutEnabled = false;

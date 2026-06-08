@@ -177,6 +177,30 @@ namespace Ledqualizer
             section["screenCaptureRow"] = scene.ScreenRowCapture.CaptureY.ToString(CultureInfo.InvariantCulture);
             section["screenCaptureMonitorIndex"] = scene.ScreenRowCapture.MonitorIndex.ToString(CultureInfo.InvariantCulture);
             section["screenCaptureReverse"] = scene.ScreenRowCapture.Reverse.ToString(CultureInfo.InvariantCulture);
+
+            section["imageCaptureSourceMode"] = scene.ImageRowCapture.SourceMode.ToString();
+            section["imageCaptureImagePath"] = scene.ImageRowCapture.ImagePath;
+            section["imageCaptureFolderPath"] = scene.ImageRowCapture.FolderPath;
+            section["imageCaptureRecursive"] = scene.ImageRowCapture.Recursive.ToString(CultureInfo.InvariantCulture);
+            section["imageCaptureLoop"] = scene.ImageRowCapture.Loop.ToString(CultureInfo.InvariantCulture);
+            section["imageCaptureDirection"] = scene.ImageRowCapture.Direction.ToString();
+            section["imageCaptureSpeedMin"] = scene.ImageRowCapture.SpeedMin.ToString(CultureInfo.InvariantCulture);
+            section["imageCaptureSpeedMax"] = scene.ImageRowCapture.SpeedMax.ToString(CultureInfo.InvariantCulture);
+
+            section["laserLiveChannelCount"] = scene.LaserDmxLive.Channels.Count.ToString(CultureInfo.InvariantCulture);
+            for (int i = 0; i < scene.LaserDmxLive.Channels.Count; i++)
+            {
+                LaserDmxChannelRow channel = scene.LaserDmxLive.Channels[i];
+                string prefix = $"laserLiveChannel{i}.";
+                section[$"{prefix}channel"] = channel.Channel.ToString(CultureInfo.InvariantCulture);
+                section[$"{prefix}mode"] = channel.Mode.ToString();
+                section[$"{prefix}constant"] = channel.ConstantValue.ToString(CultureInfo.InvariantCulture);
+                section[$"{prefix}rangeMin"] = channel.RangeMin.ToString(CultureInfo.InvariantCulture);
+                section[$"{prefix}rangeMax"] = channel.RangeMax.ToString(CultureInfo.InvariantCulture);
+                section[$"{prefix}values"] = string.Join(",", channel.Values.Select(value => value.ToString(CultureInfo.InvariantCulture)));
+                section[$"{prefix}refreshEnabled"] = channel.RefreshEnabled.ToString(CultureInfo.InvariantCulture);
+                section[$"{prefix}refreshSeconds"] = channel.RefreshIntervalSeconds.ToString(CultureInfo.InvariantCulture);
+            }
         }
 
         private static void SaveAudioReactiveSection(KeyDataCollection section, AudioReactiveSceneConfig config, string prefix)
@@ -237,6 +261,39 @@ namespace Ledqualizer
             scene.ScreenRowCapture.CaptureY = ParseInt(section.Keys["screenCaptureRow"], scene.ScreenRowCapture.CaptureY);
             scene.ScreenRowCapture.MonitorIndex = ParseInt(section.Keys["screenCaptureMonitorIndex"], scene.ScreenRowCapture.MonitorIndex);
             scene.ScreenRowCapture.Reverse = ParseBool(section.Keys["screenCaptureReverse"], scene.ScreenRowCapture.Reverse);
+
+            scene.ImageRowCapture.SourceMode = ParseImageSourceMode(section.Keys["imageCaptureSourceMode"], scene.ImageRowCapture.SourceMode);
+            scene.ImageRowCapture.ImagePath = section.Keys["imageCaptureImagePath"] ?? scene.ImageRowCapture.ImagePath;
+            scene.ImageRowCapture.FolderPath = section.Keys["imageCaptureFolderPath"] ?? scene.ImageRowCapture.FolderPath;
+            scene.ImageRowCapture.Recursive = ParseBool(section.Keys["imageCaptureRecursive"], scene.ImageRowCapture.Recursive);
+            scene.ImageRowCapture.Loop = ParseBool(section.Keys["imageCaptureLoop"], scene.ImageRowCapture.Loop);
+            scene.ImageRowCapture.Direction = ParseImageScanDirection(section.Keys["imageCaptureDirection"], scene.ImageRowCapture.Direction);
+            scene.ImageRowCapture.SpeedMin = Math.Max(0.01, ParseDouble(section.Keys["imageCaptureSpeedMin"], scene.ImageRowCapture.SpeedMin));
+            scene.ImageRowCapture.SpeedMax = Math.Max(scene.ImageRowCapture.SpeedMin, ParseDouble(section.Keys["imageCaptureSpeedMax"], scene.ImageRowCapture.SpeedMax));
+
+            scene.LaserDmxLive.Channels.Clear();
+            int laserChannelCount = ParseInt(section.Keys["laserLiveChannelCount"], 0);
+            for (int i = 0; i < laserChannelCount; i++)
+            {
+                string prefix = $"laserLiveChannel{i}.";
+                var channel = new LaserDmxChannelRow
+                {
+                    Channel = Math.Clamp(ParseInt(section.Keys[$"{prefix}channel"], 1), 1, 512),
+                    Mode = ParseLaserDmxValueMode(section.Keys[$"{prefix}mode"], LaserDmxValueMode.Constant),
+                    ConstantValue = ClampByte(ParseInt(section.Keys[$"{prefix}constant"], 0)),
+                    RangeMin = ClampByte(ParseInt(section.Keys[$"{prefix}rangeMin"], 0)),
+                    RangeMax = ClampByte(ParseInt(section.Keys[$"{prefix}rangeMax"], 255)),
+                    Values = ParseLaserValueList(section.Keys[$"{prefix}values"]),
+                    RefreshEnabled = ParseBool(section.Keys[$"{prefix}refreshEnabled"], false),
+                    RefreshIntervalSeconds = Math.Max(0.1, ParseDouble(section.Keys[$"{prefix}refreshSeconds"], 1.0))
+                };
+                if (channel.RangeMax < channel.RangeMin)
+                {
+                    (channel.RangeMin, channel.RangeMax) = (channel.RangeMax, channel.RangeMin);
+                }
+
+                scene.LaserDmxLive.Channels.Add(channel);
+            }
 
             return scene;
         }
@@ -565,6 +622,40 @@ namespace Ledqualizer
         private static AcVolume.AudioCaptureVolumeMode ParseAudioMode(string value, AcVolume.AudioCaptureVolumeMode defaultValue)
         {
             return Enum.TryParse(value, true, out AcVolume.AudioCaptureVolumeMode parsed) ? parsed : defaultValue;
+        }
+
+        private static ImageSourceMode ParseImageSourceMode(string value, ImageSourceMode defaultValue)
+        {
+            return Enum.TryParse(value, true, out ImageSourceMode parsed) ? parsed : defaultValue;
+        }
+
+        private static ImageScanDirection ParseImageScanDirection(string value, ImageScanDirection defaultValue)
+        {
+            return Enum.TryParse(value, true, out ImageScanDirection parsed) ? parsed : defaultValue;
+        }
+
+        private static LaserDmxValueMode ParseLaserDmxValueMode(string value, LaserDmxValueMode defaultValue)
+        {
+            return Enum.TryParse(value, true, out LaserDmxValueMode parsed) ? parsed : defaultValue;
+        }
+
+        private static List<int> ParseLaserValueList(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return new List<int>();
+            }
+
+            return value
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(item => int.TryParse(item, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) ? ClampByte(parsed) : -1)
+                .Where(item => item >= 0)
+                .ToList();
+        }
+
+        private static int ClampByte(int value)
+        {
+            return Math.Max(0, Math.Min(255, value));
         }
     }
 }

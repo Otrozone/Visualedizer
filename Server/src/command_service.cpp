@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <functional>
 
+#include "auxiliary_output.h"
 #include "common.h"
 #include "controller.h"
 #include "led.h"
@@ -377,6 +378,11 @@ void processWebSocketMessage(const String& message) {
 }
 
 void processWebSocketBinary(uint8_t* payload, size_t length) {
+  if (isAuxiliaryBinaryFrame(payload, length)) {
+    applyAuxiliaryBinaryFrame(payload, length);
+    return;
+  }
+
   const int totalLedCount = getTotalLedCount();
   if (length != totalLedCount * 3) {
     Serial.println("Incorrect data length");

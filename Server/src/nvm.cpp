@@ -62,6 +62,12 @@ void initConf() {
   dmxUnicast = preferences.getBool(NVM_DMX_UNICAST, true);
   dmxUniverse = preferences.getUInt(NVM_DMX_UNIVERSE, DVC_DMX_UNIVERSE);
   dmxUniverseCount = preferences.getUInt(NVM_DMX_UNIVERSE_COUNT, DMX_UNIVERSE_COUNT);
+  laserEnabled = preferences.getBool(NVM_LASER_ENABLED, laserEnabled);
+  laserTxPin = preferences.getInt(NVM_LASER_TX_PIN, laserTxPin);
+  laserRxPin = preferences.getInt(NVM_LASER_RX_PIN, laserRxPin);
+  laserEnablePin = preferences.getInt(NVM_LASER_EN_PIN, laserEnablePin);
+  strobeEnabled = preferences.getBool(NVM_STROBE_ENABLED, strobeEnabled);
+  strobePin = preferences.getInt(NVM_STROBE_PIN, strobePin);
 
   deviceName = preferences.getString(NVM_DEVICE_NAME, deviceName);
 
@@ -121,6 +127,12 @@ void handleGetConf(AsyncWebServerRequest *request) {
   jsonDoc[NVM_DMX_UNICAST] = dmxUnicast;
   jsonDoc[NVM_DMX_UNIVERSE] = dmxUniverse;
   jsonDoc[NVM_DMX_UNIVERSE_COUNT] = dmxUniverseCount;
+  jsonDoc[NVM_LASER_ENABLED] = laserEnabled;
+  jsonDoc[NVM_LASER_TX_PIN] = laserTxPin;
+  jsonDoc[NVM_LASER_RX_PIN] = laserRxPin;
+  jsonDoc[NVM_LASER_EN_PIN] = laserEnablePin;
+  jsonDoc[NVM_STROBE_ENABLED] = strobeEnabled;
+  jsonDoc[NVM_STROBE_PIN] = strobePin;
 
   jsonDoc[NVM_IR_ENABLED] = irEnabled;
   jsonDoc[NVM_IR_UNRECOGNIZED_AS_ONOFF] = irUnrecognizedAsOnOff;
@@ -169,6 +181,12 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   const bool paramDmxUnicast = jsonDoc[NVM_DMX_UNICAST].as<bool>();
   const int paramDmxUniverse = jsonDoc[NVM_DMX_UNIVERSE].as<uint>();
   const int paramDmxUniverseCount = jsonDoc[NVM_DMX_UNIVERSE_COUNT].as<uint>();
+  const bool paramLaserEnabled = jsonDoc[NVM_LASER_ENABLED].as<bool>();
+  const int paramLaserTxPin = jsonDoc[NVM_LASER_TX_PIN].as<int>();
+  const int paramLaserRxPin = jsonDoc[NVM_LASER_RX_PIN].as<int>();
+  const int paramLaserEnablePin = jsonDoc[NVM_LASER_EN_PIN].as<int>();
+  const bool paramStrobeEnabled = jsonDoc[NVM_STROBE_ENABLED].as<bool>();
+  const int paramStrobePin = jsonDoc[NVM_STROBE_PIN].as<int>();
   
   const char* paramDeviceName = jsonDoc[NVM_DEVICE_NAME].as<const char*>();
 
@@ -213,6 +231,12 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   preferences.putBool(NVM_DMX_UNICAST, paramDmxUnicast);
   preferences.putUInt(NVM_DMX_UNIVERSE, paramDmxUniverse);
   preferences.putUInt(NVM_DMX_UNIVERSE_COUNT, paramDmxUniverseCount);
+  preferences.putBool(NVM_LASER_ENABLED, paramLaserEnabled);
+  preferences.putInt(NVM_LASER_TX_PIN, paramLaserTxPin);
+  preferences.putInt(NVM_LASER_RX_PIN, paramLaserRxPin);
+  preferences.putInt(NVM_LASER_EN_PIN, paramLaserEnablePin);
+  preferences.putBool(NVM_STROBE_ENABLED, paramStrobeEnabled);
+  preferences.putInt(NVM_STROBE_PIN, paramStrobePin);
   preferences.putString(NVM_DEVICE_NAME, paramDeviceName);
 
   preferences.putBool(NVM_IR_ENABLED, paramIrEnabled);

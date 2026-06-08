@@ -39,16 +39,16 @@ namespace Ledqualizer
 
         public int MonitorIndex => (cbMonitors.SelectedItem as MonitorItem)?.Index ?? 0;
 
-        public void UpdatePreview(IReadOnlyList<Color> colors)
+        internal void UpdatePreview(CaptureScenePreview preview)
         {
             if (InvokeRequired)
             {
-                BeginInvoke(new Action<IReadOnlyList<Color>>(UpdatePreview), colors);
+                BeginInvoke(new Action<CaptureScenePreview>(UpdatePreview), preview);
                 return;
             }
 
             previewColors.Clear();
-            previewColors.AddRange(colors);
+            previewColors.AddRange(preview.Colors);
             pictureBoxPreview.Invalidate();
         }
 
