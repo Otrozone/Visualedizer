@@ -74,15 +74,6 @@ namespace Ledqualizer
         public int LaserColorY { get; set; }
     }
 
-    internal sealed class LaserDmxLiveSceneSettings
-    {
-        public List<LaserDmxChannelRow> Channels { get; set; } = new();
-    }
-
-    internal sealed class StrobeLiveSceneSettings
-    {
-    }
-
     internal sealed class DeviceSceneAssignment
     {
         public required SceneConfig Scene { get; init; }
@@ -843,7 +834,7 @@ namespace Ledqualizer
             Signature = string.Empty;
         }
 
-        private int ResolveRandomRange(LaserDmxChannelRow row)
+        private static int ResolveRandomRange(LaserDmxChannelRow row)
         {
             int min = Math.Clamp(Math.Min(row.RangeMin, row.RangeMax), 0, 255);
             int max = Math.Clamp(Math.Max(row.RangeMin, row.RangeMax), 0, 255);
@@ -876,18 +867,46 @@ namespace Ledqualizer
         }
     }
 
+    internal sealed class AuxiliaryTriggerRuntimeState
+    {
+        public bool LastConditionHigh { get; set; }
+        public bool Armed { get; set; } = true;
+        public bool OutputActive { get; set; }
+        public DateTime OnUntilUtc { get; set; } = DateTime.MinValue;
+
+        public void Reset()
+        {
+            LastConditionHigh = false;
+            Armed = true;
+            OutputActive = false;
+            OnUntilUtc = DateTime.MinValue;
+        }
+    }
+
+    internal readonly record struct AuxiliaryTriggerEvaluation(bool Triggered, bool StateChanged, bool OutputActive);
+
     internal static class AuxiliaryPayloadBuilder
     {
         private static readonly byte[] Magic = { (byte)'V', (byte)'A', (byte)'U', (byte)'X' };
         private const byte Version = 1;
 
         public static byte[] BuildLaserPayload(
-            LaserDmxLiveSceneSettings settings,
+            LaserDmxSceneConfig config,
             LaserDmxRuntimeState state,
             bool refreshAll,
             ISet<int>? refreshChannels = null)
         {
-            string signature = BuildLaserSignature(settings);
+            return BuildLaserPayload(config, state, refreshAll, refreshChannels, false);
+        }
+
+        public static byte[] BuildLaserPayload(
+            LaserDmxSceneConfig config,
+            LaserDmxRuntimeState state,
+            bool refreshAll,
+            ISet<int>? refreshChannels,
+            bool strobeEnabled)
+        {
+            string signature = BuildLaserSignature(config);
             if (!string.Equals(signature, state.Signature, StringComparison.Ordinal))
             {
                 state.Reset();
@@ -895,7 +914,7 @@ namespace Ledqualizer
                 refreshAll = true;
             }
 
-            List<(int Channel, int Value)> resolvedChannels = settings.Channels
+            List<(int Channel, int Value)> resolvedChannels = config.Channels
                 .Select(channel =>
                 {
                     bool shouldRefresh = refreshAll
@@ -906,17 +925,55 @@ namespace Ledqualizer
                 .OrderBy(item => item.Channel)
                 .ToList();
 
-            return BuildPayload(resolvedChannels, false);
+            return BuildPayload(resolvedChannels, strobeEnabled);
         }
 
         public static byte[] BuildStrobePayload(bool enabled)
         {
-            return BuildPayload(new List<(int Channel, int Value)>(), enabled);
+            return BuildPayload(Array.Empty<(int Channel, int Value)>(), enabled);
+        }
+
+        public static byte[] BuildExplicitPayload(IReadOnlyList<(int Channel, int Value)> channels, bool strobeEnabled)
+        {
+            return BuildPayload(channels, strobeEnabled);
         }
 
         public static byte[] BuildOffPayload()
         {
-            return BuildPayload(new List<(int Channel, int Value)>(), false);
+            return BuildPayload(Array.Empty<(int Channel, int Value)>(), false);
+        }
+
+        public static bool TryParsePayload(byte[] payload, out List<(int Channel, int Value)> channels, out bool strobeEnabled)
+        {
+            channels = new List<(int Channel, int Value)>();
+            strobeEnabled = false;
+            if (payload.Length < 7
+                || payload[0] != Magic[0]
+                || payload[1] != Magic[1]
+                || payload[2] != Magic[2]
+                || payload[3] != Magic[3]
+                || payload[4] != Version)
+            {
+                return false;
+            }
+
+            strobeEnabled = payload[5] != 0;
+            int channelCount = payload[6];
+            int expectedLength = 7 + (channelCount * 3);
+            if (payload.Length < expectedLength)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < channelCount; i++)
+            {
+                int offset = 7 + (i * 3);
+                int channel = payload[offset] | (payload[offset + 1] << 8);
+                int value = payload[offset + 2];
+                channels.Add((channel, value));
+            }
+
+            return true;
         }
 
         private static byte[] BuildPayload(IReadOnlyList<(int Channel, int Value)> channels, bool strobeEnabled)
@@ -939,148 +996,63 @@ namespace Ledqualizer
             return payload;
         }
 
-        private static string BuildLaserSignature(LaserDmxLiveSceneSettings settings)
+        private static string BuildLaserSignature(LaserDmxSceneConfig config)
         {
-            return string.Join("|", settings.Channels.Select(channel =>
+            return string.Join("|", config.Channels.Select(channel =>
                 $"{channel.Channel}:{channel.Mode}:{channel.ConstantValue}:{channel.RangeMin}:{channel.RangeMax}:{string.Join(",", channel.Values)}:{channel.RefreshEnabled}:{channel.RefreshIntervalSeconds:F3}"));
         }
     }
 
-    internal sealed class LaserDmxLiveSceneRunner : ISceneRunner
+    internal static class AuxiliaryRuntimeRegistry
     {
-        private readonly Func<LaserDmxLiveSceneSettings> settingsProvider;
-        private readonly Func<int> delayProvider;
-        private readonly LaserDmxRuntimeState runtimeState = new();
-
-        public LaserDmxLiveSceneRunner(Func<LaserDmxLiveSceneSettings> settingsProvider, Func<int> delayProvider)
+        private sealed class Snapshot
         {
-            this.settingsProvider = settingsProvider;
-            this.delayProvider = delayProvider;
+            public byte[] Payload { get; init; } = Array.Empty<byte>();
+            public bool LaserActive { get; init; }
+            public bool StrobeActive { get; init; }
         }
 
-        public async Task RunAsync(IReadOnlyList<DeviceTarget> devices, CancellationToken token)
+        private static readonly object SyncRoot = new();
+        private static readonly Dictionary<string, Snapshot> Snapshots = new(StringComparer.Ordinal);
+
+        public static void Update(string deviceId, byte[] payload, bool laserActive, bool strobeActive)
         {
-            try
+            lock (SyncRoot)
             {
-                LaserDmxLiveSceneSettings settings = settingsProvider();
-                bool anySent = await SendResolvedPayloadAsync(devices, token, settings, true, null).ConfigureAwait(false);
-                if (!anySent)
+                Snapshots[deviceId] = new Snapshot
                 {
-                    return;
-                }
+                    Payload = payload.ToArray(),
+                    LaserActive = laserActive,
+                    StrobeActive = strobeActive
+                };
+            }
+        }
 
-                while (!token.IsCancellationRequested)
+        public static void Clear(string deviceId)
+        {
+            lock (SyncRoot)
+            {
+                Snapshots.Remove(deviceId);
+            }
+        }
+
+        public static bool TryGet(string deviceId, out byte[] payload, out bool laserActive, out bool strobeActive)
+        {
+            lock (SyncRoot)
+            {
+                if (Snapshots.TryGetValue(deviceId, out Snapshot? snapshot))
                 {
-                    settings = settingsProvider();
-                    DateTime nowUtc = DateTime.UtcNow;
-                    HashSet<int> refreshChannels = new();
-                    foreach (LaserDmxChannelRow channel in settings.Channels.Where(channel => channel.RefreshEnabled))
-                    {
-                        DateTime nextRefresh = runtimeState.NextRefreshByChannel.TryGetValue(channel.Channel, out DateTime stored)
-                            ? stored
-                            : DateTime.MinValue;
-                        if (nextRefresh == DateTime.MinValue || nowUtc >= nextRefresh)
-                        {
-                            refreshChannels.Add(channel.Channel);
-                            runtimeState.NextRefreshByChannel[channel.Channel] = nowUtc.AddSeconds(Math.Max(0.1, channel.RefreshIntervalSeconds));
-                        }
-                    }
-
-                    if (refreshChannels.Count > 0)
-                    {
-                        anySent = await SendResolvedPayloadAsync(devices, token, settings, false, refreshChannels).ConfigureAwait(false);
-                        if (!anySent)
-                        {
-                            return;
-                        }
-                    }
-
-                    await Task.Delay(Math.Max(delayProvider(), 100), token).ConfigureAwait(false);
+                    payload = snapshot.Payload.ToArray();
+                    laserActive = snapshot.LaserActive;
+                    strobeActive = snapshot.StrobeActive;
+                    return true;
                 }
             }
-            finally
-            {
-                await SendOffFrameAsync(devices).ConfigureAwait(false);
-            }
-        }
 
-        private async Task<bool> SendResolvedPayloadAsync(
-            IReadOnlyList<DeviceTarget> devices,
-            CancellationToken token,
-            LaserDmxLiveSceneSettings settings,
-            bool refreshAll,
-            ISet<int>? refreshChannels)
-        {
-            byte[] data = AuxiliaryPayloadBuilder.BuildLaserPayload(settings, runtimeState, refreshAll, refreshChannels);
-            DateTime nowUtc = DateTime.UtcNow;
-            foreach (LaserDmxChannelRow channel in settings.Channels.Where(channel => channel.RefreshEnabled))
-            {
-                runtimeState.NextRefreshByChannel[channel.Channel] = nowUtc.AddSeconds(Math.Max(0.1, channel.RefreshIntervalSeconds));
-            }
-
-            bool anySent = false;
-            foreach (DeviceTarget device in devices)
-            {
-                anySent |= await device.Session.SendFrameAsync(data, token).ConfigureAwait(false);
-            }
-
-            return anySent;
-        }
-
-        private static async Task SendOffFrameAsync(IReadOnlyList<DeviceTarget> devices)
-        {
-            byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
-            foreach (DeviceTarget device in devices)
-            {
-                await device.Session.SendFrameAsync(offFrame, CancellationToken.None).ConfigureAwait(false);
-            }
-        }
-    }
-
-    internal sealed class StrobeLiveSceneRunner : ISceneRunner
-    {
-        private readonly Func<StrobeLiveSceneSettings> settingsProvider;
-
-        public StrobeLiveSceneRunner(Func<StrobeLiveSceneSettings> settingsProvider)
-        {
-            this.settingsProvider = settingsProvider;
-        }
-
-        public async Task RunAsync(IReadOnlyList<DeviceTarget> devices, CancellationToken token)
-        {
-            try
-            {
-                _ = settingsProvider();
-                bool anySent = false;
-                byte[] payload = AuxiliaryPayloadBuilder.BuildStrobePayload(true);
-                foreach (DeviceTarget device in devices)
-                {
-                    anySent |= await device.Session.SendFrameAsync(payload, token).ConfigureAwait(false);
-                }
-
-                if (!anySent)
-                {
-                    return;
-                }
-
-                while (!token.IsCancellationRequested)
-                {
-                    await Task.Delay(250, token).ConfigureAwait(false);
-                }
-            }
-            finally
-            {
-                await SendOffFrameAsync(devices).ConfigureAwait(false);
-            }
-        }
-
-        private static async Task SendOffFrameAsync(IReadOnlyList<DeviceTarget> devices)
-        {
-            byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
-            foreach (DeviceTarget device in devices)
-            {
-                await device.Session.SendFrameAsync(offFrame, CancellationToken.None).ConfigureAwait(false);
-            }
+            payload = Array.Empty<byte>();
+            laserActive = false;
+            strobeActive = false;
+            return false;
         }
     }
 
@@ -1110,12 +1082,24 @@ namespace Ledqualizer
         }
 
         private readonly Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider;
+        private readonly Func<SceneConfig?> laserSceneProvider;
+        private readonly Func<SceneConfig?> strobeSceneProvider;
         private readonly Func<string?> audioDeviceIdProvider;
         private readonly Func<int> delayProvider;
         private readonly Action<CaptureScenePreview> previewUpdater;
         private readonly Action<int> volumeProgressReporter;
         private readonly Action<int> spectralProgressReporter;
         private readonly Action<string> rateReporter;
+        private readonly LaserDmxRuntimeState auxiliaryLaserRuntimeState = new();
+        private readonly AuxiliaryTriggerRuntimeState laserTriggerState = new();
+        private readonly AuxiliaryTriggerRuntimeState strobeTriggerState = new();
+        private readonly Dictionary<string, AcSpectralAnalysis> auxiliarySpectralMeters = new(StringComparer.Ordinal);
+        private double? latestAuxiliarySpectralDb;
+        private bool auxiliaryWasActive;
+        private bool laserOutputActive;
+        private bool strobeOutputActive;
+        private string? lastLaserSceneId;
+        private string? lastStrobeSceneId;
         private readonly HashSet<string> registeredImageSceneIds = new(StringComparer.Ordinal);
         private static readonly object SharedImageSceneStatesLock = new();
         private static readonly Dictionary<string, ImageScenePlaybackState> SharedImageSceneStates = new(StringComparer.Ordinal);
@@ -1123,6 +1107,8 @@ namespace Ledqualizer
 
         public CompositeSceneRunner(
             Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider,
+            Func<SceneConfig?> laserSceneProvider,
+            Func<SceneConfig?> strobeSceneProvider,
             Func<string?> audioDeviceIdProvider,
             Func<int> delayProvider,
             Action<CaptureScenePreview> previewUpdater,
@@ -1131,6 +1117,8 @@ namespace Ledqualizer
             Action<string> rateReporter)
         {
             this.assignmentsProvider = assignmentsProvider;
+            this.laserSceneProvider = laserSceneProvider;
+            this.strobeSceneProvider = strobeSceneProvider;
             this.audioDeviceIdProvider = audioDeviceIdProvider;
             this.delayProvider = delayProvider;
             this.previewUpdater = previewUpdater;
@@ -1156,14 +1144,19 @@ namespace Ledqualizer
                 while (!token.IsCancellationRequested)
                 {
                     IReadOnlyList<DeviceSceneAssignment> assignments = assignmentsProvider();
-                    if (assignments.Count == 0)
+                    SceneConfig? laserScene = laserSceneProvider();
+                    SceneConfig? strobeScene = strobeSceneProvider();
+                    bool hasAuxiliaryScene = laserScene != null || strobeScene != null;
+                    if (assignments.Count == 0 && !hasAuxiliaryScene)
                     {
                         return;
                     }
 
                     CleanupImageSceneStates(assignments);
 
-                    bool needsSpectral = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysis);
+                    bool needsSpectral = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysis)
+                        || laserScene?.LaserDmx.Trigger.EventType == AuxiliaryTriggerEventType.SpectralAnalysis
+                        || strobeScene?.Strobe.Trigger.EventType == AuxiliaryTriggerEventType.SpectralAnalysis;
                     if (needsSpectral)
                     {
                         string? requestedDeviceId = audioDeviceIdProvider();
@@ -1204,11 +1197,22 @@ namespace Ledqualizer
                         }
                     }
 
+                    bool auxiliarySent = await SendAuxiliaryFrameAsync(
+                        devices,
+                        token,
+                        laserScene,
+                        strobeScene).ConfigureAwait(false);
+                    if (hasAuxiliaryScene && !auxiliarySent)
+                    {
+                        return;
+                    }
+
                     iterations++;
                     if (stopwatch.ElapsedMilliseconds >= 1000)
                     {
-                        string rateText = needsSpectral && lastSpectralDb.HasValue
-                            ? $"Rate: {iterations} | Band: {lastSpectralDb.Value:F1} dB"
+                        double? displayedSpectralDb = lastSpectralDb ?? latestAuxiliarySpectralDb;
+                        string rateText = needsSpectral && displayedSpectralDb.HasValue
+                            ? $"Rate: {iterations} | Band: {displayedSpectralDb.Value:F1} dB"
                             : $"Rate: {iterations}";
                         rateReporter(rateText);
                         iterations = 0;
@@ -1220,6 +1224,23 @@ namespace Ledqualizer
             }
             finally
             {
+                if (auxiliaryWasActive || laserOutputActive || strobeOutputActive)
+                {
+                    byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
+                    foreach (DeviceTarget device in devices)
+                    {
+                        await device.Session.SendFrameAsync(offFrame, CancellationToken.None).ConfigureAwait(false);
+                        AuxiliaryRuntimeRegistry.Clear(device.Config.Id);
+                    }
+                }
+
+                foreach (AcSpectralAnalysis meter in auxiliarySpectralMeters.Values)
+                {
+                    meter.Dispose();
+                }
+
+                auxiliarySpectralMeters.Clear();
+
                 foreach (string sceneId in registeredImageSceneIds.ToList())
                 {
                     ReleaseSharedImageSceneState(sceneId);
@@ -1227,6 +1248,298 @@ namespace Ledqualizer
 
                 registeredImageSceneIds.Clear();
             }
+        }
+
+        private async Task<bool> SendAuxiliaryFrameAsync(
+            IReadOnlyList<DeviceTarget> devices,
+            CancellationToken token,
+            SceneConfig? laserScene,
+            SceneConfig? strobeScene)
+        {
+            bool hasLaserScene = laserScene?.Type == SceneType.LaserDmx;
+            bool hasStrobeScene = strobeScene?.Type == SceneType.Strobe;
+            bool hasAuxiliaryScene = hasLaserScene || hasStrobeScene;
+
+            if (!hasAuxiliaryScene)
+            {
+                if (!auxiliaryWasActive)
+                {
+                    return true;
+                }
+
+                auxiliaryWasActive = false;
+                lastLaserSceneId = null;
+                lastStrobeSceneId = null;
+                auxiliaryLaserRuntimeState.Reset();
+                laserTriggerState.Reset();
+                strobeTriggerState.Reset();
+                laserOutputActive = false;
+                strobeOutputActive = false;
+
+                byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
+                bool offFrameSent = false;
+                foreach (DeviceTarget device in devices)
+                {
+                    offFrameSent |= await device.Session.SendFrameAsync(offFrame, token).ConfigureAwait(false);
+                    AuxiliaryRuntimeRegistry.Clear(device.Config.Id);
+                }
+
+                return offFrameSent;
+            }
+
+            bool laserSceneChanged = !string.Equals(lastLaserSceneId, laserScene?.Id, StringComparison.Ordinal);
+            bool strobeSceneChanged = !string.Equals(lastStrobeSceneId, strobeScene?.Id, StringComparison.Ordinal);
+            bool previousLaserOutputActive = laserOutputActive;
+            bool previousStrobeOutputActive = strobeOutputActive;
+
+            if (laserSceneChanged)
+            {
+                auxiliaryLaserRuntimeState.Reset();
+                laserTriggerState.Reset();
+                laserOutputActive = false;
+            }
+
+            if (strobeSceneChanged)
+            {
+                strobeTriggerState.Reset();
+                strobeOutputActive = false;
+            }
+
+            DateTime nowUtc = DateTime.UtcNow;
+            AuxiliaryTriggerEvaluation laserEvaluation = default;
+            AuxiliaryTriggerEvaluation strobeEvaluation = default;
+
+            if (hasLaserScene && laserScene != null)
+            {
+                bool conditionHigh = EvaluateAuxiliaryTriggerCondition(laserScene.LaserDmx.Trigger);
+                laserEvaluation = EvaluateAuxiliaryTrigger(laserScene.LaserDmx.Trigger, laserTriggerState, conditionHigh, nowUtc);
+                laserOutputActive = laserEvaluation.OutputActive;
+            }
+            else
+            {
+                laserOutputActive = false;
+            }
+
+            if (hasStrobeScene && strobeScene != null)
+            {
+                bool conditionHigh = EvaluateAuxiliaryTriggerCondition(strobeScene.Strobe.Trigger);
+                strobeEvaluation = EvaluateAuxiliaryTrigger(strobeScene.Strobe.Trigger, strobeTriggerState, conditionHigh, nowUtc);
+                strobeOutputActive = strobeEvaluation.OutputActive;
+            }
+            else
+            {
+                strobeOutputActive = false;
+            }
+
+            HashSet<int> refreshChannels = new();
+            bool refreshAll = laserSceneChanged
+                || laserEvaluation.Triggered
+                || (laserOutputActive && !previousLaserOutputActive);
+            if (laserOutputActive && hasLaserScene && laserScene != null)
+            {
+                foreach (LaserDmxChannelRow channel in laserScene.LaserDmx.Channels.Where(channel => channel.RefreshEnabled))
+                {
+                    DateTime nextRefresh = auxiliaryLaserRuntimeState.NextRefreshByChannel.TryGetValue(channel.Channel, out DateTime stored)
+                        ? stored
+                        : DateTime.MinValue;
+                    if (refreshAll || nextRefresh == DateTime.MinValue || nowUtc >= nextRefresh)
+                    {
+                        refreshChannels.Add(channel.Channel);
+                        auxiliaryLaserRuntimeState.NextRefreshByChannel[channel.Channel] = nowUtc.AddSeconds(Math.Max(0.1, channel.RefreshIntervalSeconds));
+                    }
+                }
+            }
+
+            bool anyAuxiliaryActive = laserOutputActive || strobeOutputActive;
+            bool shouldSend = laserEvaluation.StateChanged
+                || strobeEvaluation.StateChanged
+                || refreshAll
+                || refreshChannels.Count > 0
+                || laserSceneChanged
+                || strobeSceneChanged
+                || (laserOutputActive != previousLaserOutputActive)
+                || (strobeOutputActive != previousStrobeOutputActive);
+
+            lastLaserSceneId = laserScene?.Id;
+            lastStrobeSceneId = strobeScene?.Id;
+
+            if (!anyAuxiliaryActive)
+            {
+                if (!auxiliaryWasActive)
+                {
+                    return true;
+                }
+
+                auxiliaryWasActive = false;
+                byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
+                bool anyOffSent = false;
+                foreach (DeviceTarget device in devices)
+                {
+                    anyOffSent |= await device.Session.SendFrameAsync(offFrame, token).ConfigureAwait(false);
+                    AuxiliaryRuntimeRegistry.Clear(device.Config.Id);
+                }
+
+                return anyOffSent;
+            }
+
+            auxiliaryWasActive = true;
+            if (!shouldSend)
+            {
+                return true;
+            }
+
+            byte[] payload = laserOutputActive && laserScene != null
+                ? AuxiliaryPayloadBuilder.BuildLaserPayload(
+                    laserScene.LaserDmx,
+                    auxiliaryLaserRuntimeState,
+                    refreshAll,
+                    refreshChannels,
+                    strobeOutputActive)
+                : AuxiliaryPayloadBuilder.BuildStrobePayload(strobeOutputActive);
+
+            bool anySent = false;
+            foreach (DeviceTarget device in devices)
+            {
+                anySent |= await device.Session.SendFrameAsync(payload, token).ConfigureAwait(false);
+                AuxiliaryRuntimeRegistry.Update(device.Config.Id, payload, laserOutputActive, strobeOutputActive);
+            }
+
+            return anySent;
+        }
+
+        private bool EvaluateAuxiliaryTriggerCondition(AuxiliaryTriggerConfig trigger)
+        {
+            return trigger.EventType switch
+            {
+                AuxiliaryTriggerEventType.Volume => EvaluateVolumeCondition(trigger.Volume),
+                AuxiliaryTriggerEventType.SpectralAnalysis => EvaluateSpectralCondition(trigger.SpectralAnalysis),
+                AuxiliaryTriggerEventType.ScreenCapture => EvaluateScreenCaptureCondition(trigger.ScreenCapture),
+                _ => false
+            };
+        }
+
+        private bool EvaluateVolumeCondition(AuxiliaryVolumeTriggerConfig config)
+        {
+            float volume = VolumeSceneRunner.ReadVolume(config.AudioDeviceId);
+            return (volume * 100.0f) >= Math.Clamp(config.ThresholdPercent, 0, 100);
+        }
+
+        private bool EvaluateSpectralCondition(AuxiliarySpectralTriggerConfig config)
+        {
+            string deviceId = config.AudioDeviceId ?? string.Empty;
+            if (!auxiliarySpectralMeters.TryGetValue(deviceId, out AcSpectralAnalysis? spectralMeter))
+            {
+                spectralMeter = new AcSpectralAnalysis();
+                spectralMeter.Start(config.AudioDeviceId);
+                auxiliarySpectralMeters[deviceId] = spectralMeter;
+            }
+
+            spectralMeter.UpdateBandSettings(new SpectralBandSettings(
+                config.FrequencyLowHz,
+                config.FrequencyHighHz,
+                -90.0,
+                0.0));
+
+            double bandLevelDb = spectralMeter.GetCurrentBandLevelDb();
+            latestAuxiliarySpectralDb = bandLevelDb;
+            return bandLevelDb >= config.ThresholdDb;
+        }
+
+        private static bool EvaluateScreenCaptureCondition(AuxiliaryScreenCaptureTriggerConfig config)
+        {
+            Screen targetScreen = ResolveScreen(config.MonitorIndex);
+            Rectangle screenBounds = targetScreen.Bounds;
+            int x = Math.Clamp(config.X, 0, Math.Max(0, screenBounds.Width - 1));
+            int y = Math.Clamp(config.Y, 0, Math.Max(0, screenBounds.Height - 1));
+            Rectangle relative = new(
+                x,
+                y,
+                Math.Max(1, config.Width),
+                Math.Max(1, config.Height));
+            Rectangle absolute = new(
+                screenBounds.Left + relative.X,
+                screenBounds.Top + relative.Y,
+                Math.Min(relative.Width, Math.Max(1, screenBounds.Width - relative.X)),
+                Math.Min(relative.Height, Math.Max(1, screenBounds.Height - relative.Y)));
+
+            if (absolute.Width <= 0 || absolute.Height <= 0)
+            {
+                return false;
+            }
+
+            using Bitmap capture = new(absolute.Width, absolute.Height);
+            using Graphics graphics = Graphics.FromImage(capture);
+            graphics.CopyFromScreen(absolute.Location, Point.Empty, absolute.Size);
+
+            int stepX = Math.Max(1, absolute.Width / 32);
+            int stepY = Math.Max(1, absolute.Height / 32);
+            double brightnessTotal = 0.0;
+            int sampleCount = 0;
+            for (int sampleY = 0; sampleY < absolute.Height; sampleY += stepY)
+            {
+                for (int sampleX = 0; sampleX < absolute.Width; sampleX += stepX)
+                {
+                    Color pixel = capture.GetPixel(sampleX, sampleY);
+                    brightnessTotal += (pixel.R + pixel.G + pixel.B) / (255.0 * 3.0);
+                    sampleCount++;
+                }
+            }
+
+            double brightnessPercent = sampleCount <= 0 ? 0.0 : (brightnessTotal / sampleCount) * 100.0;
+            return brightnessPercent >= Math.Clamp(config.BrightnessThresholdPercent, 0, 100);
+        }
+
+        private static AuxiliaryTriggerEvaluation EvaluateAuxiliaryTrigger(
+            AuxiliaryTriggerConfig config,
+            AuxiliaryTriggerRuntimeState state,
+            bool conditionHigh,
+            DateTime nowUtc)
+        {
+            bool wasActive = state.OutputActive;
+            bool triggered = false;
+
+            switch (config.RetriggerMode)
+            {
+                case AuxiliaryTriggerRetriggerMode.HoldWhileHigh:
+                    state.OutputActive = conditionHigh;
+                    triggered = conditionHigh && !wasActive;
+                    break;
+
+                case AuxiliaryTriggerRetriggerMode.RepeatWhileHigh:
+                    if (conditionHigh && (!state.OutputActive || nowUtc >= state.OnUntilUtc))
+                    {
+                        triggered = true;
+                        state.OutputActive = true;
+                        state.OnUntilUtc = nowUtc.AddMilliseconds(Math.Max(1, config.OnDurationMs));
+                    }
+                    else if (state.OutputActive && nowUtc >= state.OnUntilUtc && !conditionHigh)
+                    {
+                        state.OutputActive = false;
+                    }
+                    break;
+
+                default:
+                    if (!conditionHigh)
+                    {
+                        state.Armed = true;
+                    }
+
+                    if (conditionHigh && !state.LastConditionHigh && state.Armed)
+                    {
+                        triggered = true;
+                        state.OutputActive = true;
+                        state.OnUntilUtc = nowUtc.AddMilliseconds(Math.Max(1, config.OnDurationMs));
+                        state.Armed = false;
+                    }
+                    else if (state.OutputActive && nowUtc >= state.OnUntilUtc)
+                    {
+                        state.OutputActive = false;
+                    }
+                    break;
+            }
+
+            state.LastConditionHigh = conditionHigh;
+            return new AuxiliaryTriggerEvaluation(triggered, wasActive != state.OutputActive || triggered, state.OutputActive);
         }
 
         private void CleanupImageSceneStates(IReadOnlyList<DeviceSceneAssignment> assignments)
@@ -1268,8 +1581,8 @@ namespace Ledqualizer
                 SceneType.ScreenRowCapture => BuildScreenCaptureFrame(assignment.Scene.Id, assignment.Scene.ScreenRowCapture, assignment.LedCount, capturePreviewUpdater),
                 SceneType.SpectralAnalysis => BuildSpectralFrame(assignment.Scene, assignment.LedCount, spectralAnalysis, ref lastSpectralDb, spectralProgressReporter),
                 SceneType.ImageRowCapture => BuildImageCaptureFrame(assignment.Scene.Id, assignment.Scene.ImageRowCapture, assignment.LedCount, capturePreviewUpdater),
-                SceneType.LaserDmxLive => new byte[assignment.LedCount * 3],
-                SceneType.StrobeLive => new byte[assignment.LedCount * 3],
+                SceneType.LaserDmx => new byte[assignment.LedCount * 3],
+                SceneType.Strobe => new byte[assignment.LedCount * 3],
                 _ => BuildSolidFrame(assignment.LedCount, assignment.Scene.SolidColor),
             };
         }

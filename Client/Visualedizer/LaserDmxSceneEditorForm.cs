@@ -2,83 +2,28 @@ using System.ComponentModel;
 
 namespace Ledqualizer
 {
-    public sealed class LaserDmxSendRequestedEventArgs : EventArgs
-    {
-        public LaserDmxSendRequestedEventArgs(string sceneId)
-        {
-            SceneId = sceneId;
-        }
-
-        public string SceneId { get; }
-    }
-
-    public sealed class LaserDmxLiveSceneEditorForm : Form, ISceneEditorForm
+    public sealed partial class LaserDmxSceneEditorForm : Form, ISceneEditorForm
     {
         private readonly BindingList<LaserChannelRowViewModel> rows = new();
-        private readonly DataGridView dgvChannels = new();
-        private readonly Button btnAddRow = new();
-        private readonly Button btnRemoveRow = new();
-        private readonly Button btnSend = new();
         private bool isLoading;
+        private bool selectorDataLoaded;
 
-        public LaserDmxLiveSceneEditorForm()
+        public LaserDmxSceneEditorForm()
         {
+            InitializeComponent();
             FormBorderStyle = FormBorderStyle.None;
             TopLevel = false;
             Dock = DockStyle.Fill;
 
-            TableLayoutPanel root = new()
-            {
-                ColumnCount = 1,
-                Dock = DockStyle.Fill,
-                Padding = new Padding(12),
-                RowCount = 3
-            };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-            Label lblInfo = new()
-            {
-                AutoSize = true,
-                Dock = DockStyle.Fill,
-                Text = "Configure explicit DMX channel rows. Values are sent when the scene activates, when refresh intervals elapse, and when you click Send."
-            };
-            root.Controls.Add(lblInfo, 0, 0);
-
             InitializeGrid();
-            root.Controls.Add(dgvChannels, 0, 1);
-
-            FlowLayoutPanel actions = new()
-            {
-                AutoSize = true,
-                Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight
-            };
-
-            btnAddRow.AutoSize = true;
-            btnAddRow.Text = "Add Row";
-            btnAddRow.Click += btnAddRow_Click;
-            actions.Controls.Add(btnAddRow);
-
-            btnRemoveRow.AutoSize = true;
-            btnRemoveRow.Text = "Remove Row";
-            btnRemoveRow.Click += btnRemoveRow_Click;
-            actions.Controls.Add(btnRemoveRow);
-
-            btnSend.AutoSize = true;
-            btnSend.Text = "Send";
-            btnSend.Click += btnSend_Click;
-            actions.Controls.Add(btnSend);
-
-            root.Controls.Add(actions, 0, 2);
-            Controls.Add(root);
+            EnsureSelectorDataLoaded();
+            UpdateTriggerPanelVisibility();
         }
 
         public event EventHandler? SceneChanged;
         public event EventHandler<LaserDmxSendRequestedEventArgs>? SendRequested;
 
-        public SceneType SceneType => SceneType.LaserDmxLive;
+        public SceneType SceneType => SceneType.LaserDmx;
 
         public SceneConfig? CurrentScene { get; private set; }
 
@@ -88,8 +33,11 @@ namespace Ledqualizer
             isLoading = true;
             try
             {
+                EnsureSelectorDataLoaded();
+                LoadTrigger(scene.LaserDmx.Trigger);
+
                 rows.Clear();
-                foreach (LaserDmxChannelRow channel in scene.LaserDmxLive.Channels)
+                foreach (LaserDmxChannelRow channel in scene.LaserDmx.Channels)
                 {
                     rows.Add(LaserChannelRowViewModel.FromModel(channel));
                 }
@@ -98,6 +46,45 @@ namespace Ledqualizer
             {
                 isLoading = false;
             }
+
+            UpdateTriggerPanelVisibility();
+        }
+
+        private void EnsureSelectorDataLoaded()
+        {
+            if (selectorDataLoaded)
+            {
+                return;
+            }
+
+            cbEventType.DataSource = Enum.GetValues<AuxiliaryTriggerEventType>();
+            cbRetriggerMode.DataSource = Enum.GetValues<AuxiliaryTriggerRetriggerMode>();
+            AuxiliaryTriggerEditorSupport.LoadAudioDevices(cbVolumeAudioDevice, null);
+            AuxiliaryTriggerEditorSupport.LoadAudioDevices(cbSpectralAudioDevice, null);
+            AuxiliaryTriggerEditorSupport.LoadMonitors(cbScreenMonitor);
+            selectorDataLoaded = true;
+        }
+
+        private void LoadTrigger(AuxiliaryTriggerConfig trigger)
+        {
+            cbEventType.SelectedItem = trigger.EventType;
+            cbRetriggerMode.SelectedItem = trigger.RetriggerMode;
+            numOnDurationMs.Value = ClampToNumeric(numOnDurationMs, trigger.OnDurationMs);
+
+            AuxiliaryTriggerEditorSupport.SelectAudioDevice(cbVolumeAudioDevice, trigger.Volume.AudioDeviceId);
+            numVolumeThreshold.Value = ClampToNumeric(numVolumeThreshold, trigger.Volume.ThresholdPercent);
+
+            AuxiliaryTriggerEditorSupport.SelectAudioDevice(cbSpectralAudioDevice, trigger.SpectralAnalysis.AudioDeviceId);
+            numSpectralLowHz.Value = ClampToNumeric(numSpectralLowHz, trigger.SpectralAnalysis.FrequencyLowHz);
+            numSpectralHighHz.Value = ClampToNumeric(numSpectralHighHz, trigger.SpectralAnalysis.FrequencyHighHz);
+            numSpectralThresholdDb.Value = ClampToNumeric(numSpectralThresholdDb, trigger.SpectralAnalysis.ThresholdDb);
+
+            AuxiliaryTriggerEditorSupport.SelectMonitor(cbScreenMonitor, trigger.ScreenCapture.MonitorIndex);
+            numScreenX.Value = ClampToNumeric(numScreenX, trigger.ScreenCapture.X);
+            numScreenY.Value = ClampToNumeric(numScreenY, trigger.ScreenCapture.Y);
+            numScreenWidth.Value = ClampToNumeric(numScreenWidth, trigger.ScreenCapture.Width);
+            numScreenHeight.Value = ClampToNumeric(numScreenHeight, trigger.ScreenCapture.Height);
+            numScreenBrightnessThreshold.Value = ClampToNumeric(numScreenBrightnessThreshold, trigger.ScreenCapture.BrightnessThresholdPercent);
         }
 
         private void InitializeGrid()
@@ -121,7 +108,7 @@ namespace Ledqualizer
             {
                 DataPropertyName = nameof(LaserChannelRowViewModel.Mode),
                 HeaderText = "Mode",
-                Width = 140,
+                Width = 150,
                 DataSource = Enum.GetValues<LaserDmxValueMode>()
             });
 
@@ -193,11 +180,24 @@ namespace Ledqualizer
 
         private void btnSend_Click(object? sender, EventArgs e)
         {
-            CommitRowsToScene();
+            CommitAll();
             if (!string.IsNullOrWhiteSpace(CurrentScene?.Id))
             {
                 SendRequested?.Invoke(this, new LaserDmxSendRequestedEventArgs(CurrentScene.Id));
             }
+        }
+
+        private void btnPickArea_Click(object? sender, EventArgs e)
+        {
+            Rectangle selected = AuxiliaryTriggerEditorSupport.PickScreenRectangle(
+                this,
+                AuxiliaryTriggerEditorSupport.GetSelectedMonitorIndex(cbScreenMonitor),
+                new Rectangle((int)numScreenX.Value, (int)numScreenY.Value, (int)numScreenWidth.Value, (int)numScreenHeight.Value));
+
+            numScreenX.Value = ClampToNumeric(numScreenX, selected.X);
+            numScreenY.Value = ClampToNumeric(numScreenY, selected.Y);
+            numScreenWidth.Value = ClampToNumeric(numScreenWidth, selected.Width);
+            numScreenHeight.Value = ClampToNumeric(numScreenHeight, selected.Height);
         }
 
         private void dgvChannels_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
@@ -213,6 +213,61 @@ namespace Ledqualizer
             CommitRowsToScene();
         }
 
+        private void TriggerControlChanged(object? sender, EventArgs e)
+        {
+            UpdateTriggerPanelVisibility();
+            CommitTriggerToScene();
+        }
+
+        private void UpdateTriggerPanelVisibility()
+        {
+            AuxiliaryTriggerEventType eventType = cbEventType.SelectedItem is AuxiliaryTriggerEventType value
+                ? value
+                : AuxiliaryTriggerEventType.Volume;
+            pnlVolume.Visible = eventType == AuxiliaryTriggerEventType.Volume;
+            pnlSpectral.Visible = eventType == AuxiliaryTriggerEventType.SpectralAnalysis;
+            pnlScreen.Visible = eventType == AuxiliaryTriggerEventType.ScreenCapture;
+            bool holdMode = cbRetriggerMode.SelectedItem is AuxiliaryTriggerRetriggerMode mode
+                && mode == AuxiliaryTriggerRetriggerMode.HoldWhileHigh;
+            numOnDurationMs.Enabled = !holdMode;
+        }
+
+        private void CommitAll()
+        {
+            CommitTriggerToScene();
+            CommitRowsToScene();
+        }
+
+        private void CommitTriggerToScene()
+        {
+            if (isLoading || CurrentScene == null)
+            {
+                return;
+            }
+
+            AuxiliaryTriggerConfig trigger = CurrentScene.LaserDmx.Trigger;
+            trigger.EventType = cbEventType.SelectedItem is AuxiliaryTriggerEventType eventType ? eventType : AuxiliaryTriggerEventType.Volume;
+            trigger.RetriggerMode = cbRetriggerMode.SelectedItem is AuxiliaryTriggerRetriggerMode retriggerMode ? retriggerMode : AuxiliaryTriggerRetriggerMode.OneShotUntilReset;
+            trigger.OnDurationMs = Math.Max(1, (int)numOnDurationMs.Value);
+
+            trigger.Volume.AudioDeviceId = AuxiliaryTriggerEditorSupport.GetSelectedAudioDeviceId(cbVolumeAudioDevice) ?? string.Empty;
+            trigger.Volume.ThresholdPercent = (int)numVolumeThreshold.Value;
+
+            trigger.SpectralAnalysis.AudioDeviceId = AuxiliaryTriggerEditorSupport.GetSelectedAudioDeviceId(cbSpectralAudioDevice) ?? string.Empty;
+            trigger.SpectralAnalysis.FrequencyLowHz = (double)numSpectralLowHz.Value;
+            trigger.SpectralAnalysis.FrequencyHighHz = (double)numSpectralHighHz.Value;
+            trigger.SpectralAnalysis.ThresholdDb = (double)numSpectralThresholdDb.Value;
+
+            trigger.ScreenCapture.MonitorIndex = AuxiliaryTriggerEditorSupport.GetSelectedMonitorIndex(cbScreenMonitor);
+            trigger.ScreenCapture.X = (int)numScreenX.Value;
+            trigger.ScreenCapture.Y = (int)numScreenY.Value;
+            trigger.ScreenCapture.Width = (int)numScreenWidth.Value;
+            trigger.ScreenCapture.Height = (int)numScreenHeight.Value;
+            trigger.ScreenCapture.BrightnessThresholdPercent = (int)numScreenBrightnessThreshold.Value;
+
+            SceneChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         private void CommitRowsToScene()
         {
             if (isLoading || CurrentScene == null)
@@ -220,8 +275,14 @@ namespace Ledqualizer
                 return;
             }
 
-            CurrentScene.LaserDmxLive.Channels = rows.Select(row => row.ToModel()).ToList();
+            CurrentScene.LaserDmx.Channels = rows.Select(row => row.ToModel()).ToList();
             SceneChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static decimal ClampToNumeric(NumericUpDown numeric, double value)
+        {
+            decimal decimalValue = (decimal)value;
+            return Math.Max(numeric.Minimum, Math.Min(numeric.Maximum, decimalValue));
         }
 
         private sealed class LaserChannelRowViewModel
@@ -278,5 +339,15 @@ namespace Ledqualizer
                 };
             }
         }
+    }
+
+    public sealed class LaserDmxSendRequestedEventArgs : EventArgs
+    {
+        public LaserDmxSendRequestedEventArgs(string sceneId)
+        {
+            SceneId = sceneId;
+        }
+
+        public string SceneId { get; }
     }
 }

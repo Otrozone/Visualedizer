@@ -13,7 +13,7 @@
     <Compile Update="ImageRowCaptureSceneEditorForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Update="LaserDmxLiveSceneEditorForm.cs">
+    <Compile Update="LaserDmxSceneEditorForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Update="ScreenRowCaptureSceneEditorForm.cs">
@@ -25,7 +25,7 @@
     <Compile Update="SpectralAnalysisSceneEditorForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Update="StrobeLiveSceneEditorForm.cs">
+    <Compile Update="StrobeSceneEditorForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Update="UcHue.cs">

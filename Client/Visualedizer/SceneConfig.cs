@@ -8,8 +8,8 @@ namespace Ledqualizer
         ScreenRowCapture,
         SpectralAnalysis,
         ImageRowCapture,
-        LaserDmxLive,
-        StrobeLive
+        LaserDmx,
+        Strobe
     }
 
     public enum ImageSourceMode
@@ -35,6 +35,20 @@ namespace Ledqualizer
         RandomValueFromList
     }
 
+    public enum AuxiliaryTriggerEventType
+    {
+        Volume,
+        SpectralAnalysis,
+        ScreenCapture
+    }
+
+    public enum AuxiliaryTriggerRetriggerMode
+    {
+        OneShotUntilReset,
+        RepeatWhileHigh,
+        HoldWhileHigh
+    }
+
     public sealed class SceneConfig
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -46,8 +60,8 @@ namespace Ledqualizer
         public ScreenRowCaptureSceneConfig ScreenRowCapture { get; set; } = new();
         public SpectralAnalysisSceneConfig SpectralAnalysis { get; set; } = new();
         public ImageRowCaptureSceneConfig ImageRowCapture { get; set; } = new();
-        public LaserDmxLiveSceneConfig LaserDmxLive { get; set; } = new();
-        public StrobeLiveSceneConfig StrobeLive { get; set; } = new();
+        public LaserDmxSceneConfig LaserDmx { get; set; } = new();
+        public StrobeSceneConfig Strobe { get; set; } = new();
 
         public SceneConfig Clone()
         {
@@ -62,8 +76,8 @@ namespace Ledqualizer
                 ScreenRowCapture = ScreenRowCapture.Clone(),
                 SpectralAnalysis = SpectralAnalysis.Clone(),
                 ImageRowCapture = ImageRowCapture.Clone(),
-                LaserDmxLive = LaserDmxLive.Clone(),
-                StrobeLive = StrobeLive.Clone()
+                LaserDmx = LaserDmx.Clone(),
+                Strobe = Strobe.Clone()
             };
         }
 
@@ -225,14 +239,78 @@ namespace Ledqualizer
         }
     }
 
-    public sealed class LaserDmxLiveSceneConfig
+    public sealed class AuxiliaryTriggerConfig
     {
+        public AuxiliaryTriggerEventType EventType { get; set; } = AuxiliaryTriggerEventType.Volume;
+        public AuxiliaryTriggerRetriggerMode RetriggerMode { get; set; } = AuxiliaryTriggerRetriggerMode.OneShotUntilReset;
+        public int OnDurationMs { get; set; } = 300;
+        public AuxiliaryVolumeTriggerConfig Volume { get; set; } = new();
+        public AuxiliarySpectralTriggerConfig SpectralAnalysis { get; set; } = new();
+        public AuxiliaryScreenCaptureTriggerConfig ScreenCapture { get; set; } = new();
+
+        public AuxiliaryTriggerConfig Clone()
+        {
+            return new AuxiliaryTriggerConfig
+            {
+                EventType = EventType,
+                RetriggerMode = RetriggerMode,
+                OnDurationMs = OnDurationMs,
+                Volume = Volume.Clone(),
+                SpectralAnalysis = SpectralAnalysis.Clone(),
+                ScreenCapture = ScreenCapture.Clone()
+            };
+        }
+    }
+
+    public sealed class AuxiliaryVolumeTriggerConfig
+    {
+        public string AudioDeviceId { get; set; } = string.Empty;
+        public int ThresholdPercent { get; set; } = 65;
+
+        public AuxiliaryVolumeTriggerConfig Clone()
+        {
+            return (AuxiliaryVolumeTriggerConfig)MemberwiseClone();
+        }
+    }
+
+    public sealed class AuxiliarySpectralTriggerConfig
+    {
+        public string AudioDeviceId { get; set; } = string.Empty;
+        public double FrequencyLowHz { get; set; } = 60;
+        public double FrequencyHighHz { get; set; } = 250;
+        public double ThresholdDb { get; set; } = -30;
+
+        public AuxiliarySpectralTriggerConfig Clone()
+        {
+            return (AuxiliarySpectralTriggerConfig)MemberwiseClone();
+        }
+    }
+
+    public sealed class AuxiliaryScreenCaptureTriggerConfig
+    {
+        public int MonitorIndex { get; set; }
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Width { get; set; } = 100;
+        public int Height { get; set; } = 100;
+        public int BrightnessThresholdPercent { get; set; } = 70;
+
+        public AuxiliaryScreenCaptureTriggerConfig Clone()
+        {
+            return (AuxiliaryScreenCaptureTriggerConfig)MemberwiseClone();
+        }
+    }
+
+    public sealed class LaserDmxSceneConfig
+    {
+        public AuxiliaryTriggerConfig Trigger { get; set; } = new();
         public List<LaserDmxChannelRow> Channels { get; set; } = new();
 
-        public LaserDmxLiveSceneConfig Clone()
+        public LaserDmxSceneConfig Clone()
         {
-            return new LaserDmxLiveSceneConfig
+            return new LaserDmxSceneConfig
             {
+                Trigger = Trigger.Clone(),
                 Channels = Channels.Select(channel => channel.Clone()).ToList()
             };
         }
@@ -265,14 +343,16 @@ namespace Ledqualizer
         }
     }
 
-    public sealed class StrobeLiveSceneConfig
+    public sealed class StrobeSceneConfig
     {
-        public int TriggerX { get; set; }
-        public int TriggerY { get; set; }
+        public AuxiliaryTriggerConfig Trigger { get; set; } = new();
 
-        public StrobeLiveSceneConfig Clone()
+        public StrobeSceneConfig Clone()
         {
-            return (StrobeLiveSceneConfig)MemberwiseClone();
+            return new StrobeSceneConfig
+            {
+                Trigger = Trigger.Clone()
+            };
         }
     }
 
@@ -286,6 +366,8 @@ namespace Ledqualizer
         public int StripCount { get; set; }
         public bool Enabled { get; set; } = true;
         public string AssignedSceneId { get; set; } = string.Empty;
+        public string AssignedLaserSceneId { get; set; } = string.Empty;
+        public string AssignedStrobeSceneId { get; set; } = string.Empty;
         public List<DeviceStripConfig> Strips { get; set; } = new();
     }
 
@@ -316,6 +398,8 @@ namespace Ledqualizer
         public int LedCount { get; set; }
         public int StripCount { get; set; }
         public string AssignedSceneId { get; set; } = string.Empty;
+        public string AssignedLaserSceneId { get; set; } = string.Empty;
+        public string AssignedStrobeSceneId { get; set; } = string.Empty;
         public string Status { get; set; } = "Disconnected";
 
         public DeviceConfig ToDeviceConfig()
@@ -329,7 +413,9 @@ namespace Ledqualizer
                 Port = Port,
                 LedCount = LedCount,
                 StripCount = StripCount,
-                AssignedSceneId = AssignedSceneId
+                AssignedSceneId = AssignedSceneId,
+                AssignedLaserSceneId = AssignedLaserSceneId,
+                AssignedStrobeSceneId = AssignedStrobeSceneId
             };
         }
 
@@ -348,6 +434,8 @@ namespace Ledqualizer
                 LedCount = device.LedCount,
                 StripCount = device.StripCount,
                 AssignedSceneId = device.AssignedSceneId,
+                AssignedLaserSceneId = device.AssignedLaserSceneId,
+                AssignedStrobeSceneId = device.AssignedStrobeSceneId,
                 Status = "Disconnected"
             };
         }
@@ -367,6 +455,8 @@ namespace Ledqualizer
                 LedCount = strip.LedCount,
                 StripCount = 1,
                 AssignedSceneId = strip.AssignedSceneId,
+                AssignedLaserSceneId = string.Empty,
+                AssignedStrobeSceneId = string.Empty,
                 Status = "Disconnected"
             };
         }
@@ -403,8 +493,8 @@ namespace Ledqualizer
                 SceneType.ScreenRowCapture => "Screen Row Capture",
                 SceneType.SpectralAnalysis => "Spectral Analysis",
                 SceneType.ImageRowCapture => "Image Row Capture",
-                SceneType.LaserDmxLive => "Laser DMX",
-                SceneType.StrobeLive => "Strobe",
+                SceneType.LaserDmx => "Laser DMX",
+                SceneType.Strobe => "Strobe",
                 _ => type.ToString()
             };
         }
@@ -414,12 +504,22 @@ namespace Ledqualizer
     {
         public static bool IsAuxiliary(SceneType type)
         {
-            return type is SceneType.LaserDmxLive or SceneType.StrobeLive;
+            return type is SceneType.LaserDmx or SceneType.Strobe;
         }
 
         public static bool SupportsStripAssignment(SceneType type)
         {
             return !IsAuxiliary(type);
+        }
+
+        public static bool IsLaser(SceneType type)
+        {
+            return type == SceneType.LaserDmx;
+        }
+
+        public static bool IsStrobe(SceneType type)
+        {
+            return type == SceneType.Strobe;
         }
     }
 
@@ -435,8 +535,8 @@ namespace Ledqualizer
                 SceneType.ScreenRowCapture => $"Display {scene.ScreenRowCapture.MonitorIndex + 1}, Row {scene.ScreenRowCapture.CaptureY}" + (scene.ScreenRowCapture.Reverse ? ", Reversed" : string.Empty),
                 SceneType.SpectralAnalysis => $"{scene.SpectralAnalysis.FrequencyLowHz:F0}-{scene.SpectralAnalysis.FrequencyHighHz:F0} Hz, Sat {scene.SpectralAnalysis.Saturation}%",
                 SceneType.ImageRowCapture => BuildImageRowSummary(scene.ImageRowCapture),
-                SceneType.LaserDmxLive => BuildLaserDmxSummary(scene.LaserDmxLive),
-                SceneType.StrobeLive => "Activation on/off",
+                SceneType.LaserDmx => BuildLaserDmxSummary(scene.LaserDmx),
+                SceneType.Strobe => $"{BuildTriggerSummary(scene.Strobe.Trigger)}, Strobe output",
                 _ => string.Empty
             };
         }
@@ -451,10 +551,34 @@ namespace Ledqualizer
             return $"{source}, {config.Direction}, {speed}{loop}";
         }
 
-        private static string BuildLaserDmxSummary(LaserDmxLiveSceneConfig config)
+        private static string BuildLaserDmxSummary(LaserDmxSceneConfig config)
         {
             int refreshCount = config.Channels.Count(channel => channel.RefreshEnabled);
-            return $"{config.Channels.Count} channels" + (refreshCount > 0 ? $", {refreshCount} refreshing" : string.Empty);
+            string channelSummary = $"{config.Channels.Count} channels" + (refreshCount > 0 ? $", {refreshCount} refreshing" : string.Empty);
+            return $"{BuildTriggerSummary(config.Trigger)}, {channelSummary}";
+        }
+
+        private static string BuildTriggerSummary(AuxiliaryTriggerConfig trigger)
+        {
+            string source = trigger.EventType switch
+            {
+                AuxiliaryTriggerEventType.Volume => $"Volume >= {Math.Clamp(trigger.Volume.ThresholdPercent, 0, 100)}%",
+                AuxiliaryTriggerEventType.SpectralAnalysis => $"{Math.Min(trigger.SpectralAnalysis.FrequencyLowHz, trigger.SpectralAnalysis.FrequencyHighHz):F0}-{Math.Max(trigger.SpectralAnalysis.FrequencyLowHz, trigger.SpectralAnalysis.FrequencyHighHz):F0} Hz >= {trigger.SpectralAnalysis.ThresholdDb:F1} dB",
+                AuxiliaryTriggerEventType.ScreenCapture => $"Screen {trigger.ScreenCapture.MonitorIndex + 1}, {Math.Max(1, trigger.ScreenCapture.Width)}x{Math.Max(1, trigger.ScreenCapture.Height)} >= {Math.Clamp(trigger.ScreenCapture.BrightnessThresholdPercent, 0, 100)}%",
+                _ => trigger.EventType.ToString()
+            };
+
+            string mode = trigger.RetriggerMode switch
+            {
+                AuxiliaryTriggerRetriggerMode.OneShotUntilReset => "One-shot",
+                AuxiliaryTriggerRetriggerMode.RepeatWhileHigh => "Repeat",
+                AuxiliaryTriggerRetriggerMode.HoldWhileHigh => "Hold",
+                _ => trigger.RetriggerMode.ToString()
+            };
+
+            return trigger.RetriggerMode == AuxiliaryTriggerRetriggerMode.HoldWhileHigh
+                ? $"{source}, {mode}"
+                : $"{source}, {mode}, {Math.Max(1, trigger.OnDurationMs)} ms";
         }
     }
 }

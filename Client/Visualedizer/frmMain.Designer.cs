@@ -15,6 +15,8 @@ namespace Ledqualizer
         private DataGridViewCheckBoxColumn colEnabled;
         private DataGridViewTextBoxColumn colName;
         private DataGridViewComboBoxColumn colAssignedScene;
+        private DataGridViewComboBoxColumn colAssignedLaserScene;
+        private DataGridViewComboBoxColumn colAssignedStrobeScene;
         private DataGridViewTextBoxColumn colHost;
         private DataGridViewTextBoxColumn colPort;
         private DataGridViewTextBoxColumn colStripCount;
@@ -52,6 +54,8 @@ namespace Ledqualizer
             colEnabled = new DataGridViewCheckBoxColumn();
             colName = new DataGridViewTextBoxColumn();
             colAssignedScene = new DataGridViewComboBoxColumn();
+            colAssignedLaserScene = new DataGridViewComboBoxColumn();
+            colAssignedStrobeScene = new DataGridViewComboBoxColumn();
             colHost = new DataGridViewTextBoxColumn();
             colPort = new DataGridViewTextBoxColumn();
             colStripCount = new DataGridViewTextBoxColumn();
@@ -128,7 +132,7 @@ namespace Ledqualizer
             dgvDevices.AllowUserToDeleteRows = false;
             dgvDevices.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             dgvDevices.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvDevices.Columns.AddRange(new DataGridViewColumn[] { colEnabled, colName, colAssignedScene, colHost, colPort, colStripCount, colLedCount, colStatus });
+            dgvDevices.Columns.AddRange(new DataGridViewColumn[] { colEnabled, colName, colAssignedScene, colAssignedLaserScene, colAssignedStrobeScene, colHost, colPort, colStripCount, colLedCount, colStatus });
             dgvDevices.Location = new Point(12, 59);
             dgvDevices.Name = "dgvDevices";
             dgvDevices.RowHeadersVisible = false;
@@ -155,7 +159,21 @@ namespace Ledqualizer
             colAssignedScene.DataPropertyName = "AssignedSceneId";
             colAssignedScene.HeaderText = "Scene";
             colAssignedScene.Name = "colAssignedScene";
-            colAssignedScene.Width = 180;
+            colAssignedScene.Width = 160;
+            // 
+            // colAssignedLaserScene
+            // 
+            colAssignedLaserScene.DataPropertyName = "AssignedLaserSceneId";
+            colAssignedLaserScene.HeaderText = "Laser Scene";
+            colAssignedLaserScene.Name = "colAssignedLaserScene";
+            colAssignedLaserScene.Width = 120;
+            // 
+            // colAssignedStrobeScene
+            // 
+            colAssignedStrobeScene.DataPropertyName = "AssignedStrobeSceneId";
+            colAssignedStrobeScene.HeaderText = "Strobe Scene";
+            colAssignedStrobeScene.Name = "colAssignedStrobeScene";
+            colAssignedStrobeScene.Width = 120;
             // 
             // colHost
             // 

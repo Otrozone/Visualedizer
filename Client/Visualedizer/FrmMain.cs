@@ -31,17 +31,33 @@ namespace Ledqualizer
             public string Display { get; }
         }
 
+        private sealed class SceneAssignmentOption
+        {
+            public SceneAssignmentOption(string id, string name)
+            {
+                Id = id;
+                Name = name;
+            }
+
+            public string Id { get; }
+            public string Name { get; }
+        }
+
         private readonly AppConfig appConfig = new();
         private readonly BindingList<DeviceGridRow> deviceRows = new();
         private readonly BindingList<SceneGridRow> sceneRows = new();
-        private readonly BindingSource sceneLookupBindingSource = new();
+        private readonly BindingSource ledSceneLookupBindingSource = new();
+        private readonly BindingSource laserSceneLookupBindingSource = new();
+        private readonly BindingSource strobeSceneLookupBindingSource = new();
         private readonly BindingSource sceneGridBindingSource = new();
         private readonly Dictionary<string, DeviceRunEntry> deviceRuns = new();
         private readonly Dictionary<SceneType, Form> sceneEditors = new();
         private readonly List<SceneTypeOption> sceneTypeOptions = Enum.GetValues<SceneType>().Select(type => new SceneTypeOption(type)).ToList();
+        private readonly BindingList<SceneAssignmentOption> ledSceneOptions = new();
+        private readonly BindingList<SceneAssignmentOption> laserSceneOptions = new();
+        private readonly BindingList<SceneAssignmentOption> strobeSceneOptions = new();
         private readonly DeviceMetadataService deviceMetadataService = new();
         private readonly Dictionary<string, Task> metadataRefreshTasks = new();
-        private readonly Dictionary<string, bool> strobeTestStates = new();
         private readonly Dictionary<string, LaserDmxRuntimeState> manualLaserStates = new();
         private readonly Font deviceGroupFont;
 
@@ -103,8 +119,8 @@ namespace Ledqualizer
             var screenRowEditor = new ScreenRowCaptureSceneEditorForm();
             var spectralEditor = new SpectralAnalysisSceneEditorForm();
             var imageRowEditor = new ImageRowCaptureSceneEditorForm();
-            var laserDmxLiveEditor = new LaserDmxLiveSceneEditorForm();
-            var strobeLiveEditor = new StrobeLiveSceneEditorForm();
+            var laserDmxEditor = new LaserDmxSceneEditorForm();
+            var strobeEditor = new StrobeSceneEditorForm();
 
             solidColorEditor.SceneChanged += Editor_SceneChanged;
             gradientEditor.SceneChanged += Editor_SceneChanged;
@@ -116,10 +132,10 @@ namespace Ledqualizer
             spectralEditor.SceneChanged += Editor_SceneChanged;
             spectralEditor.SelectedAudioDeviceChanged += SpectralEditor_SelectedAudioDeviceChanged;
             imageRowEditor.SceneChanged += Editor_SceneChanged;
-            laserDmxLiveEditor.SceneChanged += Editor_SceneChanged;
-            strobeLiveEditor.SceneChanged += Editor_SceneChanged;
-            laserDmxLiveEditor.SendRequested += LaserDmxLiveEditor_SendRequested;
-            strobeLiveEditor.ToggleTestRequested += StrobeLiveEditor_ToggleTestRequested;
+            laserDmxEditor.SceneChanged += Editor_SceneChanged;
+            strobeEditor.SceneChanged += Editor_SceneChanged;
+            laserDmxEditor.SendRequested += LaserDmxEditor_SendRequested;
+            strobeEditor.TestRequested += StrobeEditor_TestRequested;
 
             sceneEditors[SceneType.SolidColor] = solidColorEditor;
             sceneEditors[SceneType.Gradient] = gradientEditor;
@@ -127,8 +143,8 @@ namespace Ledqualizer
             sceneEditors[SceneType.ScreenRowCapture] = screenRowEditor;
             sceneEditors[SceneType.SpectralAnalysis] = spectralEditor;
             sceneEditors[SceneType.ImageRowCapture] = imageRowEditor;
-            sceneEditors[SceneType.LaserDmxLive] = laserDmxLiveEditor;
-            sceneEditors[SceneType.StrobeLive] = strobeLiveEditor;
+            sceneEditors[SceneType.LaserDmx] = laserDmxEditor;
+            sceneEditors[SceneType.Strobe] = strobeEditor;
 
             foreach (Form editor in sceneEditors.Values)
             {
@@ -152,15 +168,28 @@ namespace Ledqualizer
             dgvDevices.CellFormatting += dgvDevices_CellFormatting;
             dgvDevices.DataError += dgvDevices_DataError;
 
-            colAssignedScene.DataSource = sceneLookupBindingSource;
-            colAssignedScene.DisplayMember = nameof(SceneGridRow.Name);
-            colAssignedScene.ValueMember = nameof(SceneGridRow.Id);
+            ledSceneLookupBindingSource.DataSource = ledSceneOptions;
+            laserSceneLookupBindingSource.DataSource = laserSceneOptions;
+            strobeSceneLookupBindingSource.DataSource = strobeSceneOptions;
+
+            colAssignedScene.DataSource = ledSceneLookupBindingSource;
+            colAssignedScene.DisplayMember = nameof(SceneAssignmentOption.Name);
+            colAssignedScene.ValueMember = nameof(SceneAssignmentOption.Id);
             colAssignedScene.DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton;
+
+            colAssignedLaserScene.DataSource = laserSceneLookupBindingSource;
+            colAssignedLaserScene.DisplayMember = nameof(SceneAssignmentOption.Name);
+            colAssignedLaserScene.ValueMember = nameof(SceneAssignmentOption.Id);
+            colAssignedLaserScene.DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton;
+
+            colAssignedStrobeScene.DataSource = strobeSceneLookupBindingSource;
+            colAssignedStrobeScene.DisplayMember = nameof(SceneAssignmentOption.Name);
+            colAssignedStrobeScene.ValueMember = nameof(SceneAssignmentOption.Id);
+            colAssignedStrobeScene.DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton;
         }
 
         private void ConfigureSceneGrid()
         {
-            sceneLookupBindingSource.DataSource = sceneRows;
             sceneGridBindingSource.DataSource = sceneRows;
 
             dgvScenes.AutoGenerateColumns = false;
@@ -178,6 +207,43 @@ namespace Ledqualizer
             colSceneType.DisplayMember = nameof(SceneTypeOption.Display);
             colSceneType.ValueMember = nameof(SceneTypeOption.Value);
             colSceneType.DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton;
+        }
+
+        private void RefreshSceneAssignmentOptions()
+        {
+            RebuildSceneAssignmentOptions(
+                ledSceneOptions,
+                appConfig.Scenes.Where(scene => SceneTypeRules.SupportsStripAssignment(scene.Type)),
+                includeNone: true);
+            RebuildSceneAssignmentOptions(
+                laserSceneOptions,
+                appConfig.Scenes.Where(scene => SceneTypeRules.IsLaser(scene.Type)),
+                includeNone: true);
+            RebuildSceneAssignmentOptions(
+                strobeSceneOptions,
+                appConfig.Scenes.Where(scene => SceneTypeRules.IsStrobe(scene.Type)),
+                includeNone: true);
+
+            ledSceneLookupBindingSource.ResetBindings(false);
+            laserSceneLookupBindingSource.ResetBindings(false);
+            strobeSceneLookupBindingSource.ResetBindings(false);
+        }
+
+        private static void RebuildSceneAssignmentOptions(
+            BindingList<SceneAssignmentOption> target,
+            IEnumerable<SceneConfig> scenes,
+            bool includeNone)
+        {
+            target.Clear();
+            if (includeNone)
+            {
+                target.Add(new SceneAssignmentOption(string.Empty, "(None)"));
+            }
+
+            foreach (SceneConfig scene in scenes.OrderBy(scene => scene.Name, StringComparer.CurrentCultureIgnoreCase))
+            {
+                target.Add(new SceneAssignmentOption(scene.Id, scene.Name));
+            }
         }
 
         private async void frmMain_Load(object sender, EventArgs e)
@@ -207,6 +273,7 @@ namespace Ledqualizer
             {
                 sceneRows.Add(SceneGridRow.FromSceneConfig(scene));
             }
+            RefreshSceneAssignmentOptions();
 
             deviceRows.Clear();
             foreach (DeviceConfig device in appConfig.Devices)
@@ -217,8 +284,10 @@ namespace Ledqualizer
                 }
             }
 
-            sceneLookupBindingSource.ResetBindings(false);
             sceneGridBindingSource.ResetBindings(false);
+            ledSceneLookupBindingSource.ResetBindings(false);
+            laserSceneLookupBindingSource.ResetBindings(false);
+            strobeSceneLookupBindingSource.ResetBindings(false);
 
             if (sceneRows.Count > 0)
             {
@@ -283,6 +352,8 @@ namespace Ledqualizer
                 StripCount = rootRow.StripCount,
                 Enabled = rootRow.Enabled,
                 AssignedSceneId = rootRow.AssignedSceneId,
+                AssignedLaserSceneId = rootRow.AssignedLaserSceneId,
+                AssignedStrobeSceneId = rootRow.AssignedStrobeSceneId,
                 Strips = GetStripRows(rootRow.Id)
                     .Select(row => new DeviceStripConfig
                     {
@@ -407,18 +478,38 @@ namespace Ledqualizer
                     continue;
                 }
 
-                bool rowHasTarget = row.Kind == DeviceRowKind.Device ? row.Enabled : row.Enabled;
+                bool rowHasTarget = row.Enabled;
                 SceneConfig? assignedScene = FindSceneById(row.AssignedSceneId);
-                if (rowHasTarget && assignedScene == null)
+                bool requiresLedScene = row.Kind == DeviceRowKind.Strip
+                    ? rowHasTarget
+                    : rowHasTarget && !string.IsNullOrWhiteSpace(row.AssignedSceneId);
+                if (requiresLedScene && assignedScene == null)
                 {
                     row.Status = "Scene missing";
                 }
-                else if (row.Kind == DeviceRowKind.Strip
-                    && rowHasTarget
+                else if (row.Kind == DeviceRowKind.Device
+                    && requiresLedScene
                     && assignedScene != null
                     && !SceneTypeRules.SupportsStripAssignment(assignedScene.Type))
                 {
                     row.Status = "Scene incompatible";
+                }
+                else if (row.Kind == DeviceRowKind.Strip
+                    && requiresLedScene
+                    && assignedScene != null
+                    && !SceneTypeRules.SupportsStripAssignment(assignedScene.Type))
+                {
+                    row.Status = "Scene incompatible";
+                }
+                else if (row.Kind == DeviceRowKind.Device
+                    && !IsValidAuxiliarySceneAssignment(row.AssignedLaserSceneId, SceneTypeRules.IsLaser, out string? laserStatus))
+                {
+                    row.Status = laserStatus!;
+                }
+                else if (row.Kind == DeviceRowKind.Device
+                    && !IsValidAuxiliarySceneAssignment(row.AssignedStrobeSceneId, SceneTypeRules.IsStrobe, out string? strobeStatus))
+                {
+                    row.Status = strobeStatus!;
                 }
                 else if (!deviceRuns.ContainsKey(rootRow.Id) && row.Status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase))
                 {
@@ -482,7 +573,12 @@ namespace Ledqualizer
                 return false;
             }
 
-            if (device.Enabled && FindSceneById(device.AssignedSceneId) != null)
+            if (device.Enabled && IsLedSceneAssigned(device.AssignedSceneId))
+            {
+                return true;
+            }
+
+            if (device.Enabled && (IsLaserSceneAssigned(device.AssignedLaserSceneId) || IsStrobeSceneAssigned(device.AssignedStrobeSceneId)))
             {
                 return true;
             }
@@ -528,6 +624,7 @@ namespace Ledqualizer
                 "Invalid" => "Invalid",
                 "Metadata unavailable" => "Metadata unavailable",
                 "Scene missing" => "Scene missing",
+                "Scene incompatible" => "Scene incompatible",
                 _ => ResolveActiveStatus(deviceId)
             };
         }
@@ -542,34 +639,20 @@ namespace Ledqualizer
         private string BuildRunSignature(DeviceConfig config)
         {
             string rootSceneType = FindSceneById(config.AssignedSceneId)?.Type.ToString() ?? string.Empty;
+            string laserSceneType = FindSceneById(config.AssignedLaserSceneId)?.Type.ToString() ?? string.Empty;
+            string strobeSceneType = FindSceneById(config.AssignedStrobeSceneId)?.Type.ToString() ?? string.Empty;
             string stripSignature = string.Join("|", config.Strips
                 .OrderBy(strip => strip.StripIndex)
                 .Select(strip => $"{strip.StripIndex}:{strip.LedCount}:{strip.Enabled}:{strip.AssignedSceneId}:{FindSceneById(strip.AssignedSceneId)?.Type.ToString() ?? string.Empty}"));
-            return $"{config.Host}|{config.Port}|{config.LedCount}|{config.StripCount}|{config.Enabled}|{config.AssignedSceneId}|{rootSceneType}|{stripSignature}";
+            return $"{config.Host}|{config.Port}|{config.LedCount}|{config.StripCount}|{config.Enabled}|{config.AssignedSceneId}|{rootSceneType}|{config.AssignedLaserSceneId}|{laserSceneType}|{config.AssignedStrobeSceneId}|{strobeSceneType}|{stripSignature}";
         }
 
         private ISceneRunner CreateCompositeSceneRunner(string deviceId)
         {
-            DeviceGridRow? rootRow = FindRootDeviceRow(deviceId);
-            if (rootRow?.Enabled == true)
-            {
-                SceneConfig? rootScene = FindSceneById(rootRow.AssignedSceneId);
-                if (rootScene?.Type == SceneType.LaserDmxLive)
-                {
-                    return new LaserDmxLiveSceneRunner(
-                        () => GetLaserDmxLiveSceneSettings(rootScene.Id),
-                        () => ReadUi(() => (int)numDelay.Value));
-                }
-
-                if (rootScene?.Type == SceneType.StrobeLive)
-                {
-                    return new StrobeLiveSceneRunner(
-                        () => GetStrobeLiveSceneSettings(rootScene.Id));
-                }
-            }
-
             return new CompositeSceneRunner(
                 () => GetDeviceSceneAssignments(deviceId),
+                () => GetAssignedLaserScene(deviceId),
+                () => GetAssignedStrobeScene(deviceId),
                 () => selectedAudioDeviceId,
                 () => ReadUi(() => (int)numDelay.Value),
                 UpdatePreview,
@@ -592,13 +675,10 @@ namespace Ledqualizer
             if (rootRow.Enabled)
             {
                 SceneConfig? rootScene = FindSceneById(rootRow.AssignedSceneId);
-                if (rootScene != null && rootRow.LedCount > 0)
+                if (rootScene != null
+                    && rootRow.LedCount > 0
+                    && SceneTypeRules.SupportsStripAssignment(rootScene.Type))
                 {
-                    if (SceneTypeRules.IsAuxiliary(rootScene.Type))
-                    {
-                        return assignments;
-                    }
-
                     assignments.Add(new DeviceSceneAssignment
                     {
                         Scene = rootScene,
@@ -628,6 +708,72 @@ namespace Ledqualizer
             }
 
             return assignments;
+        }
+
+        private SceneConfig? GetAssignedLaserScene(string deviceId)
+        {
+            DeviceGridRow? rootRow = FindRootDeviceRow(deviceId);
+            if (rootRow == null || !rootRow.Enabled)
+            {
+                return null;
+            }
+
+            SceneConfig? scene = FindSceneById(rootRow.AssignedLaserSceneId);
+            return scene != null && SceneTypeRules.IsLaser(scene.Type) ? scene : null;
+        }
+
+        private SceneConfig? GetAssignedStrobeScene(string deviceId)
+        {
+            DeviceGridRow? rootRow = FindRootDeviceRow(deviceId);
+            if (rootRow == null || !rootRow.Enabled)
+            {
+                return null;
+            }
+
+            SceneConfig? scene = FindSceneById(rootRow.AssignedStrobeSceneId);
+            return scene != null && SceneTypeRules.IsStrobe(scene.Type) ? scene : null;
+        }
+
+        private bool IsLedSceneAssigned(string sceneId)
+        {
+            SceneConfig? scene = FindSceneById(sceneId);
+            return scene != null && SceneTypeRules.SupportsStripAssignment(scene.Type);
+        }
+
+        private bool IsLaserSceneAssigned(string sceneId)
+        {
+            SceneConfig? scene = FindSceneById(sceneId);
+            return scene != null && SceneTypeRules.IsLaser(scene.Type);
+        }
+
+        private bool IsStrobeSceneAssigned(string sceneId)
+        {
+            SceneConfig? scene = FindSceneById(sceneId);
+            return scene != null && SceneTypeRules.IsStrobe(scene.Type);
+        }
+
+        private bool IsValidAuxiliarySceneAssignment(string sceneId, Func<SceneType, bool> matcher, out string? status)
+        {
+            status = null;
+            if (string.IsNullOrWhiteSpace(sceneId))
+            {
+                return true;
+            }
+
+            SceneConfig? scene = FindSceneById(sceneId);
+            if (scene == null)
+            {
+                status = "Scene missing";
+                return false;
+            }
+
+            if (!matcher(scene.Type))
+            {
+                status = "Scene incompatible";
+                return false;
+            }
+
+            return true;
         }
 
         private SolidColorSceneSettings GetSolidColorSceneSettings(string sceneId)
@@ -758,42 +904,31 @@ namespace Ledqualizer
             SafeUi(() => statLblRate.Text = text);
         }
 
-        private LaserDmxLiveSceneSettings GetLaserDmxLiveSceneSettings(string sceneId)
+        private async void LaserDmxEditor_SendRequested(object? sender, LaserDmxSendRequestedEventArgs e)
         {
-            SceneConfig scene = RequireScene(sceneId);
-            return ReadUi(() => new LaserDmxLiveSceneSettings
+            List<DeviceGridRow> rows = GetActiveAssignedDeviceRows(
+                row => string.Equals(row.AssignedLaserSceneId, e.SceneId, StringComparison.Ordinal));
+            foreach (DeviceGridRow row in rows)
             {
-                Channels = scene.LaserDmxLive.Channels.Select(channel => channel.Clone()).ToList()
-            });
+                await SendAuxiliaryPayloadToDevicesAsync(
+                    new[] { BuildDeviceConfigFromRows(row) },
+                    BuildAuxiliaryPayloadForRow(row, row.AssignedLaserSceneId, null)).ConfigureAwait(false);
+            }
         }
 
-        private StrobeLiveSceneSettings GetStrobeLiveSceneSettings(string sceneId)
+        private async void StrobeEditor_TestRequested(object? sender, StrobeTestRequestedEventArgs e)
         {
-            RequireScene(sceneId);
-            return new StrobeLiveSceneSettings();
-        }
-
-        private async void LaserDmxLiveEditor_SendRequested(object? sender, LaserDmxSendRequestedEventArgs e)
-        {
-            LaserDmxLiveSceneSettings settings = GetLaserDmxLiveSceneSettings(e.SceneId);
-            if (!manualLaserStates.TryGetValue(e.SceneId, out LaserDmxRuntimeState? runtimeState))
+            List<DeviceGridRow> rows = GetActiveAssignedDeviceRows(
+                row => string.Equals(row.AssignedStrobeSceneId, e.SceneId, StringComparison.Ordinal));
+            foreach (DeviceGridRow row in rows)
             {
-                runtimeState = new LaserDmxRuntimeState();
-                manualLaserStates[e.SceneId] = runtimeState;
+                await SendAuxiliaryPayloadToDevicesAsync(
+                    new[] { BuildDeviceConfigFromRows(row) },
+                    BuildAuxiliaryPayloadForRow(row, row.AssignedLaserSceneId, true)).ConfigureAwait(false);
             }
 
-            byte[] payload = AuxiliaryPayloadBuilder.BuildLaserPayload(settings, runtimeState, true, null);
-            await SendAuxiliaryPayloadToAssignedActiveDevicesAsync(e.SceneId, payload);
-        }
-
-        private async void StrobeLiveEditor_ToggleTestRequested(object? sender, StrobeTestRequestedEventArgs e)
-        {
-            bool nextState = !strobeTestStates.TryGetValue(e.SceneId, out bool currentState) || !currentState;
-            strobeTestStates[e.SceneId] = nextState;
-            await SendAuxiliaryPayloadToAssignedActiveDevicesAsync(e.SceneId, AuxiliaryPayloadBuilder.BuildStrobePayload(nextState));
-
-            List<string> activeDeviceIds = GetActiveAssignedDeviceIds(e.SceneId);
-            if (!nextState && activeDeviceIds.Count > 0)
+            List<string> activeDeviceIds = rows.Select(row => row.Id).ToList();
+            if (activeDeviceIds.Count > 0)
             {
                 _ = RestoreStrobeAfterTestAsync(activeDeviceIds);
             }
@@ -811,36 +946,63 @@ namespace Ledqualizer
                     continue;
                 }
 
-                SceneConfig? scene = ReadUi(() => FindSceneById(row.AssignedSceneId));
-                if (scene?.Type != SceneType.StrobeLive)
+                SceneConfig? scene = ReadUi(() => FindSceneById(row.AssignedStrobeSceneId));
+                if (scene?.Type != SceneType.Strobe)
                 {
                     continue;
                 }
 
-                await SendAuxiliaryPayloadToDevicesAsync(new[] { BuildDeviceConfigFromRows(row) }, AuxiliaryPayloadBuilder.BuildStrobePayload(true)).ConfigureAwait(false);
+                DeviceConfig config = ReadUi(() => BuildDeviceConfigFromRows(row));
+                byte[] payload = ReadUi(() => BuildAuxiliaryPayloadForRow(row, row.AssignedLaserSceneId, false));
+                await SendAuxiliaryPayloadToDevicesAsync(
+                    new[] { config },
+                    payload).ConfigureAwait(false);
             }
         }
 
-        private List<string> GetActiveAssignedDeviceIds(string sceneId)
+        private List<DeviceGridRow> GetActiveAssignedDeviceRows(Func<DeviceGridRow, bool> predicate)
         {
             return ReadUi(() => GetRootDeviceRows()
                 .Where(row => row.Enabled
-                    && string.Equals(row.AssignedSceneId, sceneId, StringComparison.Ordinal)
+                    && predicate(row)
                     && deviceRuns.ContainsKey(row.Id))
-                .Select(row => row.Id)
                 .ToList());
         }
 
-        private async Task SendAuxiliaryPayloadToAssignedActiveDevicesAsync(string sceneId, byte[] payload)
+        private byte[] BuildAuxiliaryPayloadForRow(DeviceGridRow row, string? laserSceneIdOverride, bool? strobeEnabledOverride)
         {
-            List<DeviceConfig> devices = ReadUi(() => GetRootDeviceRows()
-                .Where(row => row.Enabled
-                    && string.Equals(row.AssignedSceneId, sceneId, StringComparison.Ordinal)
-                    && deviceRuns.ContainsKey(row.Id))
-                .Select(BuildDeviceConfigFromRows)
-                .ToList());
+            string laserSceneId = laserSceneIdOverride ?? row.AssignedLaserSceneId;
+            SceneConfig? laserScene = FindSceneById(laserSceneId);
+            bool hasRuntimeState = AuxiliaryRuntimeRegistry.TryGet(row.Id, out byte[] currentPayload, out bool laserActive, out bool strobeActive);
+            bool strobeEnabled = strobeEnabledOverride ?? strobeActive;
+            List<(int Channel, int Value)> currentChannels = new();
+            bool parsedCurrentPayload = hasRuntimeState
+                && AuxiliaryPayloadBuilder.TryParsePayload(currentPayload, out currentChannels, out _);
 
-            await SendAuxiliaryPayloadToDevicesAsync(devices, payload).ConfigureAwait(false);
+            if (laserScene?.Type == SceneType.LaserDmx)
+            {
+                if (!manualLaserStates.TryGetValue(laserScene.Id, out LaserDmxRuntimeState? runtimeState))
+                {
+                    runtimeState = new LaserDmxRuntimeState();
+                    manualLaserStates[laserScene.Id] = runtimeState;
+                }
+
+                return AuxiliaryPayloadBuilder.BuildLaserPayload(
+                    laserScene.LaserDmx,
+                    runtimeState,
+                    true,
+                    null,
+                    strobeEnabled);
+            }
+
+            if (laserActive && parsedCurrentPayload)
+            {
+                return AuxiliaryPayloadBuilder.BuildExplicitPayload(currentChannels, strobeEnabled);
+            }
+
+            return strobeEnabled
+                ? AuxiliaryPayloadBuilder.BuildStrobePayload(true)
+                : AuxiliaryPayloadBuilder.BuildOffPayload();
         }
 
         private async Task SendAuxiliaryPayloadToDevicesAsync(IReadOnlyList<DeviceConfig> devices, byte[] payload)
@@ -939,7 +1101,11 @@ namespace Ledqualizer
 
             string propertyName = dgvDevices.Columns[e.ColumnIndex].DataPropertyName;
             if (row.Kind == DeviceRowKind.Strip
-                && propertyName is nameof(DeviceGridRow.Name) or nameof(DeviceGridRow.Host) or nameof(DeviceGridRow.Port))
+                && propertyName is nameof(DeviceGridRow.Name)
+                    or nameof(DeviceGridRow.Host)
+                    or nameof(DeviceGridRow.Port)
+                    or nameof(DeviceGridRow.AssignedLaserSceneId)
+                    or nameof(DeviceGridRow.AssignedStrobeSceneId))
             {
                 e.Cancel = true;
             }
@@ -970,7 +1136,12 @@ namespace Ledqualizer
                 e.Value = row.LedCount.ToString();
                 e.FormattingApplied = true;
             }
-            else if (row.Kind == DeviceRowKind.Strip && propertyName is nameof(DeviceGridRow.Host) or nameof(DeviceGridRow.Port) or nameof(DeviceGridRow.StripCount))
+            else if (row.Kind == DeviceRowKind.Strip
+                && propertyName is nameof(DeviceGridRow.Host)
+                    or nameof(DeviceGridRow.Port)
+                    or nameof(DeviceGridRow.StripCount)
+                    or nameof(DeviceGridRow.AssignedLaserSceneId)
+                    or nameof(DeviceGridRow.AssignedStrobeSceneId))
             {
                 e.Value = string.Empty;
                 e.FormattingApplied = true;
@@ -1145,7 +1316,15 @@ namespace Ledqualizer
             row.Name = scene.Name;
             row.Summary = SceneSummaryBuilder.Build(scene);
 
-            sceneLookupBindingSource.ResetBindings(false);
+            RefreshSceneAssignmentOptions();
+            if (typeChanged)
+            {
+                NormalizeSceneAssignments();
+            }
+
+            ledSceneLookupBindingSource.ResetBindings(false);
+            laserSceneLookupBindingSource.ResetBindings(false);
+            strobeSceneLookupBindingSource.ResetBindings(false);
             sceneGridBindingSource.ResetBindings(false);
             dgvDevices.Refresh();
 
@@ -1157,6 +1336,39 @@ namespace Ledqualizer
             if (typeChanged)
             {
                 await ReconcileDeviceRunsAsync();
+            }
+        }
+
+        private void NormalizeSceneAssignments()
+        {
+            string fallbackLedSceneId = appConfig.Scenes
+                .FirstOrDefault(scene => SceneTypeRules.SupportsStripAssignment(scene.Type))?.Id
+                ?? string.Empty;
+
+            foreach (DeviceGridRow row in deviceRows)
+            {
+                if (!IsLedSceneAssigned(row.AssignedSceneId))
+                {
+                    row.AssignedSceneId = fallbackLedSceneId;
+                }
+
+                if (row.Kind == DeviceRowKind.Device)
+                {
+                    if (!IsLaserSceneAssigned(row.AssignedLaserSceneId))
+                    {
+                        row.AssignedLaserSceneId = string.Empty;
+                    }
+
+                    if (!IsStrobeSceneAssigned(row.AssignedStrobeSceneId))
+                    {
+                        row.AssignedStrobeSceneId = string.Empty;
+                    }
+                }
+                else
+                {
+                    row.AssignedLaserSceneId = string.Empty;
+                    row.AssignedStrobeSceneId = string.Empty;
+                }
             }
         }
 
@@ -1266,7 +1478,8 @@ namespace Ledqualizer
 
         private async void btnAddDevice_Click(object? sender, EventArgs e)
         {
-            string defaultSceneId = appConfig.Scenes.FirstOrDefault()?.Id ?? string.Empty;
+            string defaultSceneId = appConfig.Scenes.FirstOrDefault(scene => SceneTypeRules.SupportsStripAssignment(scene.Type))?.Id
+                ?? string.Empty;
             DeviceConfig device = new()
             {
                 Id = Guid.NewGuid().ToString("N"),
@@ -1276,7 +1489,9 @@ namespace Ledqualizer
                 Port = 81,
                 LedCount = 0,
                 StripCount = 0,
-                AssignedSceneId = defaultSceneId
+                AssignedSceneId = defaultSceneId,
+                AssignedLaserSceneId = string.Empty,
+                AssignedStrobeSceneId = string.Empty
             };
 
             foreach (DeviceGridRow row in BuildDeviceRows(device))
@@ -1354,7 +1569,7 @@ namespace Ledqualizer
             appConfig.Scenes.Add(scene);
             SceneGridRow row = SceneGridRow.FromSceneConfig(scene);
             sceneRows.Add(row);
-            sceneLookupBindingSource.ResetBindings(false);
+            RefreshSceneAssignmentOptions();
             sceneGridBindingSource.ResetBindings(false);
             dgvScenes.ClearSelection();
             int rowIndex = sceneRows.Count - 1;
@@ -1377,7 +1592,7 @@ namespace Ledqualizer
             clone.Name = $"{selectedScene.Name} Copy";
             appConfig.Scenes.Add(clone);
             sceneRows.Add(SceneGridRow.FromSceneConfig(clone));
-            sceneLookupBindingSource.ResetBindings(false);
+            RefreshSceneAssignmentOptions();
             sceneGridBindingSource.ResetBindings(false);
         }
 
@@ -1389,7 +1604,10 @@ namespace Ledqualizer
                 return;
             }
 
-            bool isAssigned = deviceRows.Any(device => string.Equals(device.AssignedSceneId, selectedScene.Id, StringComparison.Ordinal));
+            bool isAssigned = deviceRows.Any(device =>
+                string.Equals(device.AssignedSceneId, selectedScene.Id, StringComparison.Ordinal)
+                || string.Equals(device.AssignedLaserSceneId, selectedScene.Id, StringComparison.Ordinal)
+                || string.Equals(device.AssignedStrobeSceneId, selectedScene.Id, StringComparison.Ordinal));
             if (isAssigned)
             {
                 MessageBox.Show(this, "This scene is still assigned to one or more devices.", "Scene In Use", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1403,7 +1621,7 @@ namespace Ledqualizer
                 sceneRows.Remove(row);
             }
 
-            sceneLookupBindingSource.ResetBindings(false);
+            RefreshSceneAssignmentOptions();
             sceneGridBindingSource.ResetBindings(false);
             ShowSelectedSceneEditor();
         }
