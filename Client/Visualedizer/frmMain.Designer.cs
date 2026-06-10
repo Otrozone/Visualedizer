@@ -3,6 +3,7 @@ namespace Ledqualizer
     partial class FrmMain
     {
         private System.ComponentModel.IContainer components = null;
+        private SplitContainer splitContainerWorkspace;
         private SplitContainer splitContainerRoot;
         private Label lblDelay;
         private NumericUpDown numDelay;
@@ -33,6 +34,20 @@ namespace Ledqualizer
         private DataGridViewTextBoxColumn colSceneSummary;
         private Panel panelSceneEditorHost;
         private Label lblEditorTitle;
+        private Label lblCollections;
+        private Button btnAddCollection;
+        private Button btnRemoveCollection;
+        private Button btnAssignCollectionShortcut;
+        private Button btnClearCollectionShortcut;
+        private Button btnSetResetShortcut;
+        private Button btnStopCollection;
+        private Label lblResetShortcut;
+        private DataGridView dgvCollections;
+        private DataGridViewTextBoxColumn colCollectionName;
+        private DataGridViewComboBoxColumn colCollectionMode;
+        private DataGridViewTextBoxColumn colCollectionShortcut;
+        private DataGridViewTextBoxColumn colCollectionTargets;
+        private DataGridViewTextBoxColumn colCollectionStatus;
         private StatusStrip statusStrip;
         private ToolStripStatusLabel statLblConnection;
         private ToolStripStatusLabel statLblRate;
@@ -49,6 +64,7 @@ namespace Ledqualizer
 
         private void InitializeComponent()
         {
+            splitContainerWorkspace = new SplitContainer();
             splitContainerRoot = new SplitContainer();
             dgvDevices = new DataGridView();
             colEnabled = new DataGridViewCheckBoxColumn();
@@ -79,9 +95,27 @@ namespace Ledqualizer
             lblScenes = new Label();
             panelSceneEditorHost = new Panel();
             lblEditorTitle = new Label();
+            lblCollections = new Label();
+            btnAddCollection = new Button();
+            btnRemoveCollection = new Button();
+            btnAssignCollectionShortcut = new Button();
+            btnClearCollectionShortcut = new Button();
+            btnSetResetShortcut = new Button();
+            btnStopCollection = new Button();
+            lblResetShortcut = new Label();
+            dgvCollections = new DataGridView();
+            colCollectionName = new DataGridViewTextBoxColumn();
+            colCollectionMode = new DataGridViewComboBoxColumn();
+            colCollectionShortcut = new DataGridViewTextBoxColumn();
+            colCollectionTargets = new DataGridViewTextBoxColumn();
+            colCollectionStatus = new DataGridViewTextBoxColumn();
             statusStrip = new StatusStrip();
             statLblConnection = new ToolStripStatusLabel();
             statLblRate = new ToolStripStatusLabel();
+            ((System.ComponentModel.ISupportInitialize)splitContainerWorkspace).BeginInit();
+            splitContainerWorkspace.Panel1.SuspendLayout();
+            splitContainerWorkspace.Panel2.SuspendLayout();
+            splitContainerWorkspace.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)splitContainerRoot).BeginInit();
             splitContainerRoot.Panel1.SuspendLayout();
             splitContainerRoot.Panel2.SuspendLayout();
@@ -93,8 +127,39 @@ namespace Ledqualizer
             splitContainerMain.Panel2.SuspendLayout();
             splitContainerMain.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgvScenes).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)dgvCollections).BeginInit();
             statusStrip.SuspendLayout();
             SuspendLayout();
+            // 
+            // splitContainerWorkspace
+            // 
+            splitContainerWorkspace.BackColor = SystemColors.ControlDark;
+            splitContainerWorkspace.Dock = DockStyle.Fill;
+            splitContainerWorkspace.Location = new Point(0, 0);
+            splitContainerWorkspace.Name = "splitContainerWorkspace";
+            splitContainerWorkspace.Orientation = Orientation.Horizontal;
+            // 
+            // splitContainerWorkspace.Panel1
+            // 
+            splitContainerWorkspace.Panel1.BackColor = SystemColors.Control;
+            splitContainerWorkspace.Panel1.Controls.Add(splitContainerRoot);
+            // 
+            // splitContainerWorkspace.Panel2
+            // 
+            splitContainerWorkspace.Panel2.BackColor = SystemColors.Control;
+            splitContainerWorkspace.Panel2.Controls.Add(dgvCollections);
+            splitContainerWorkspace.Panel2.Controls.Add(lblResetShortcut);
+            splitContainerWorkspace.Panel2.Controls.Add(btnStopCollection);
+            splitContainerWorkspace.Panel2.Controls.Add(btnSetResetShortcut);
+            splitContainerWorkspace.Panel2.Controls.Add(btnClearCollectionShortcut);
+            splitContainerWorkspace.Panel2.Controls.Add(btnAssignCollectionShortcut);
+            splitContainerWorkspace.Panel2.Controls.Add(btnRemoveCollection);
+            splitContainerWorkspace.Panel2.Controls.Add(btnAddCollection);
+            splitContainerWorkspace.Panel2.Controls.Add(lblCollections);
+            splitContainerWorkspace.Size = new Size(1103, 711);
+            splitContainerWorkspace.SplitterDistance = 535;
+            splitContainerWorkspace.SplitterWidth = 3;
+            splitContainerWorkspace.TabIndex = 0;
             // 
             // splitContainerRoot
             // 
@@ -121,7 +186,7 @@ namespace Ledqualizer
             // 
             splitContainerRoot.Panel2.BackColor = SystemColors.Control;
             splitContainerRoot.Panel2.Controls.Add(splitContainerMain);
-            splitContainerRoot.Size = new Size(1103, 711);
+            splitContainerRoot.Size = new Size(1103, 535);
             splitContainerRoot.SplitterDistance = 218;
             splitContainerRoot.SplitterWidth = 3;
             splitContainerRoot.TabIndex = 0;
@@ -307,7 +372,7 @@ namespace Ledqualizer
             splitContainerMain.Panel2.BackColor = SystemColors.Control;
             splitContainerMain.Panel2.Controls.Add(panelSceneEditorHost);
             splitContainerMain.Panel2.Controls.Add(lblEditorTitle);
-            splitContainerMain.Size = new Size(1103, 490);
+            splitContainerMain.Size = new Size(1103, 314);
             splitContainerMain.SplitterDistance = 392;
             splitContainerMain.SplitterWidth = 3;
             splitContainerMain.TabIndex = 1;
@@ -322,7 +387,7 @@ namespace Ledqualizer
             dgvScenes.Location = new Point(12, 65);
             dgvScenes.Name = "dgvScenes";
             dgvScenes.RowHeadersVisible = false;
-            dgvScenes.Size = new Size(367, 413);
+            dgvScenes.Size = new Size(367, 237);
             dgvScenes.TabIndex = 4;
             // 
             // colSceneName
@@ -394,7 +459,7 @@ namespace Ledqualizer
             panelSceneEditorHost.BorderStyle = BorderStyle.FixedSingle;
             panelSceneEditorHost.Location = new Point(13, 36);
             panelSceneEditorHost.Name = "panelSceneEditorHost";
-            panelSceneEditorHost.Size = new Size(689, 442);
+            panelSceneEditorHost.Size = new Size(689, 266);
             panelSceneEditorHost.TabIndex = 1;
             // 
             // lblEditorTitle
@@ -405,6 +470,140 @@ namespace Ledqualizer
             lblEditorTitle.Size = new Size(83, 15);
             lblEditorTitle.TabIndex = 0;
             lblEditorTitle.Text = "Scene Settings";
+            // 
+            // lblCollections
+            // 
+            lblCollections.AutoSize = true;
+            lblCollections.Location = new Point(12, 10);
+            lblCollections.Name = "lblCollections";
+            lblCollections.Size = new Size(67, 15);
+            lblCollections.TabIndex = 0;
+            lblCollections.Text = "Collections";
+            // 
+            // btnAddCollection
+            // 
+            btnAddCollection.Location = new Point(12, 34);
+            btnAddCollection.Name = "btnAddCollection";
+            btnAddCollection.Size = new Size(102, 23);
+            btnAddCollection.TabIndex = 1;
+            btnAddCollection.Text = "Add snapshot";
+            btnAddCollection.UseVisualStyleBackColor = true;
+            btnAddCollection.Click += btnAddCollection_Click;
+            // 
+            // btnRemoveCollection
+            // 
+            btnRemoveCollection.Location = new Point(120, 34);
+            btnRemoveCollection.Name = "btnRemoveCollection";
+            btnRemoveCollection.Size = new Size(82, 23);
+            btnRemoveCollection.TabIndex = 2;
+            btnRemoveCollection.Text = "Remove";
+            btnRemoveCollection.UseVisualStyleBackColor = true;
+            btnRemoveCollection.Click += btnRemoveCollection_Click;
+            // 
+            // btnAssignCollectionShortcut
+            // 
+            btnAssignCollectionShortcut.Location = new Point(208, 34);
+            btnAssignCollectionShortcut.Name = "btnAssignCollectionShortcut";
+            btnAssignCollectionShortcut.Size = new Size(103, 23);
+            btnAssignCollectionShortcut.TabIndex = 3;
+            btnAssignCollectionShortcut.Text = "Set shortcut";
+            btnAssignCollectionShortcut.UseVisualStyleBackColor = true;
+            btnAssignCollectionShortcut.Click += btnAssignCollectionShortcut_Click;
+            // 
+            // btnClearCollectionShortcut
+            // 
+            btnClearCollectionShortcut.Location = new Point(317, 34);
+            btnClearCollectionShortcut.Name = "btnClearCollectionShortcut";
+            btnClearCollectionShortcut.Size = new Size(103, 23);
+            btnClearCollectionShortcut.TabIndex = 4;
+            btnClearCollectionShortcut.Text = "Clear shortcut";
+            btnClearCollectionShortcut.UseVisualStyleBackColor = true;
+            btnClearCollectionShortcut.Click += btnClearCollectionShortcut_Click;
+            // 
+            // btnSetResetShortcut
+            // 
+            btnSetResetShortcut.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnSetResetShortcut.Location = new Point(832, 34);
+            btnSetResetShortcut.Name = "btnSetResetShortcut";
+            btnSetResetShortcut.Size = new Size(111, 23);
+            btnSetResetShortcut.TabIndex = 5;
+            btnSetResetShortcut.Text = "Set reset key";
+            btnSetResetShortcut.UseVisualStyleBackColor = true;
+            btnSetResetShortcut.Click += btnSetResetShortcut_Click;
+            // 
+            // btnStopCollection
+            // 
+            btnStopCollection.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnStopCollection.Location = new Point(949, 34);
+            btnStopCollection.Name = "btnStopCollection";
+            btnStopCollection.Size = new Size(142, 23);
+            btnStopCollection.TabIndex = 6;
+            btnStopCollection.Text = "Stop collection";
+            btnStopCollection.UseVisualStyleBackColor = true;
+            btnStopCollection.Click += btnStopCollection_Click;
+            // 
+            // lblResetShortcut
+            // 
+            lblResetShortcut.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            lblResetShortcut.AutoSize = true;
+            lblResetShortcut.Location = new Point(832, 11);
+            lblResetShortcut.Name = "lblResetShortcut";
+            lblResetShortcut.Size = new Size(114, 15);
+            lblResetShortcut.TabIndex = 7;
+            lblResetShortcut.Text = "Reset shortcut: none";
+            // 
+            // dgvCollections
+            // 
+            dgvCollections.AllowUserToAddRows = false;
+            dgvCollections.AllowUserToDeleteRows = false;
+            dgvCollections.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            dgvCollections.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dgvCollections.Columns.AddRange(new DataGridViewColumn[] { colCollectionName, colCollectionMode, colCollectionShortcut, colCollectionTargets, colCollectionStatus });
+            dgvCollections.Location = new Point(12, 63);
+            dgvCollections.Name = "dgvCollections";
+            dgvCollections.RowHeadersVisible = false;
+            dgvCollections.Size = new Size(1079, 97);
+            dgvCollections.TabIndex = 8;
+            // 
+            // colCollectionName
+            // 
+            colCollectionName.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            colCollectionName.DataPropertyName = "Name";
+            colCollectionName.FillWeight = 24F;
+            colCollectionName.HeaderText = "Name";
+            colCollectionName.Name = "colCollectionName";
+            // 
+            // colCollectionMode
+            // 
+            colCollectionMode.DataPropertyName = "ActivationMode";
+            colCollectionMode.HeaderText = "Mode";
+            colCollectionMode.Name = "colCollectionMode";
+            colCollectionMode.Width = 90;
+            // 
+            // colCollectionShortcut
+            // 
+            colCollectionShortcut.DataPropertyName = "ShortcutText";
+            colCollectionShortcut.HeaderText = "Shortcut";
+            colCollectionShortcut.Name = "colCollectionShortcut";
+            colCollectionShortcut.ReadOnly = true;
+            colCollectionShortcut.Width = 150;
+            // 
+            // colCollectionTargets
+            // 
+            colCollectionTargets.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            colCollectionTargets.DataPropertyName = "TargetSummary";
+            colCollectionTargets.FillWeight = 38F;
+            colCollectionTargets.HeaderText = "Targets";
+            colCollectionTargets.Name = "colCollectionTargets";
+            colCollectionTargets.ReadOnly = true;
+            // 
+            // colCollectionStatus
+            // 
+            colCollectionStatus.DataPropertyName = "StatusText";
+            colCollectionStatus.HeaderText = "Status";
+            colCollectionStatus.Name = "colCollectionStatus";
+            colCollectionStatus.ReadOnly = true;
+            colCollectionStatus.Width = 90;
             // 
             // statusStrip
             // 
@@ -432,12 +631,17 @@ namespace Ledqualizer
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1103, 733);
-            Controls.Add(splitContainerRoot);
+            Controls.Add(splitContainerWorkspace);
             Controls.Add(statusStrip);
             Name = "FrmMain";
             Text = "Visualedizer";
             FormClosing += FrmMain_FormClosing;
             Load += frmMain_Load;
+            splitContainerWorkspace.Panel1.ResumeLayout(false);
+            splitContainerWorkspace.Panel2.ResumeLayout(false);
+            splitContainerWorkspace.Panel2.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)splitContainerWorkspace).EndInit();
+            splitContainerWorkspace.ResumeLayout(false);
             splitContainerRoot.Panel1.ResumeLayout(false);
             splitContainerRoot.Panel1.PerformLayout();
             splitContainerRoot.Panel2.ResumeLayout(false);
@@ -452,6 +656,7 @@ namespace Ledqualizer
             ((System.ComponentModel.ISupportInitialize)splitContainerMain).EndInit();
             splitContainerMain.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dgvScenes).EndInit();
+            ((System.ComponentModel.ISupportInitialize)dgvCollections).EndInit();
             statusStrip.ResumeLayout(false);
             statusStrip.PerformLayout();
             ResumeLayout(false);

@@ -1,28 +1,23 @@
-using IniParser;
-using IniParser.Model;
-using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Ledqualizer
 {
     internal sealed class AppConfig
     {
-        private enum LegacySceneKind
+        private const int CurrentConfigVersion = 2;
+        private const string JsonFileName = "config.json";
+        private static readonly JsonSerializerOptions JsonOptions = new()
         {
-            Basic,
-            Volume,
-            SpectralAnalysis,
-            ScreenCapture,
-            OtherDevices
-        }
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() }
+        };
 
-        private const string IniFileName = "config.ini";
-        private const string IniSectionSettings = "Settings";
-        private const string IniSectionScreenCaptureOther = "ScreenCaptureOther";
-        private const string IniSectionDevicePrefix = "Device:";
-        private const string IniSectionScenePrefix = "Scene:";
-
+        public int ConfigVersion { get; set; } = CurrentConfigVersion;
         public List<DeviceConfig> Devices { get; set; } = new();
         public List<SceneConfig> Scenes { get; set; } = new();
+        public List<ConfigurationCollection> Collections { get; set; } = new();
+        public KeyboardShortcutConfig ResetShortcut { get; set; } = new();
 
         public int Delay { get; set; } = 20;
 
@@ -35,476 +30,66 @@ namespace Ledqualizer
         public int LaserColorY { get; set; }
         public int LaserColorX { get; set; }
 
-        public void LoadFromIni()
+        public void Load()
         {
             Devices.Clear();
             Scenes.Clear();
+            Collections.Clear();
+            ResetShortcut = new KeyboardShortcutConfig();
 
-            if (!File.Exists(IniFileName))
+            if (File.Exists(JsonFileName))
             {
-                EnsureDefaults();
-                return;
-            }
-
-            var parser = new FileIniDataParser();
-            IniData data = parser.ReadFile(IniFileName);
-
-            Delay = ParseInt(GetValue(data, IniSectionSettings, "delay"), Delay);
-
-            StrobeTriggerX = ParseInt(GetValue(data, IniSectionScreenCaptureOther, "strobeTriggerX"), StrobeTriggerX);
-            StrobeTriggerY = ParseInt(GetValue(data, IniSectionScreenCaptureOther, "strobeTriggerY"), StrobeTriggerY);
-            LaserTriggerX = ParseInt(GetValue(data, IniSectionScreenCaptureOther, "laserTriggerX"), LaserTriggerX);
-            LaserTriggerY = ParseInt(GetValue(data, IniSectionScreenCaptureOther, "laserTriggerY"), LaserTriggerY);
-            LaserPatternX = ParseInt(GetValue(data, IniSectionScreenCaptureOther, "laserPatternX"), LaserPatternX);
-            LaserPatternY = ParseInt(GetValue(data, IniSectionScreenCaptureOther, "laserPatternY"), LaserPatternY);
-            LaserColorX = ParseInt(GetValue(data, IniSectionScreenCaptureOther, "laserColorX"), LaserColorX);
-            LaserColorY = ParseInt(GetValue(data, IniSectionScreenCaptureOther, "laserColorY"), LaserColorY);
-
-            List<SectionData> deviceSections = data.Sections
-                .Where(section => section.SectionName.StartsWith(IniSectionDevicePrefix, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            foreach (SectionData section in data.Sections)
-            {
-                if (!section.SectionName.StartsWith(IniSectionScenePrefix, StringComparison.OrdinalIgnoreCase))
+                string json = File.ReadAllText(JsonFileName);
+                AppConfig? loaded = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions);
+                if (loaded != null)
                 {
-                    continue;
-                }
-
-                SceneConfig? scene = LoadScene(section);
-                if (scene != null)
-                {
-                    Scenes.Add(scene);
-                }
-            }
-
-            var legacySceneMap = new Dictionary<LegacySceneKind, string>();
-            foreach (SectionData section in deviceSections)
-            {
-                DeviceConfig? device = LoadDevice(section, legacySceneMap, data);
-                if (device != null)
-                {
-                    Devices.Add(device);
-                }
-            }
-
-            if (Devices.Count == 0)
-            {
-                DeviceConfig? migrated = TryMigrateLegacySingleDevice(data, legacySceneMap);
-                if (migrated != null)
-                {
-                    Devices.Add(migrated);
-                }
-            }
-
-            EnsureDefaults();
-        }
-
-        public void SaveToIni()
-        {
-            EnsureDefaults();
-
-            var parser = new FileIniDataParser();
-            IniData data = new();
-
-            data[IniSectionSettings]["delay"] = Delay.ToString(CultureInfo.InvariantCulture);
-
-            data[IniSectionScreenCaptureOther]["strobeTriggerX"] = StrobeTriggerX.ToString(CultureInfo.InvariantCulture);
-            data[IniSectionScreenCaptureOther]["strobeTriggerY"] = StrobeTriggerY.ToString(CultureInfo.InvariantCulture);
-            data[IniSectionScreenCaptureOther]["laserTriggerX"] = LaserTriggerX.ToString(CultureInfo.InvariantCulture);
-            data[IniSectionScreenCaptureOther]["laserTriggerY"] = LaserTriggerY.ToString(CultureInfo.InvariantCulture);
-            data[IniSectionScreenCaptureOther]["laserPatternX"] = LaserPatternX.ToString(CultureInfo.InvariantCulture);
-            data[IniSectionScreenCaptureOther]["laserPatternY"] = LaserPatternY.ToString(CultureInfo.InvariantCulture);
-            data[IniSectionScreenCaptureOther]["laserColorX"] = LaserColorX.ToString(CultureInfo.InvariantCulture);
-            data[IniSectionScreenCaptureOther]["laserColorY"] = LaserColorY.ToString(CultureInfo.InvariantCulture);
-
-            for (int i = 0; i < Scenes.Count; i++)
-            {
-                SceneConfig scene = Scenes[i];
-                string sectionName = $"{IniSectionScenePrefix}{i}";
-                SaveSceneSection(data[sectionName], scene);
-            }
-
-            for (int i = 0; i < Devices.Count; i++)
-            {
-                DeviceConfig device = Devices[i];
-                string sectionName = $"{IniSectionDevicePrefix}{i}";
-                data[sectionName]["id"] = device.Id;
-                data[sectionName]["name"] = device.Name;
-                data[sectionName]["host"] = device.Host;
-                data[sectionName]["port"] = device.Port.ToString(CultureInfo.InvariantCulture);
-                data[sectionName]["ledCount"] = device.LedCount.ToString(CultureInfo.InvariantCulture);
-                data[sectionName]["stripCount"] = device.StripCount.ToString(CultureInfo.InvariantCulture);
-                data[sectionName]["enabled"] = device.Enabled.ToString(CultureInfo.InvariantCulture);
-                data[sectionName]["assignedSceneId"] = device.AssignedSceneId;
-                data[sectionName]["assignedLaserSceneId"] = device.AssignedLaserSceneId;
-                data[sectionName]["assignedStrobeSceneId"] = device.AssignedStrobeSceneId;
-                foreach (DeviceStripConfig strip in device.Strips.OrderBy(strip => strip.StripIndex))
-                {
-                    string keyPrefix = $"strip.{strip.StripIndex}.";
-                    data[sectionName][$"{keyPrefix}enabled"] = strip.Enabled.ToString(CultureInfo.InvariantCulture);
-                    data[sectionName][$"{keyPrefix}ledCount"] = strip.LedCount.ToString(CultureInfo.InvariantCulture);
-                    data[sectionName][$"{keyPrefix}assignedSceneId"] = strip.AssignedSceneId;
-                }
-            }
-
-            parser.WriteFile(IniFileName, data);
-        }
-
-        private void SaveSceneSection(KeyDataCollection section, SceneConfig scene)
-        {
-            section["id"] = scene.Id;
-            section["name"] = scene.Name;
-            section["type"] = scene.Type.ToString();
-
-            section["solidHue"] = scene.SolidColor.Hue.ToString(CultureInfo.InvariantCulture);
-            section["solidMinHue"] = scene.SolidColor.MinHue.ToString(CultureInfo.InvariantCulture);
-            section["solidMaxHue"] = scene.SolidColor.MaxHue.ToString(CultureInfo.InvariantCulture);
-            section["solidSaturation"] = scene.SolidColor.Saturation.ToString(CultureInfo.InvariantCulture);
-            section["solidBrightness"] = scene.SolidColor.Brightness.ToString(CultureInfo.InvariantCulture);
-
-            section["gradientHueMin"] = scene.Gradient.HueMin.ToString(CultureInfo.InvariantCulture);
-            section["gradientHueMax"] = scene.Gradient.HueMax.ToString(CultureInfo.InvariantCulture);
-            section["gradientSaturation"] = scene.Gradient.Saturation.ToString(CultureInfo.InvariantCulture);
-            section["gradientBrightness"] = scene.Gradient.Brightness.ToString(CultureInfo.InvariantCulture);
-
-            SaveAudioReactiveSection(section, scene.VolumeReactive, "volume");
-            SaveAudioReactiveSection(section, scene.SpectralAnalysis, "spectral");
-
-            section["spectralFrequencyLow"] = scene.SpectralAnalysis.FrequencyLowHz.ToString(CultureInfo.InvariantCulture);
-            section["spectralFrequencyHigh"] = scene.SpectralAnalysis.FrequencyHighHz.ToString(CultureInfo.InvariantCulture);
-            section["spectralLevelLowDb"] = scene.SpectralAnalysis.LevelLowDb.ToString(CultureInfo.InvariantCulture);
-            section["spectralLevelHighDb"] = scene.SpectralAnalysis.LevelHighDb.ToString(CultureInfo.InvariantCulture);
-
-            section["screenCaptureRow"] = scene.ScreenRowCapture.CaptureY.ToString(CultureInfo.InvariantCulture);
-            section["screenCaptureMonitorIndex"] = scene.ScreenRowCapture.MonitorIndex.ToString(CultureInfo.InvariantCulture);
-            section["screenCaptureReverse"] = scene.ScreenRowCapture.Reverse.ToString(CultureInfo.InvariantCulture);
-
-            section["imageCaptureSourceMode"] = scene.ImageRowCapture.SourceMode.ToString();
-            section["imageCaptureImagePath"] = scene.ImageRowCapture.ImagePath;
-            section["imageCaptureFolderPath"] = scene.ImageRowCapture.FolderPath;
-            section["imageCaptureRecursive"] = scene.ImageRowCapture.Recursive.ToString(CultureInfo.InvariantCulture);
-            section["imageCaptureLoop"] = scene.ImageRowCapture.Loop.ToString(CultureInfo.InvariantCulture);
-            section["imageCaptureDirection"] = scene.ImageRowCapture.Direction.ToString();
-            section["imageCaptureSpeedMin"] = scene.ImageRowCapture.SpeedMin.ToString(CultureInfo.InvariantCulture);
-            section["imageCaptureSpeedMax"] = scene.ImageRowCapture.SpeedMax.ToString(CultureInfo.InvariantCulture);
-
-            SaveAuxiliaryTriggerSection(section, scene.LaserDmx.Trigger, "laser");
-            section["laserChannelCount"] = scene.LaserDmx.Channels.Count.ToString(CultureInfo.InvariantCulture);
-            for (int i = 0; i < scene.LaserDmx.Channels.Count; i++)
-            {
-                LaserDmxChannelRow channel = scene.LaserDmx.Channels[i];
-                string prefix = $"laserChannel{i}.";
-                section[$"{prefix}channel"] = channel.Channel.ToString(CultureInfo.InvariantCulture);
-                section[$"{prefix}mode"] = channel.Mode.ToString();
-                section[$"{prefix}constant"] = channel.ConstantValue.ToString(CultureInfo.InvariantCulture);
-                section[$"{prefix}rangeMin"] = channel.RangeMin.ToString(CultureInfo.InvariantCulture);
-                section[$"{prefix}rangeMax"] = channel.RangeMax.ToString(CultureInfo.InvariantCulture);
-                section[$"{prefix}values"] = string.Join(",", channel.Values.Select(value => value.ToString(CultureInfo.InvariantCulture)));
-                section[$"{prefix}refreshEnabled"] = channel.RefreshEnabled.ToString(CultureInfo.InvariantCulture);
-                section[$"{prefix}refreshSeconds"] = channel.RefreshIntervalSeconds.ToString(CultureInfo.InvariantCulture);
-            }
-
-            SaveAuxiliaryTriggerSection(section, scene.Strobe.Trigger, "strobe");
-        }
-
-        private static void SaveAuxiliaryTriggerSection(KeyDataCollection section, AuxiliaryTriggerConfig config, string prefix)
-        {
-            section[$"{prefix}TriggerEventType"] = config.EventType.ToString();
-            section[$"{prefix}TriggerRetriggerMode"] = config.RetriggerMode.ToString();
-            section[$"{prefix}TriggerOnDurationMs"] = Math.Max(1, config.OnDurationMs).ToString(CultureInfo.InvariantCulture);
-
-            section[$"{prefix}TriggerVolumeAudioDeviceId"] = config.Volume.AudioDeviceId ?? string.Empty;
-            section[$"{prefix}TriggerVolumeThresholdPercent"] = Math.Clamp(config.Volume.ThresholdPercent, 0, 100).ToString(CultureInfo.InvariantCulture);
-
-            section[$"{prefix}TriggerSpectralAudioDeviceId"] = config.SpectralAnalysis.AudioDeviceId ?? string.Empty;
-            section[$"{prefix}TriggerSpectralFrequencyLow"] = config.SpectralAnalysis.FrequencyLowHz.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}TriggerSpectralFrequencyHigh"] = config.SpectralAnalysis.FrequencyHighHz.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}TriggerSpectralThresholdDb"] = config.SpectralAnalysis.ThresholdDb.ToString(CultureInfo.InvariantCulture);
-
-            section[$"{prefix}TriggerScreenMonitorIndex"] = config.ScreenCapture.MonitorIndex.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}TriggerScreenX"] = config.ScreenCapture.X.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}TriggerScreenY"] = config.ScreenCapture.Y.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}TriggerScreenWidth"] = Math.Max(1, config.ScreenCapture.Width).ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}TriggerScreenHeight"] = Math.Max(1, config.ScreenCapture.Height).ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}TriggerScreenBrightnessThresholdPercent"] = Math.Clamp(config.ScreenCapture.BrightnessThresholdPercent, 0, 100).ToString(CultureInfo.InvariantCulture);
-        }
-
-        private static void SaveAudioReactiveSection(KeyDataCollection section, AudioReactiveSceneConfig config, string prefix)
-        {
-            section[$"{prefix}Mode"] = config.Mode.ToString();
-            section[$"{prefix}Brightness"] = config.Brightness.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}Saturation"] = config.Saturation.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}Normalization"] = config.Normalization.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}Reverse"] = config.Reverse.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}HueReverse"] = config.HueReverse.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}White"] = config.White.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}BackgroundWhite"] = config.BackgroundWhite.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}BackgroundBrightness"] = config.BackgroundBrightness.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}BackgroundSaturation"] = config.BackgroundSaturation.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}BackgroundHue"] = config.BackgroundHue.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}HueMin"] = config.HueMin.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}HueMax"] = config.HueMax.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}RotateModes"] = config.RotateModes.ToString(CultureInfo.InvariantCulture);
-            section[$"{prefix}RotateIntervalSeconds"] = config.RotateIntervalSeconds.ToString(CultureInfo.InvariantCulture);
-        }
-
-        private SceneConfig? LoadScene(SectionData section)
-        {
-            string name = section.Keys["name"];
-            string typeValue = section.Keys["type"];
-
-            if (string.IsNullOrWhiteSpace(name) || !TryParseSceneType(typeValue, out SceneType sceneType))
-            {
-                return null;
-            }
-
-            SceneConfig scene = new()
-            {
-                Id = string.IsNullOrWhiteSpace(section.Keys["id"]) ? Guid.NewGuid().ToString("N") : section.Keys["id"],
-                Name = name,
-                Type = sceneType
-            };
-
-            scene.SolidColor.Hue = ParseDouble(section.Keys["solidHue"], scene.SolidColor.Hue);
-            scene.SolidColor.MinHue = ParseDouble(section.Keys["solidMinHue"], scene.SolidColor.MinHue);
-            scene.SolidColor.MaxHue = ParseDouble(section.Keys["solidMaxHue"], scene.SolidColor.MaxHue);
-            scene.SolidColor.Saturation = ParseInt(section.Keys["solidSaturation"], scene.SolidColor.Saturation);
-            scene.SolidColor.Brightness = ParseInt(section.Keys["solidBrightness"], scene.SolidColor.Brightness);
-
-            scene.Gradient.HueMin = ParseDouble(section.Keys["gradientHueMin"], scene.Gradient.HueMin);
-            scene.Gradient.HueMax = ParseDouble(section.Keys["gradientHueMax"], scene.Gradient.HueMax);
-            scene.Gradient.Saturation = ParseInt(section.Keys["gradientSaturation"], scene.Gradient.Saturation);
-            scene.Gradient.Brightness = ParseInt(section.Keys["gradientBrightness"], scene.Gradient.Brightness);
-
-            LoadAudioReactiveSection(section, scene.VolumeReactive, "volume");
-            LoadAudioReactiveSection(section, scene.SpectralAnalysis, "spectral");
-
-            scene.SpectralAnalysis.FrequencyLowHz = ParseDouble(section.Keys["spectralFrequencyLow"], scene.SpectralAnalysis.FrequencyLowHz);
-            scene.SpectralAnalysis.FrequencyHighHz = ParseDouble(section.Keys["spectralFrequencyHigh"], scene.SpectralAnalysis.FrequencyHighHz);
-            scene.SpectralAnalysis.LevelLowDb = ParseDouble(section.Keys["spectralLevelLowDb"], scene.SpectralAnalysis.LevelLowDb);
-            scene.SpectralAnalysis.LevelHighDb = ParseDouble(section.Keys["spectralLevelHighDb"], scene.SpectralAnalysis.LevelHighDb);
-
-            scene.ScreenRowCapture.CaptureY = ParseInt(section.Keys["screenCaptureRow"], scene.ScreenRowCapture.CaptureY);
-            scene.ScreenRowCapture.MonitorIndex = ParseInt(section.Keys["screenCaptureMonitorIndex"], scene.ScreenRowCapture.MonitorIndex);
-            scene.ScreenRowCapture.Reverse = ParseBool(section.Keys["screenCaptureReverse"], scene.ScreenRowCapture.Reverse);
-
-            scene.ImageRowCapture.SourceMode = ParseImageSourceMode(section.Keys["imageCaptureSourceMode"], scene.ImageRowCapture.SourceMode);
-            scene.ImageRowCapture.ImagePath = section.Keys["imageCaptureImagePath"] ?? scene.ImageRowCapture.ImagePath;
-            scene.ImageRowCapture.FolderPath = section.Keys["imageCaptureFolderPath"] ?? scene.ImageRowCapture.FolderPath;
-            scene.ImageRowCapture.Recursive = ParseBool(section.Keys["imageCaptureRecursive"], scene.ImageRowCapture.Recursive);
-            scene.ImageRowCapture.Loop = ParseBool(section.Keys["imageCaptureLoop"], scene.ImageRowCapture.Loop);
-            scene.ImageRowCapture.Direction = ParseImageScanDirection(section.Keys["imageCaptureDirection"], scene.ImageRowCapture.Direction);
-            scene.ImageRowCapture.SpeedMin = Math.Max(0.01, ParseDouble(section.Keys["imageCaptureSpeedMin"], scene.ImageRowCapture.SpeedMin));
-            scene.ImageRowCapture.SpeedMax = Math.Max(scene.ImageRowCapture.SpeedMin, ParseDouble(section.Keys["imageCaptureSpeedMax"], scene.ImageRowCapture.SpeedMax));
-
-            LoadAuxiliaryTriggerSection(section, scene.LaserDmx.Trigger, "laser");
-            scene.LaserDmx.Channels.Clear();
-            int laserChannelCount = ParseInt(
-                FirstNonEmpty(section.Keys["laserChannelCount"], section.Keys["laserLiveChannelCount"]),
-                0);
-            for (int i = 0; i < laserChannelCount; i++)
-            {
-                string prefix = section.Keys[$"laserChannel{i}.channel"] != null
-                    ? $"laserChannel{i}."
-                    : $"laserLiveChannel{i}.";
-                var channel = new LaserDmxChannelRow
-                {
-                    Channel = Math.Clamp(ParseInt(section.Keys[$"{prefix}channel"], 1), 1, 512),
-                    Mode = ParseLaserDmxValueMode(section.Keys[$"{prefix}mode"], LaserDmxValueMode.Constant),
-                    ConstantValue = ClampByte(ParseInt(section.Keys[$"{prefix}constant"], 0)),
-                    RangeMin = ClampByte(ParseInt(section.Keys[$"{prefix}rangeMin"], 0)),
-                    RangeMax = ClampByte(ParseInt(section.Keys[$"{prefix}rangeMax"], 255)),
-                    Values = ParseLaserValueList(section.Keys[$"{prefix}values"]),
-                    RefreshEnabled = ParseBool(section.Keys[$"{prefix}refreshEnabled"], false),
-                    RefreshIntervalSeconds = Math.Max(0.1, ParseDouble(section.Keys[$"{prefix}refreshSeconds"], 1.0))
-                };
-                if (channel.RangeMax < channel.RangeMin)
-                {
-                    (channel.RangeMin, channel.RangeMax) = (channel.RangeMax, channel.RangeMin);
-                }
-
-                scene.LaserDmx.Channels.Add(channel);
-            }
-
-            LoadAuxiliaryTriggerSection(section, scene.Strobe.Trigger, "strobe");
-            return scene;
-        }
-
-        private static void LoadAuxiliaryTriggerSection(SectionData section, AuxiliaryTriggerConfig config, string prefix)
-        {
-            config.EventType = ParseAuxiliaryTriggerEventType(section.Keys[$"{prefix}TriggerEventType"], config.EventType);
-            config.RetriggerMode = ParseAuxiliaryTriggerRetriggerMode(section.Keys[$"{prefix}TriggerRetriggerMode"], config.RetriggerMode);
-            config.OnDurationMs = Math.Max(1, ParseInt(section.Keys[$"{prefix}TriggerOnDurationMs"], config.OnDurationMs));
-
-            config.Volume.AudioDeviceId = section.Keys[$"{prefix}TriggerVolumeAudioDeviceId"] ?? string.Empty;
-            config.Volume.ThresholdPercent = Math.Clamp(ParseInt(section.Keys[$"{prefix}TriggerVolumeThresholdPercent"], config.Volume.ThresholdPercent), 0, 100);
-
-            config.SpectralAnalysis.AudioDeviceId = section.Keys[$"{prefix}TriggerSpectralAudioDeviceId"] ?? string.Empty;
-            config.SpectralAnalysis.FrequencyLowHz = ParseDouble(section.Keys[$"{prefix}TriggerSpectralFrequencyLow"], config.SpectralAnalysis.FrequencyLowHz);
-            config.SpectralAnalysis.FrequencyHighHz = ParseDouble(section.Keys[$"{prefix}TriggerSpectralFrequencyHigh"], config.SpectralAnalysis.FrequencyHighHz);
-            config.SpectralAnalysis.ThresholdDb = ParseDouble(section.Keys[$"{prefix}TriggerSpectralThresholdDb"], config.SpectralAnalysis.ThresholdDb);
-
-            config.ScreenCapture.MonitorIndex = ParseInt(section.Keys[$"{prefix}TriggerScreenMonitorIndex"], config.ScreenCapture.MonitorIndex);
-            config.ScreenCapture.X = ParseInt(section.Keys[$"{prefix}TriggerScreenX"], config.ScreenCapture.X);
-            config.ScreenCapture.Y = ParseInt(section.Keys[$"{prefix}TriggerScreenY"], config.ScreenCapture.Y);
-            config.ScreenCapture.Width = Math.Max(1, ParseInt(section.Keys[$"{prefix}TriggerScreenWidth"], config.ScreenCapture.Width));
-            config.ScreenCapture.Height = Math.Max(1, ParseInt(section.Keys[$"{prefix}TriggerScreenHeight"], config.ScreenCapture.Height));
-            config.ScreenCapture.BrightnessThresholdPercent = Math.Clamp(ParseInt(section.Keys[$"{prefix}TriggerScreenBrightnessThresholdPercent"], config.ScreenCapture.BrightnessThresholdPercent), 0, 100);
-        }
-
-        private static void LoadAudioReactiveSection(SectionData section, AudioReactiveSceneConfig config, string prefix)
-        {
-            config.Mode = ParseAudioMode(section.Keys[$"{prefix}Mode"], config.Mode);
-            config.Brightness = ParseInt(section.Keys[$"{prefix}Brightness"], config.Brightness);
-            config.Saturation = ParseInt(section.Keys[$"{prefix}Saturation"], config.Saturation);
-            config.Normalization = ParseInt(section.Keys[$"{prefix}Normalization"], config.Normalization);
-            config.Reverse = ParseBool(section.Keys[$"{prefix}Reverse"], config.Reverse);
-            config.HueReverse = ParseBool(section.Keys[$"{prefix}HueReverse"], config.HueReverse);
-            config.White = ParseBool(section.Keys[$"{prefix}White"], config.White);
-            config.BackgroundWhite = ParseBool(section.Keys[$"{prefix}BackgroundWhite"], config.BackgroundWhite);
-            config.BackgroundBrightness = ParseInt(section.Keys[$"{prefix}BackgroundBrightness"], config.BackgroundBrightness);
-            config.BackgroundSaturation = ParseInt(section.Keys[$"{prefix}BackgroundSaturation"], config.BackgroundSaturation);
-            config.BackgroundHue = ParseDouble(section.Keys[$"{prefix}BackgroundHue"], config.BackgroundHue);
-            config.HueMin = ParseDouble(section.Keys[$"{prefix}HueMin"], config.HueMin);
-            config.HueMax = ParseDouble(section.Keys[$"{prefix}HueMax"], config.HueMax);
-            config.RotateModes = ParseBool(section.Keys[$"{prefix}RotateModes"], config.RotateModes);
-            config.RotateIntervalSeconds = ParseInt(section.Keys[$"{prefix}RotateIntervalSeconds"], config.RotateIntervalSeconds);
-        }
-
-        private DeviceConfig? LoadDevice(SectionData section, IDictionary<LegacySceneKind, string> legacySceneMap, IniData data)
-        {
-            string host = section.Keys["host"];
-            int port = ParseInt(section.Keys["port"], 81);
-            int ledCount = ParseInt(section.Keys["ledCount"], 0);
-            int stripCount = ParseInt(section.Keys["stripCount"], 0);
-            if (string.IsNullOrWhiteSpace(host) || port <= 0)
-            {
-                return null;
-            }
-
-            string assignedSceneId = section.Keys["assignedSceneId"];
-            if (string.IsNullOrWhiteSpace(assignedSceneId))
-            {
-                assignedSceneId = MigrateLegacySceneAssignment(section.Keys["scene"], legacySceneMap, data);
-            }
-
-            DeviceConfig config = new DeviceConfig
-            {
-                Id = string.IsNullOrWhiteSpace(section.Keys["id"]) ? Guid.NewGuid().ToString("N") : section.Keys["id"],
-                Name = string.IsNullOrWhiteSpace(section.Keys["name"]) ? "Device" : section.Keys["name"],
-                Host = host,
-                Port = port,
-                LedCount = ledCount,
-                StripCount = stripCount,
-                Enabled = ParseBool(section.Keys["enabled"], true),
-                AssignedSceneId = assignedSceneId,
-                AssignedLaserSceneId = section.Keys["assignedLaserSceneId"] ?? string.Empty,
-                AssignedStrobeSceneId = section.Keys["assignedStrobeSceneId"] ?? string.Empty
-            };
-
-            config.Strips = LoadStripTargets(section, config.AssignedSceneId, config.StripCount, config.LedCount);
-            return config;
-        }
-
-        private DeviceConfig? TryMigrateLegacySingleDevice(IniData data, IDictionary<LegacySceneKind, string> legacySceneMap)
-        {
-            string host = GetValue(data, IniSectionSettings, "ipAddress");
-            int port = ParseInt(GetValue(data, IniSectionSettings, "port"), 81);
-            int ledCount = ParseInt(GetValue(data, IniSectionSettings, "ledCount"), 0);
-            if (string.IsNullOrWhiteSpace(host) || port <= 0 || ledCount <= 0)
-            {
-                return null;
-            }
-
-            return new DeviceConfig
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                Name = "Device 1",
-                Host = host,
-                Port = port,
-                LedCount = ledCount,
-                StripCount = ledCount > 0 ? 1 : 0,
-                Enabled = true,
-                AssignedSceneId = GetOrCreateLegacyScene(LegacySceneKind.Basic, legacySceneMap, data),
-                Strips = ledCount > 0
-                    ? new List<DeviceStripConfig>
+                    CopyFrom(loaded);
+                    if (ConfigVersion < CurrentConfigVersion)
                     {
-                        new()
-                        {
-                            StripIndex = 0,
-                            LedCount = ledCount,
-                            Enabled = false,
-                            AssignedSceneId = GetOrCreateLegacyScene(LegacySceneKind.Basic, legacySceneMap, data)
-                        }
+                        MigrateDeviceLevelLedAssignmentsToStrips();
                     }
-                    : new List<DeviceStripConfig>()
-            };
-        }
 
-        private string MigrateLegacySceneAssignment(string sceneValue, IDictionary<LegacySceneKind, string> legacySceneMap, IniData data)
-        {
-            if (Enum.TryParse(sceneValue, true, out LegacySceneKind kind))
-            {
-                return GetOrCreateLegacyScene(kind, legacySceneMap, data);
+                    EnsureDefaults();
+                    ConfigVersion = CurrentConfigVersion;
+                    return;
+                }
             }
 
-            return GetOrCreateLegacyScene(LegacySceneKind.Basic, legacySceneMap, data);
+            EnsureDefaults();
+            ConfigVersion = CurrentConfigVersion;
         }
 
-        private string GetOrCreateLegacyScene(LegacySceneKind kind, IDictionary<LegacySceneKind, string> legacySceneMap, IniData data)
+        public void Save()
         {
-            if (legacySceneMap.TryGetValue(kind, out string existingId))
-            {
-                return existingId;
-            }
-
-            SceneConfig scene = CreateMigratedScene(kind, data);
-            Scenes.Add(scene);
-            legacySceneMap[kind] = scene.Id;
-            return scene.Id;
+            EnsureDefaults();
+            ConfigVersion = CurrentConfigVersion;
+            string json = JsonSerializer.Serialize(this, JsonOptions);
+            File.WriteAllText(JsonFileName, json);
         }
 
-        private SceneConfig CreateMigratedScene(LegacySceneKind kind, IniData data)
+        private void CopyFrom(AppConfig loaded)
         {
-            SceneConfig scene = SceneConfig.CreateDefault(MapLegacySceneType(kind), Scenes.Count + 1);
-            scene.Name = kind switch
-            {
-                LegacySceneKind.Basic => "Migrated Solid Color",
-                LegacySceneKind.Volume => "Migrated Volume Reactive",
-                LegacySceneKind.SpectralAnalysis => "Migrated Spectral Analysis",
-                LegacySceneKind.ScreenCapture => "Migrated Screen Row Capture",
-                _ => "Migrated Solid Color"
-            };
-
-            scene.SolidColor.Brightness = ParseInt(GetValue(data, IniSectionSettings, "brightness"), scene.SolidColor.Brightness);
-            scene.VolumeReactive.Brightness = ParseInt(GetValue(data, IniSectionSettings, "brightness"), scene.VolumeReactive.Brightness);
-            scene.VolumeReactive.Normalization = ParseInt(GetValue(data, IniSectionSettings, "normalizationLevel"), scene.VolumeReactive.Normalization);
-            scene.SpectralAnalysis.Brightness = scene.VolumeReactive.Brightness;
-            scene.SpectralAnalysis.Normalization = scene.VolumeReactive.Normalization;
-            scene.SpectralAnalysis.FrequencyLowHz = ParseInt(GetValue(data, "SpectralAnalysis", "frequencyLow"), (int)scene.SpectralAnalysis.FrequencyLowHz);
-            scene.SpectralAnalysis.FrequencyHighHz = ParseInt(GetValue(data, "SpectralAnalysis", "frequencyHigh"), (int)scene.SpectralAnalysis.FrequencyHighHz);
-            scene.SpectralAnalysis.LevelLowDb = ParseInt(GetValue(data, "SpectralAnalysis", "levelLowDb"), (int)scene.SpectralAnalysis.LevelLowDb);
-            scene.SpectralAnalysis.LevelHighDb = ParseInt(GetValue(data, "SpectralAnalysis", "levelHighDb"), (int)scene.SpectralAnalysis.LevelHighDb);
-            scene.ScreenRowCapture.CaptureY = ParseInt(GetValue(data, "ScreenCapture", "screenCaptureRow"), scene.ScreenRowCapture.CaptureY);
-            scene.ScreenRowCapture.MonitorIndex = ParseInt(GetValue(data, "ScreenCapture", "screenCaptureMonitorIndex"), scene.ScreenRowCapture.MonitorIndex);
-
-            return scene;
-        }
-
-        private static SceneType MapLegacySceneType(LegacySceneKind kind)
-        {
-            return kind switch
-            {
-                LegacySceneKind.Volume => SceneType.VolumeReactive,
-                LegacySceneKind.SpectralAnalysis => SceneType.SpectralAnalysis,
-                LegacySceneKind.ScreenCapture => SceneType.ScreenRowCapture,
-                _ => SceneType.SolidColor
-            };
+            ConfigVersion = loaded.ConfigVersion;
+            Devices = loaded.Devices ?? new List<DeviceConfig>();
+            Scenes = loaded.Scenes ?? new List<SceneConfig>();
+            Collections = loaded.Collections ?? new List<ConfigurationCollection>();
+            ResetShortcut = loaded.ResetShortcut ?? new KeyboardShortcutConfig();
+            Delay = loaded.Delay;
+            StrobeTriggerX = loaded.StrobeTriggerX;
+            StrobeTriggerY = loaded.StrobeTriggerY;
+            LaserTriggerX = loaded.LaserTriggerX;
+            LaserTriggerY = loaded.LaserTriggerY;
+            LaserPatternX = loaded.LaserPatternX;
+            LaserPatternY = loaded.LaserPatternY;
+            LaserColorX = loaded.LaserColorX;
+            LaserColorY = loaded.LaserColorY;
         }
 
         private void EnsureDefaults()
         {
+            Collections ??= new List<ConfigurationCollection>();
+            ResetShortcut ??= new KeyboardShortcutConfig();
+
             if (Scenes.Count == 0)
             {
                 Scenes.Add(SceneConfig.CreateDefault(SceneType.SolidColor, 1));
@@ -534,6 +119,11 @@ namespace Ledqualizer
                 ?? string.Empty;
             foreach (DeviceConfig device in Devices)
             {
+                if (device.StripCount <= 0 && device.LedCount > 0)
+                {
+                    device.StripCount = 1;
+                }
+
                 if (string.IsNullOrWhiteSpace(device.AssignedSceneId)
                     || !IsLedSceneAssignment(device.AssignedSceneId))
                 {
@@ -555,73 +145,63 @@ namespace Ledqualizer
                 device.Strips ??= new List<DeviceStripConfig>();
                 EnsureStripDefaults(device, fallbackLedSceneId, FindSceneType);
             }
+
+            foreach (ConfigurationCollection collection in Collections)
+            {
+                if (string.IsNullOrWhiteSpace(collection.Id))
+                {
+                    collection.Id = Guid.NewGuid().ToString("N");
+                }
+
+                if (string.IsNullOrWhiteSpace(collection.Name))
+                {
+                    collection.Name = "Collection";
+                }
+
+                if (collection.CreatedUtc == default)
+                {
+                    collection.CreatedUtc = DateTime.UtcNow;
+                }
+
+                collection.Shortcut ??= new KeyboardShortcutConfig();
+                collection.Devices ??= new List<CollectionDeviceSnapshot>();
+                foreach (CollectionDeviceSnapshot device in collection.Devices)
+                {
+                    device.Strips ??= new List<CollectionStripSnapshot>();
+                }
+            }
         }
 
-        private static List<DeviceStripConfig> LoadStripTargets(SectionData section, string fallbackSceneId, int stripCount, int totalLedCount)
+        private void MigrateDeviceLevelLedAssignmentsToStrips()
         {
-            var strips = new Dictionary<int, DeviceStripConfig>();
-            foreach (KeyData key in section.Keys)
+            string fallbackLedSceneId = Scenes
+                .FirstOrDefault(scene => SceneTypeRules.SupportsStripAssignment(scene.Type))?.Id
+                ?? string.Empty;
+
+            foreach (DeviceConfig device in Devices)
             {
-                if (!key.KeyName.StartsWith("strip.", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
+                bool oldDeviceEnabled = device.Enabled;
+                bool oldDeviceHadLedScene = IsLedSceneAssignment(device.AssignedSceneId);
+                bool oldDeviceHadAuxiliary = IsLaserSceneAssignment(device.AssignedLaserSceneId)
+                    || IsStrobeSceneAssignment(device.AssignedStrobeSceneId);
 
-                string suffix = key.KeyName["strip.".Length..];
-                int separatorIndex = suffix.IndexOf('.');
-                if (separatorIndex <= 0)
-                {
-                    continue;
-                }
+                EnsureStripDefaults(device, fallbackLedSceneId, FindSceneType);
 
-                string indexText = suffix[..separatorIndex];
-                string propertyName = suffix[(separatorIndex + 1)..];
-                if (!int.TryParse(indexText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int stripIndex) || stripIndex < 0)
+                if (oldDeviceEnabled && oldDeviceHadLedScene)
                 {
-                    continue;
-                }
-
-                if (!strips.TryGetValue(stripIndex, out DeviceStripConfig? strip))
-                {
-                    strip = new DeviceStripConfig
+                    foreach (DeviceStripConfig strip in device.Strips)
                     {
-                        StripIndex = stripIndex,
-                        AssignedSceneId = fallbackSceneId
-                    };
-                    strips.Add(stripIndex, strip);
+                        strip.Enabled = true;
+                        if (string.IsNullOrWhiteSpace(strip.AssignedSceneId)
+                            || string.Equals(strip.AssignedSceneId, fallbackLedSceneId, StringComparison.Ordinal))
+                        {
+                            strip.AssignedSceneId = device.AssignedSceneId;
+                        }
+                    }
                 }
 
-                switch (propertyName)
-                {
-                    case "enabled":
-                        strip.Enabled = ParseBool(key.Value, false);
-                        break;
-                    case "ledCount":
-                        strip.LedCount = ParseInt(key.Value, strip.LedCount);
-                        break;
-                    case "assignedSceneId":
-                        strip.AssignedSceneId = string.IsNullOrWhiteSpace(key.Value) ? fallbackSceneId : key.Value;
-                        break;
-                }
+                device.Enabled = oldDeviceEnabled && oldDeviceHadAuxiliary;
             }
-
-            var orderedStrips = strips.Values.OrderBy(strip => strip.StripIndex).ToList();
-            if (orderedStrips.Count == 0 && stripCount > 0)
-            {
-                int fallbackLedCount = stripCount > 0 ? Math.Max(totalLedCount / stripCount, 0) : 0;
-                for (int i = 0; i < stripCount; i++)
-                {
-                    orderedStrips.Add(new DeviceStripConfig
-                    {
-                        StripIndex = i,
-                        LedCount = fallbackLedCount,
-                        Enabled = false,
-                        AssignedSceneId = fallbackSceneId
-                    });
-                }
-            }
-
-            return orderedStrips;
         }
 
         private static void EnsureStripDefaults(DeviceConfig device, string fallbackSceneId, Func<string, SceneType?> findSceneType)
@@ -678,97 +258,6 @@ namespace Ledqualizer
             device.Strips = normalized;
         }
 
-        private static string GetValue(IniData data, string section, string key)
-        {
-            if (!data.Sections.ContainsSection(section))
-            {
-                return string.Empty;
-            }
-
-            return data[section][key] ?? string.Empty;
-        }
-
-        private static int ParseInt(string value, int defaultValue)
-        {
-            return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) ? parsed : defaultValue;
-        }
-
-        private static double ParseDouble(string value, double defaultValue)
-        {
-            return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) ? parsed : defaultValue;
-        }
-
-        private static bool ParseBool(string value, bool defaultValue)
-        {
-            return bool.TryParse(value, out bool parsed) ? parsed : defaultValue;
-        }
-
-        private static AcVolume.AudioCaptureVolumeMode ParseAudioMode(string value, AcVolume.AudioCaptureVolumeMode defaultValue)
-        {
-            return Enum.TryParse(value, true, out AcVolume.AudioCaptureVolumeMode parsed) ? parsed : defaultValue;
-        }
-
-        private static ImageSourceMode ParseImageSourceMode(string value, ImageSourceMode defaultValue)
-        {
-            return Enum.TryParse(value, true, out ImageSourceMode parsed) ? parsed : defaultValue;
-        }
-
-        private static ImageScanDirection ParseImageScanDirection(string value, ImageScanDirection defaultValue)
-        {
-            return Enum.TryParse(value, true, out ImageScanDirection parsed) ? parsed : defaultValue;
-        }
-
-        private static LaserDmxValueMode ParseLaserDmxValueMode(string value, LaserDmxValueMode defaultValue)
-        {
-            return Enum.TryParse(value, true, out LaserDmxValueMode parsed) ? parsed : defaultValue;
-        }
-
-        private static AuxiliaryTriggerEventType ParseAuxiliaryTriggerEventType(string value, AuxiliaryTriggerEventType defaultValue)
-        {
-            return Enum.TryParse(value, true, out AuxiliaryTriggerEventType parsed) ? parsed : defaultValue;
-        }
-
-        private static AuxiliaryTriggerRetriggerMode ParseAuxiliaryTriggerRetriggerMode(string value, AuxiliaryTriggerRetriggerMode defaultValue)
-        {
-            return Enum.TryParse(value, true, out AuxiliaryTriggerRetriggerMode parsed) ? parsed : defaultValue;
-        }
-
-        private static List<int> ParseLaserValueList(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return new List<int>();
-            }
-
-            return value
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(item => int.TryParse(item, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) ? ClampByte(parsed) : -1)
-                .Where(item => item >= 0)
-                .ToList();
-        }
-
-        private static bool TryParseSceneType(string value, out SceneType sceneType)
-        {
-            string normalized = value switch
-            {
-                "LaserDmxLive" => nameof(SceneType.LaserDmx),
-                "StrobeLive" => nameof(SceneType.Strobe),
-                _ => value
-            };
-
-            return Enum.TryParse(normalized, true, out sceneType);
-        }
-
-        private static string FirstNonEmpty(params string[] values)
-        {
-            return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
-        }
-
-        private static int ClampByte(int value)
-        {
-            return Math.Max(0, Math.Min(255, value));
-        }
-
         private SceneType? FindSceneType(string sceneId)
         {
             return Scenes.FirstOrDefault(scene => string.Equals(scene.Id, sceneId, StringComparison.Ordinal))?.Type;
@@ -791,5 +280,6 @@ namespace Ledqualizer
             SceneType? sceneType = FindSceneType(sceneId);
             return sceneType != null && SceneTypeRules.IsStrobe(sceneType.Value);
         }
+
     }
 }

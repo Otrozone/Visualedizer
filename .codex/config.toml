@@ -1,0 +1,10 @@
+default_permissions = "visualedizer"
+
+[permissions.visualedizer]
+extends = ":workspace"
+
+[permissions.visualedizer.filesystem.":workspace_roots"]
+"Client/Visualedizer/bin" = "deny"
+"Client/Visualedizer/obj" = "deny"
+"Server/.pio" = "deny"
+"Server/.vscode" = "deny"

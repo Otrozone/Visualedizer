@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using System.Windows.Forms;
+
 namespace Ledqualizer
 {
     public enum SceneType
@@ -47,6 +50,189 @@ namespace Ledqualizer
         OneShotUntilReset,
         RepeatWhileHigh,
         HoldWhileHigh
+    }
+
+    public enum CollectionActivationMode
+    {
+        Toggle,
+        Hold
+    }
+
+    public sealed class KeyboardShortcutConfig
+    {
+        public bool Control { get; set; }
+        public bool Shift { get; set; }
+        public bool Alt { get; set; }
+        public Keys Key { get; set; } = Keys.None;
+
+        [JsonIgnore]
+        public bool IsEmpty => Key == Keys.None && !Control && !Shift && !Alt;
+
+        [JsonIgnore]
+        public bool IsUsable => Key != Keys.None && !IsModifierKey(Key);
+
+        public KeyboardShortcutConfig Clone()
+        {
+            return new KeyboardShortcutConfig
+            {
+                Control = Control,
+                Shift = Shift,
+                Alt = Alt,
+                Key = Key
+            };
+        }
+
+        public bool Matches(KeyboardShortcutConfig? other)
+        {
+            return other != null
+                && Control == other.Control
+                && Shift == other.Shift
+                && Alt == other.Alt
+                && Key == other.Key;
+        }
+
+        public string GetSignature()
+        {
+            return $"{Control}:{Shift}:{Alt}:{Key}";
+        }
+
+        public override string ToString()
+        {
+            if (IsEmpty)
+            {
+                return string.Empty;
+            }
+
+            var parts = new List<string>();
+            if (Control)
+            {
+                parts.Add("Ctrl");
+            }
+
+            if (Shift)
+            {
+                parts.Add("Shift");
+            }
+
+            if (Alt)
+            {
+                parts.Add("Alt");
+            }
+
+            if (Key != Keys.None)
+            {
+                parts.Add(FormatKey(Key));
+            }
+
+            return string.Join(" + ", parts);
+        }
+
+        public static KeyboardShortcutConfig Empty()
+        {
+            return new KeyboardShortcutConfig();
+        }
+
+        public static KeyboardShortcutConfig FromKeys(Keys keyData)
+        {
+            Keys key = keyData & Keys.KeyCode;
+            return new KeyboardShortcutConfig
+            {
+                Control = (keyData & Keys.Control) == Keys.Control,
+                Shift = (keyData & Keys.Shift) == Keys.Shift,
+                Alt = (keyData & Keys.Alt) == Keys.Alt,
+                Key = NormalizeKey(key)
+            };
+        }
+
+        public static KeyboardShortcutConfig FromKeyEvent(KeyEventArgs e)
+        {
+            return new KeyboardShortcutConfig
+            {
+                Control = e.Control,
+                Shift = e.Shift,
+                Alt = e.Alt,
+                Key = NormalizeKey(e.KeyCode)
+            };
+        }
+
+        public static bool IsModifierKey(Keys key)
+        {
+            return key is Keys.ControlKey
+                or Keys.LControlKey
+                or Keys.RControlKey
+                or Keys.ShiftKey
+                or Keys.LShiftKey
+                or Keys.RShiftKey
+                or Keys.Menu
+                or Keys.LMenu
+                or Keys.RMenu
+                or Keys.Control
+                or Keys.Shift
+                or Keys.Alt;
+        }
+
+        private static Keys NormalizeKey(Keys key)
+        {
+            return key switch
+            {
+                Keys.ControlKey or Keys.LControlKey or Keys.RControlKey => Keys.None,
+                Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey => Keys.None,
+                Keys.Menu or Keys.LMenu or Keys.RMenu => Keys.None,
+                _ => key
+            };
+        }
+
+        private static string FormatKey(Keys key)
+        {
+            return key switch
+            {
+                Keys.Escape => "Esc",
+                Keys.Return => "Enter",
+                Keys.Space => "Space",
+                Keys.Next => "Page Down",
+                Keys.Prior => "Page Up",
+                _ => key.ToString()
+            };
+        }
+    }
+
+    public sealed class ConfigurationCollection
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string Name { get; set; } = "Collection";
+        public CollectionActivationMode ActivationMode { get; set; } = CollectionActivationMode.Toggle;
+        public KeyboardShortcutConfig Shortcut { get; set; } = new();
+        public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+        public List<CollectionDeviceSnapshot> Devices { get; set; } = new();
+
+        public bool HasTargets()
+        {
+            return Devices.Any(device =>
+                device.Strips.Any(strip => strip.Scene != null && strip.LedCount > 0)
+                || device.LaserScene != null
+                || device.StrobeScene != null);
+        }
+    }
+
+    public sealed class CollectionDeviceSnapshot
+    {
+        public string DeviceId { get; set; } = string.Empty;
+        public string Name { get; set; } = "Device";
+        public string Host { get; set; } = "127.0.0.1";
+        public int Port { get; set; } = 81;
+        public int LedCount { get; set; }
+        public int StripCount { get; set; }
+        public SceneConfig? LaserScene { get; set; }
+        public SceneConfig? StrobeScene { get; set; }
+        public List<CollectionStripSnapshot> Strips { get; set; } = new();
+    }
+
+    public sealed class CollectionStripSnapshot
+    {
+        public int StripIndex { get; set; }
+        public int StartIndex { get; set; }
+        public int LedCount { get; set; }
+        public SceneConfig? Scene { get; set; }
     }
 
     public sealed class SceneConfig
@@ -369,6 +555,24 @@ namespace Ledqualizer
         public string AssignedLaserSceneId { get; set; } = string.Empty;
         public string AssignedStrobeSceneId { get; set; } = string.Empty;
         public List<DeviceStripConfig> Strips { get; set; } = new();
+
+        public DeviceConfig Clone()
+        {
+            return new DeviceConfig
+            {
+                Id = Id,
+                Name = Name,
+                Host = Host,
+                Port = Port,
+                LedCount = LedCount,
+                StripCount = StripCount,
+                Enabled = Enabled,
+                AssignedSceneId = AssignedSceneId,
+                AssignedLaserSceneId = AssignedLaserSceneId,
+                AssignedStrobeSceneId = AssignedStrobeSceneId,
+                Strips = Strips.Select(strip => strip.Clone()).ToList()
+            };
+        }
     }
 
     internal sealed class DeviceStripConfig
@@ -377,6 +581,17 @@ namespace Ledqualizer
         public int LedCount { get; set; }
         public bool Enabled { get; set; }
         public string AssignedSceneId { get; set; } = string.Empty;
+
+        public DeviceStripConfig Clone()
+        {
+            return new DeviceStripConfig
+            {
+                StripIndex = StripIndex,
+                LedCount = LedCount,
+                Enabled = Enabled,
+                AssignedSceneId = AssignedSceneId
+            };
+        }
     }
 
     internal enum DeviceRowKind
@@ -478,6 +693,58 @@ namespace Ledqualizer
                 Type = scene.Type,
                 Summary = SceneSummaryBuilder.Build(scene)
             };
+        }
+    }
+
+    internal sealed class CollectionGridRow
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string Name { get; set; } = "Collection";
+        public CollectionActivationMode ActivationMode { get; set; } = CollectionActivationMode.Toggle;
+        public string ShortcutText { get; set; } = string.Empty;
+        public string TargetSummary { get; set; } = string.Empty;
+        public string StatusText { get; set; } = "Inactive";
+
+        public static CollectionGridRow FromCollection(ConfigurationCollection collection, bool isActive)
+        {
+            return new CollectionGridRow
+            {
+                Id = collection.Id,
+                Name = collection.Name,
+                ActivationMode = collection.ActivationMode,
+                ShortcutText = collection.Shortcut?.ToString() ?? string.Empty,
+                TargetSummary = CollectionSummaryBuilder.Build(collection),
+                StatusText = isActive ? "Active" : "Inactive"
+            };
+        }
+    }
+
+    internal static class CollectionSummaryBuilder
+    {
+        public static string Build(ConfigurationCollection collection)
+        {
+            int deviceCount = collection.Devices.Count;
+            int stripCount = collection.Devices.Sum(device => device.Strips.Count(strip => strip.Scene != null && strip.LedCount > 0));
+            int laserCount = collection.Devices.Count(device => device.LaserScene != null);
+            int strobeCount = collection.Devices.Count(device => device.StrobeScene != null);
+            var parts = new List<string>();
+            if (stripCount > 0)
+            {
+                parts.Add($"{stripCount} LED strip{(stripCount == 1 ? string.Empty : "s")}");
+            }
+
+            if (laserCount > 0)
+            {
+                parts.Add($"{laserCount} laser");
+            }
+
+            if (strobeCount > 0)
+            {
+                parts.Add($"{strobeCount} strobe");
+            }
+
+            string targetText = parts.Count == 0 ? "No targets" : string.Join(", ", parts);
+            return $"{deviceCount} device{(deviceCount == 1 ? string.Empty : "s")}: {targetText}";
         }
     }
 

@@ -71,6 +71,16 @@ namespace Ledqualizer
                         continue;
                     }
 
+                    if (strips.Count == 0)
+                    {
+                        stripCount = Math.Max(stripCount, 1);
+                        strips = BuildFallbackStrips(totalLedCount, stripCount);
+                    }
+                    else
+                    {
+                        stripCount = strips.Count;
+                    }
+
                     return new DeviceMetadata
                     {
                         Name = string.IsNullOrWhiteSpace(response.DeviceName) ? host : response.DeviceName,
@@ -100,6 +110,31 @@ namespace Ledqualizer
             {
                 yield return new Uri($"http://{host}:{webSocketPort}/get-conf");
             }
+        }
+
+        private static List<DeviceStripMetadata> BuildFallbackStrips(int totalLedCount, int stripCount)
+        {
+            int normalizedStripCount = Math.Max(stripCount, 1);
+            int baseLedCount = totalLedCount / normalizedStripCount;
+            int remainder = totalLedCount % normalizedStripCount;
+            var strips = new List<DeviceStripMetadata>();
+
+            for (int index = 0; index < normalizedStripCount; index++)
+            {
+                int ledCount = baseLedCount + (index < remainder ? 1 : 0);
+                if (ledCount <= 0)
+                {
+                    continue;
+                }
+
+                strips.Add(new DeviceStripMetadata
+                {
+                    Index = index,
+                    LedCount = ledCount
+                });
+            }
+
+            return strips;
         }
 
         private sealed class DeviceMetadataResponse

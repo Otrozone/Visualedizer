@@ -46,11 +46,14 @@ namespace Ledqualizer
         private readonly AppConfig appConfig = new();
         private readonly BindingList<DeviceGridRow> deviceRows = new();
         private readonly BindingList<SceneGridRow> sceneRows = new();
+        private readonly BindingList<CollectionGridRow> collectionRows = new();
         private readonly BindingSource ledSceneLookupBindingSource = new();
         private readonly BindingSource laserSceneLookupBindingSource = new();
         private readonly BindingSource strobeSceneLookupBindingSource = new();
         private readonly BindingSource sceneGridBindingSource = new();
+        private readonly BindingSource collectionGridBindingSource = new();
         private readonly Dictionary<string, DeviceRunEntry> deviceRuns = new();
+        private readonly Dictionary<string, DeviceRunEntry> collectionRuns = new();
         private readonly Dictionary<SceneType, Form> sceneEditors = new();
         private readonly List<SceneTypeOption> sceneTypeOptions = Enum.GetValues<SceneType>().Select(type => new SceneTypeOption(type)).ToList();
         private readonly BindingList<SceneAssignmentOption> ledSceneOptions = new();
@@ -67,9 +70,15 @@ namespace Ledqualizer
         private bool closingInProgress;
         private bool shutdownCompleted;
         private bool syncingAudioDeviceSelection;
+        private bool collectionOverrideActive;
+        private bool collectionOverrideChanging;
         private string? selectedAudioDeviceId;
+        private string? activeCollectionId;
+        private CollectionActivationMode? activeCollectionMode;
+        private KeyboardShortcutConfig? activeHoldShortcut;
         private OtherDevicesForm? otherDevicesForm;
         private FormOverlay? frmOverlay;
+        private GlobalShortcutManager? globalShortcutManager;
 
         public sealed class FormOverlay : Form
         {
@@ -109,6 +118,8 @@ namespace Ledqualizer
             InitializeSceneEditors();
             ConfigureDeviceGrid();
             ConfigureSceneGrid();
+            ConfigureCollectionGrid();
+            InitializeGlobalShortcutManager();
         }
 
         private void InitializeSceneEditors()
@@ -156,6 +167,7 @@ namespace Ledqualizer
 
         private void ConfigureDeviceGrid()
         {
+            ApplyCompactRowHeight(dgvDevices);
             dgvDevices.AutoGenerateColumns = false;
             dgvDevices.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             dgvDevices.MultiSelect = true;
@@ -192,6 +204,7 @@ namespace Ledqualizer
         {
             sceneGridBindingSource.DataSource = sceneRows;
 
+            ApplyCompactRowHeight(dgvScenes);
             dgvScenes.AutoGenerateColumns = false;
             dgvScenes.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             dgvScenes.MultiSelect = false;
@@ -207,6 +220,46 @@ namespace Ledqualizer
             colSceneType.DisplayMember = nameof(SceneTypeOption.Display);
             colSceneType.ValueMember = nameof(SceneTypeOption.Value);
             colSceneType.DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton;
+        }
+
+        private void ConfigureCollectionGrid()
+        {
+            collectionGridBindingSource.DataSource = collectionRows;
+
+            ApplyCompactRowHeight(dgvCollections);
+            dgvCollections.AutoGenerateColumns = false;
+            dgvCollections.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            dgvCollections.MultiSelect = false;
+            dgvCollections.DataSource = collectionGridBindingSource;
+            dgvCollections.CurrentCellDirtyStateChanged += dgvCollections_CurrentCellDirtyStateChanged;
+            dgvCollections.CellValueChanged += dgvCollections_CellValueChanged;
+            dgvCollections.CellEndEdit += dgvCollections_CellEndEdit;
+            dgvCollections.CellMouseClick += dgvCollections_CellMouseClick;
+            dgvCollections.CellValidating += dgvCollections_CellValidating;
+            dgvCollections.DataError += dgvCollections_DataError;
+
+            colCollectionMode.DataSource = Enum.GetValues<CollectionActivationMode>();
+            colCollectionMode.DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton;
+        }
+
+        private static void ApplyCompactRowHeight(DataGridView grid)
+        {
+            int compactHeight = Math.Max(1, (int)Math.Round(grid.RowTemplate.Height * 0.8, MidpointRounding.AwayFromZero));
+            grid.RowTemplate.Height = compactHeight;
+        }
+
+        private void InitializeGlobalShortcutManager()
+        {
+            try
+            {
+                globalShortcutManager = new GlobalShortcutManager();
+                globalShortcutManager.ShortcutKeyDown += GlobalShortcutManager_ShortcutKeyDown;
+                globalShortcutManager.ShortcutKeyUp += GlobalShortcutManager_ShortcutKeyUp;
+            }
+            catch
+            {
+                globalShortcutManager = null;
+            }
         }
 
         private void RefreshSceneAssignmentOptions()
@@ -251,7 +304,7 @@ namespace Ledqualizer
             isLoading = true;
             try
             {
-                appConfig.LoadFromIni();
+                appConfig.Load();
                 ApplyConfigToUi();
                 LoadAudioDevices();
                 CountHz();
@@ -284,7 +337,11 @@ namespace Ledqualizer
                 }
             }
 
+            RefreshCollectionRows();
+            lblResetShortcut.Text = $"Reset shortcut: {FormatShortcut(appConfig.ResetShortcut)}";
+
             sceneGridBindingSource.ResetBindings(false);
+            collectionGridBindingSource.ResetBindings(false);
             ledSceneLookupBindingSource.ResetBindings(false);
             laserSceneLookupBindingSource.ResetBindings(false);
             strobeSceneLookupBindingSource.ResetBindings(false);
@@ -305,13 +362,96 @@ namespace Ledqualizer
             appConfig.Devices = GetRootDeviceRows()
                 .Select(BuildDeviceConfigFromRows)
                 .ToList();
+            SyncCollectionsFromRows();
+        }
+
+        private void RefreshCollectionRows()
+        {
+            collectionRows.Clear();
+            foreach (ConfigurationCollection collection in appConfig.Collections)
+            {
+                collectionRows.Add(CollectionGridRow.FromCollection(collection, IsCollectionActive(collection.Id)));
+            }
+        }
+
+        private void RefreshCollectionRow(ConfigurationCollection collection)
+        {
+            CollectionGridRow? row = collectionRows.FirstOrDefault(item => item.Id == collection.Id);
+            if (row == null)
+            {
+                collectionRows.Add(CollectionGridRow.FromCollection(collection, IsCollectionActive(collection.Id)));
+                return;
+            }
+
+            int rowIndex = collectionRows.IndexOf(row);
+            CollectionGridRow refreshed = CollectionGridRow.FromCollection(collection, IsCollectionActive(collection.Id));
+            row.Name = refreshed.Name;
+            row.ActivationMode = refreshed.ActivationMode;
+            row.ShortcutText = refreshed.ShortcutText;
+            row.TargetSummary = refreshed.TargetSummary;
+            row.StatusText = refreshed.StatusText;
+            if (rowIndex >= 0)
+            {
+                collectionGridBindingSource.ResetItem(rowIndex);
+            }
+        }
+
+        private void RefreshCollectionStatuses()
+        {
+            foreach (CollectionGridRow row in collectionRows)
+            {
+                int rowIndex = collectionRows.IndexOf(row);
+                row.StatusText = IsCollectionActive(row.Id) ? "Active" : "Inactive";
+                if (rowIndex >= 0)
+                {
+                    collectionGridBindingSource.ResetItem(rowIndex);
+                }
+            }
+        }
+
+        private bool IsCollectionActive(string collectionId)
+        {
+            return collectionOverrideActive && string.Equals(activeCollectionId, collectionId, StringComparison.Ordinal);
+        }
+
+        private void SyncCollectionsFromRows()
+        {
+            foreach (CollectionGridRow row in collectionRows)
+            {
+                ConfigurationCollection? collection = FindCollectionById(row.Id);
+                if (collection == null)
+                {
+                    continue;
+                }
+
+                collection.Name = string.IsNullOrWhiteSpace(row.Name) ? collection.Name : row.Name.Trim();
+                collection.ActivationMode = row.ActivationMode;
+            }
+        }
+
+        private ConfigurationCollection? FindCollectionById(string collectionId)
+        {
+            return appConfig.Collections.FirstOrDefault(collection => string.Equals(collection.Id, collectionId, StringComparison.Ordinal));
+        }
+
+        private ConfigurationCollection? GetSelectedCollection()
+        {
+            return dgvCollections.CurrentRow?.DataBoundItem is CollectionGridRow row
+                ? FindCollectionById(row.Id)
+                : null;
+        }
+
+        private static string FormatShortcut(KeyboardShortcutConfig? shortcut)
+        {
+            string text = shortcut?.ToString() ?? string.Empty;
+            return string.IsNullOrWhiteSpace(text) ? "none" : text;
         }
 
         private IEnumerable<DeviceGridRow> BuildDeviceRows(DeviceConfig device)
         {
             yield return DeviceGridRow.FromDeviceConfig(device);
 
-            if (device.StripCount < 2)
+            if (device.StripCount <= 0)
             {
                 yield break;
             }
@@ -391,7 +531,7 @@ namespace Ledqualizer
 
         private async Task ReconcileDeviceRunsAsync()
         {
-            if (isLoading)
+            if (isLoading || collectionOverrideActive || collectionOverrideChanging)
             {
                 return;
             }
@@ -480,19 +620,10 @@ namespace Ledqualizer
 
                 bool rowHasTarget = row.Enabled;
                 SceneConfig? assignedScene = FindSceneById(row.AssignedSceneId);
-                bool requiresLedScene = row.Kind == DeviceRowKind.Strip
-                    ? rowHasTarget
-                    : rowHasTarget && !string.IsNullOrWhiteSpace(row.AssignedSceneId);
+                bool requiresLedScene = row.Kind == DeviceRowKind.Strip && rowHasTarget;
                 if (requiresLedScene && assignedScene == null)
                 {
                     row.Status = "Scene missing";
-                }
-                else if (row.Kind == DeviceRowKind.Device
-                    && requiresLedScene
-                    && assignedScene != null
-                    && !SceneTypeRules.SupportsStripAssignment(assignedScene.Type))
-                {
-                    row.Status = "Scene incompatible";
                 }
                 else if (row.Kind == DeviceRowKind.Strip
                     && requiresLedScene
@@ -502,11 +633,13 @@ namespace Ledqualizer
                     row.Status = "Scene incompatible";
                 }
                 else if (row.Kind == DeviceRowKind.Device
+                    && row.Enabled
                     && !IsValidAuxiliarySceneAssignment(row.AssignedLaserSceneId, SceneTypeRules.IsLaser, out string? laserStatus))
                 {
                     row.Status = laserStatus!;
                 }
                 else if (row.Kind == DeviceRowKind.Device
+                    && row.Enabled
                     && !IsValidAuxiliarySceneAssignment(row.AssignedStrobeSceneId, SceneTypeRules.IsStrobe, out string? strobeStatus))
                 {
                     row.Status = strobeStatus!;
@@ -557,6 +690,171 @@ namespace Ledqualizer
             }
         }
 
+        private async Task StartCollectionOverrideAsync(ConfigurationCollection collection, CollectionActivationMode activationMode, KeyboardShortcutConfig? holdShortcut)
+        {
+            if (collectionOverrideChanging)
+            {
+                return;
+            }
+
+            collectionOverrideChanging = true;
+            try
+            {
+                List<DeviceConfig> previousCollectionDevices = CaptureCollectionRunDevices();
+                await StopCollectionRunsAsync();
+                await SendZeroLedFramesAsync(previousCollectionDevices);
+                await StopAllDeviceRunsAsync();
+
+                collectionOverrideActive = true;
+                activeCollectionId = collection.Id;
+                activeCollectionMode = activationMode;
+                activeHoldShortcut = holdShortcut?.Clone();
+                RefreshCollectionStatuses();
+
+                foreach (CollectionDeviceSnapshot snapshot in collection.Devices.Where(HasSnapshotTargets))
+                {
+                    DeviceConfig config = BuildDeviceConfigFromSnapshot(snapshot);
+                    if (config.LedCount <= 0 || !IsValidDeviceConfig(config))
+                    {
+                        continue;
+                    }
+
+                    RunController controller = new();
+                    controller.DeviceStatusChanged += RunController_DeviceStatusChanged;
+                    collectionRuns[config.Id] = new DeviceRunEntry(config, BuildSnapshotRunSignature(snapshot), controller);
+                    await controller.StartAsync(new[] { config }, CreateCollectionSceneRunner(snapshot));
+                }
+
+                UpdateConnectionSummary();
+            }
+            finally
+            {
+                collectionOverrideChanging = false;
+            }
+        }
+
+        private async Task StopCollectionOverrideAsync(bool resumeDefault)
+        {
+            if (!collectionOverrideActive && collectionRuns.Count == 0)
+            {
+                return;
+            }
+
+            collectionOverrideChanging = true;
+            try
+            {
+                List<DeviceConfig> previousCollectionDevices = CaptureCollectionRunDevices();
+                await StopCollectionRunsAsync();
+                await SendZeroLedFramesAsync(previousCollectionDevices);
+                collectionOverrideActive = false;
+                activeCollectionId = null;
+                activeCollectionMode = null;
+                activeHoldShortcut = null;
+                RefreshCollectionStatuses();
+            }
+            finally
+            {
+                collectionOverrideChanging = false;
+            }
+
+            if (resumeDefault)
+            {
+                await ReconcileDeviceRunsAsync();
+            }
+        }
+
+        private async Task StopCollectionRunsAsync()
+        {
+            foreach (string deviceId in collectionRuns.Keys.ToList())
+            {
+                if (!collectionRuns.TryGetValue(deviceId, out DeviceRunEntry? entry))
+                {
+                    continue;
+                }
+
+                collectionRuns.Remove(deviceId);
+                entry.Controller.DeviceStatusChanged -= RunController_DeviceStatusChanged;
+                await entry.Controller.StopAsync();
+            }
+        }
+
+        private List<DeviceConfig> CaptureCollectionRunDevices()
+        {
+            return collectionRuns.Values
+                .Select(entry => entry.Config.Clone())
+                .ToList();
+        }
+
+        private static bool HasSnapshotTargets(CollectionDeviceSnapshot snapshot)
+        {
+            return snapshot.LaserScene != null
+                || snapshot.StrobeScene != null
+                || snapshot.Strips.Any(strip => strip.Scene != null && strip.LedCount > 0);
+        }
+
+        private DeviceConfig BuildDeviceConfigFromSnapshot(CollectionDeviceSnapshot snapshot)
+        {
+            return new DeviceConfig
+            {
+                Id = snapshot.DeviceId,
+                Name = snapshot.Name,
+                Host = snapshot.Host,
+                Port = snapshot.Port,
+                LedCount = snapshot.LedCount,
+                StripCount = snapshot.StripCount,
+                Enabled = snapshot.LaserScene != null || snapshot.StrobeScene != null,
+                AssignedSceneId = string.Empty,
+                AssignedLaserSceneId = snapshot.LaserScene?.Id ?? string.Empty,
+                AssignedStrobeSceneId = snapshot.StrobeScene?.Id ?? string.Empty,
+                Strips = snapshot.Strips
+                    .OrderBy(strip => strip.StripIndex)
+                    .Select(strip => new DeviceStripConfig
+                    {
+                        StripIndex = strip.StripIndex,
+                        LedCount = strip.LedCount,
+                        Enabled = strip.Scene != null,
+                        AssignedSceneId = strip.Scene?.Id ?? string.Empty
+                    })
+                    .ToList()
+            };
+        }
+
+        private ISceneRunner CreateCollectionSceneRunner(CollectionDeviceSnapshot snapshot)
+        {
+            return new CompositeSceneRunner(
+                () => GetSnapshotSceneAssignments(snapshot),
+                () => snapshot.LaserScene,
+                () => snapshot.StrobeScene,
+                () => selectedAudioDeviceId,
+                () => ReadUi(() => (int)numDelay.Value),
+                UpdatePreview,
+                UpdateVolumeProgress,
+                UpdateSpectralProgress,
+                UpdateRate);
+        }
+
+        private static IReadOnlyList<DeviceSceneAssignment> GetSnapshotSceneAssignments(CollectionDeviceSnapshot snapshot)
+        {
+            return snapshot.Strips
+                .Where(strip => strip.Scene != null && strip.LedCount > 0)
+                .OrderBy(strip => strip.StripIndex)
+                .Select(strip => new DeviceSceneAssignment
+                {
+                    Scene = strip.Scene!,
+                    StartIndex = strip.StartIndex,
+                    LedCount = strip.LedCount
+                })
+                .ToList();
+        }
+
+        private static string BuildSnapshotRunSignature(CollectionDeviceSnapshot snapshot)
+        {
+            string stripSignature = string.Join("|", snapshot.Strips
+                .OrderBy(strip => strip.StripIndex)
+                .Select(strip => $"{strip.StripIndex}:{strip.StartIndex}:{strip.LedCount}:{strip.Scene?.Id}:{strip.Scene?.Type}"));
+            return $"{snapshot.Host}|{snapshot.Port}|{snapshot.LedCount}|{snapshot.StripCount}|{snapshot.LaserScene?.Id}:{snapshot.LaserScene?.Type}|{snapshot.StrobeScene?.Id}:{snapshot.StrobeScene?.Type}|{stripSignature}";
+        }
+
         private bool RequiresRestart(DeviceRunEntry current, DeviceConfig desired)
         {
             return !string.Equals(current.Config.Host, desired.Host, StringComparison.OrdinalIgnoreCase)
@@ -571,11 +869,6 @@ namespace Ledqualizer
             if (!IsValidDeviceConfig(device) || device.LedCount <= 0)
             {
                 return false;
-            }
-
-            if (device.Enabled && IsLedSceneAssigned(device.AssignedSceneId))
-            {
-                return true;
             }
 
             if (device.Enabled && (IsLaserSceneAssigned(device.AssignedLaserSceneId) || IsStrobeSceneAssigned(device.AssignedStrobeSceneId)))
@@ -606,7 +899,9 @@ namespace Ledqualizer
 
         private string ResolveActiveStatus(string deviceId)
         {
-            return deviceRuns.ContainsKey(deviceId) ? "Effect active" : "Online";
+            return collectionRuns.ContainsKey(deviceId)
+                ? "Collection active"
+                : deviceRuns.ContainsKey(deviceId) ? "Effect active" : "Online";
         }
 
         private string ResolvePostMetadataStatus(string deviceId)
@@ -638,13 +933,12 @@ namespace Ledqualizer
 
         private string BuildRunSignature(DeviceConfig config)
         {
-            string rootSceneType = FindSceneById(config.AssignedSceneId)?.Type.ToString() ?? string.Empty;
             string laserSceneType = FindSceneById(config.AssignedLaserSceneId)?.Type.ToString() ?? string.Empty;
             string strobeSceneType = FindSceneById(config.AssignedStrobeSceneId)?.Type.ToString() ?? string.Empty;
             string stripSignature = string.Join("|", config.Strips
                 .OrderBy(strip => strip.StripIndex)
                 .Select(strip => $"{strip.StripIndex}:{strip.LedCount}:{strip.Enabled}:{strip.AssignedSceneId}:{FindSceneById(strip.AssignedSceneId)?.Type.ToString() ?? string.Empty}"));
-            return $"{config.Host}|{config.Port}|{config.LedCount}|{config.StripCount}|{config.Enabled}|{config.AssignedSceneId}|{rootSceneType}|{config.AssignedLaserSceneId}|{laserSceneType}|{config.AssignedStrobeSceneId}|{strobeSceneType}|{stripSignature}";
+            return $"{config.Host}|{config.Port}|{config.LedCount}|{config.StripCount}|{config.Enabled}|{config.AssignedLaserSceneId}|{laserSceneType}|{config.AssignedStrobeSceneId}|{strobeSceneType}|{stripSignature}";
         }
 
         private ISceneRunner CreateCompositeSceneRunner(string deviceId)
@@ -671,22 +965,6 @@ namespace Ledqualizer
 
             var assignments = new List<DeviceSceneAssignment>();
             int offset = 0;
-
-            if (rootRow.Enabled)
-            {
-                SceneConfig? rootScene = FindSceneById(rootRow.AssignedSceneId);
-                if (rootScene != null
-                    && rootRow.LedCount > 0
-                    && SceneTypeRules.SupportsStripAssignment(rootScene.Type))
-                {
-                    assignments.Add(new DeviceSceneAssignment
-                    {
-                        Scene = rootScene,
-                        LedCount = rootRow.LedCount,
-                        StartIndex = 0
-                    });
-                }
-            }
 
             foreach (DeviceGridRow stripRow in GetStripRows(deviceId))
             {
@@ -1024,6 +1302,44 @@ namespace Ledqualizer
             }
         }
 
+        private async Task SendZeroLedFramesAsync(IReadOnlyList<DeviceConfig> devices)
+        {
+            HashSet<string> visitedEndpoints = new(StringComparer.OrdinalIgnoreCase);
+            foreach (DeviceConfig device in devices)
+            {
+                if (!IsValidDeviceConfig(device) || device.LedCount <= 0)
+                {
+                    continue;
+                }
+
+                string endpointKey = $"{device.Host.Trim()}:{device.Port}";
+                if (!visitedEndpoints.Add(endpointKey))
+                {
+                    continue;
+                }
+
+                byte[] offFrame = new byte[device.LedCount * 3];
+                var session = new DeviceSession(device, (_, _, _) => { });
+                using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
+
+                try
+                {
+                    if (await session.ConnectAsync(timeout.Token).ConfigureAwait(false))
+                    {
+                        await session.SendFrameAsync(offFrame, timeout.Token).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Best-effort blackout; release/resume must continue even if a device is unreachable.
+                }
+                finally
+                {
+                    await session.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+        }
+
         private void RunController_DeviceStatusChanged(string deviceId, ConnectionState state, string? detail)
         {
             SafeUi(() =>
@@ -1060,6 +1376,16 @@ namespace Ledqualizer
 
         private void UpdateConnectionSummary()
         {
+            if (collectionOverrideActive)
+            {
+                int enabledCollectionCount = collectionRuns.Count;
+                int connectedCollectionCount = GetRootDeviceRows().Count(item => item.Status is "Collection active" or "Online" or "Effect active");
+                statLblConnection.Text = enabledCollectionCount == 0
+                    ? "Collection active: no targets"
+                    : $"Collection: {connectedCollectionCount}/{enabledCollectionCount} online";
+                return;
+            }
+
             int enabledCount = GetRootDeviceRows()
                 .Select(BuildDeviceConfigFromRows)
                 .Count(HasActiveTargets);
@@ -1076,6 +1402,377 @@ namespace Ledqualizer
             if (offlineCount > 0)
             {
                 statLblConnection.Text += $" ({offlineCount} offline)";
+            }
+        }
+
+        private async void btnAddCollection_Click(object? sender, EventArgs e)
+        {
+            ConfigurationCollection? collection = CreateSnapshotCollection();
+            if (collection == null)
+            {
+                MessageBox.Show(this, "There are no enabled LED strips, laser scenes, or strobe scenes to capture.", "No Enabled Targets", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            appConfig.Collections.Add(collection);
+            collectionRows.Add(CollectionGridRow.FromCollection(collection, IsCollectionActive(collection.Id)));
+            int rowIndex = collectionRows.Count - 1;
+            if (rowIndex >= 0)
+            {
+                dgvCollections.ClearSelection();
+                dgvCollections.Rows[rowIndex].Selected = true;
+                dgvCollections.CurrentCell = dgvCollections.Rows[rowIndex].Cells[0];
+            }
+
+            await Task.CompletedTask;
+        }
+
+        private async void btnRemoveCollection_Click(object? sender, EventArgs e)
+        {
+            ConfigurationCollection? collection = GetSelectedCollection();
+            if (collection == null)
+            {
+                return;
+            }
+
+            if (string.Equals(activeCollectionId, collection.Id, StringComparison.Ordinal))
+            {
+                await StopCollectionOverrideAsync(resumeDefault: true);
+            }
+
+            appConfig.Collections.Remove(collection);
+            CollectionGridRow? row = collectionRows.FirstOrDefault(item => item.Id == collection.Id);
+            if (row != null)
+            {
+                collectionRows.Remove(row);
+            }
+        }
+
+        private void btnAssignCollectionShortcut_Click(object? sender, EventArgs e)
+        {
+            ConfigurationCollection? collection = GetSelectedCollection();
+            if (collection == null)
+            {
+                return;
+            }
+
+            KeyboardShortcutConfig? shortcut = CaptureShortcut(collection.Shortcut, "Collection Shortcut");
+            if (shortcut == null)
+            {
+                return;
+            }
+
+            if (!ValidateShortcut(shortcut, collection.Id, out string error))
+            {
+                MessageBox.Show(this, error, "Shortcut Conflict", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            collection.Shortcut = shortcut;
+            RefreshCollectionRow(collection);
+        }
+
+        private void btnClearCollectionShortcut_Click(object? sender, EventArgs e)
+        {
+            ConfigurationCollection? collection = GetSelectedCollection();
+            if (collection == null)
+            {
+                return;
+            }
+
+            collection.Shortcut = KeyboardShortcutConfig.Empty();
+            RefreshCollectionRow(collection);
+        }
+
+        private void btnSetResetShortcut_Click(object? sender, EventArgs e)
+        {
+            KeyboardShortcutConfig? shortcut = CaptureShortcut(appConfig.ResetShortcut, "Reset Shortcut");
+            if (shortcut == null)
+            {
+                return;
+            }
+
+            if (!ValidateShortcut(shortcut, excludedCollectionId: null, out string error))
+            {
+                MessageBox.Show(this, error, "Shortcut Conflict", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            appConfig.ResetShortcut = shortcut;
+            lblResetShortcut.Text = $"Reset shortcut: {FormatShortcut(appConfig.ResetShortcut)}";
+            collectionGridBindingSource.ResetBindings(false);
+        }
+
+        private async void btnStopCollection_Click(object? sender, EventArgs e)
+        {
+            await StopCollectionOverrideAsync(resumeDefault: true);
+        }
+
+        private KeyboardShortcutConfig? CaptureShortcut(KeyboardShortcutConfig? current, string title)
+        {
+            using var form = new ShortcutCaptureForm(title, current);
+            return form.ShowDialog(this) == DialogResult.OK ? form.Shortcut : null;
+        }
+
+        private bool ValidateShortcut(KeyboardShortcutConfig shortcut, string? excludedCollectionId, out string error)
+        {
+            error = string.Empty;
+            if (shortcut.IsEmpty)
+            {
+                return true;
+            }
+
+            if (!shortcut.IsUsable)
+            {
+                error = "Shortcut must include a non-modifier key.";
+                return false;
+            }
+
+            if (appConfig.ResetShortcut != null
+                && !shortcut.IsEmpty
+                && shortcut.Matches(appConfig.ResetShortcut)
+                && excludedCollectionId != null)
+            {
+                error = "This shortcut is already assigned as the reset shortcut.";
+                return false;
+            }
+
+            foreach (ConfigurationCollection collection in appConfig.Collections)
+            {
+                if (excludedCollectionId != null && string.Equals(collection.Id, excludedCollectionId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (collection.Shortcut != null && !collection.Shortcut.IsEmpty && shortcut.Matches(collection.Shortcut))
+                {
+                    error = $"This shortcut is already assigned to '{collection.Name}'.";
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private ConfigurationCollection? CreateSnapshotCollection()
+        {
+            SyncConfigFromUi();
+            var collection = new ConfigurationCollection
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = $"Snapshot {appConfig.Collections.Count + 1}",
+                ActivationMode = CollectionActivationMode.Toggle,
+                CreatedUtc = DateTime.UtcNow
+            };
+
+            foreach (DeviceGridRow rootRow in GetRootDeviceRows())
+            {
+                CollectionDeviceSnapshot? snapshot = CreateDeviceSnapshot(rootRow);
+                if (snapshot != null)
+                {
+                    collection.Devices.Add(snapshot);
+                }
+            }
+
+            return collection.HasTargets() ? collection : null;
+        }
+
+        private CollectionDeviceSnapshot? CreateDeviceSnapshot(DeviceGridRow rootRow)
+        {
+            var snapshot = new CollectionDeviceSnapshot
+            {
+                DeviceId = rootRow.Id,
+                Name = rootRow.Name,
+                Host = rootRow.Host,
+                Port = rootRow.Port,
+                LedCount = rootRow.LedCount,
+                StripCount = rootRow.StripCount
+            };
+
+            if (rootRow.Enabled)
+            {
+                SceneConfig? laserScene = FindSceneById(rootRow.AssignedLaserSceneId);
+                if (laserScene != null && SceneTypeRules.IsLaser(laserScene.Type))
+                {
+                    snapshot.LaserScene = laserScene.Clone();
+                }
+
+                SceneConfig? strobeScene = FindSceneById(rootRow.AssignedStrobeSceneId);
+                if (strobeScene != null && SceneTypeRules.IsStrobe(strobeScene.Type))
+                {
+                    snapshot.StrobeScene = strobeScene.Clone();
+                }
+            }
+
+            int offset = 0;
+            foreach (DeviceGridRow stripRow in GetStripRows(rootRow.Id))
+            {
+                if (stripRow.Enabled)
+                {
+                    SceneConfig? scene = FindSceneById(stripRow.AssignedSceneId);
+                    if (scene != null && SceneTypeRules.SupportsStripAssignment(scene.Type) && stripRow.LedCount > 0)
+                    {
+                        snapshot.Strips.Add(new CollectionStripSnapshot
+                        {
+                            StripIndex = stripRow.StripIndex,
+                            StartIndex = offset,
+                            LedCount = stripRow.LedCount,
+                            Scene = scene.Clone()
+                        });
+                    }
+                }
+
+                offset += Math.Max(0, stripRow.LedCount);
+            }
+
+            return HasSnapshotTargets(snapshot) ? snapshot : null;
+        }
+
+        private async void dgvCollections_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.Button != MouseButtons.Left || (ModifierKeys & Keys.Control) != Keys.Control)
+            {
+                return;
+            }
+
+            if (dgvCollections.Rows[e.RowIndex].DataBoundItem is not CollectionGridRow row)
+            {
+                return;
+            }
+
+            ConfigurationCollection? collection = FindCollectionById(row.Id);
+            if (collection != null)
+            {
+                await StartCollectionOverrideAsync(collection, CollectionActivationMode.Toggle, holdShortcut: null);
+            }
+        }
+
+        private void dgvCollections_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
+        {
+            if (dgvCollections.IsCurrentCellDirty && IsImmediateCommitCell(dgvCollections))
+            {
+                dgvCollections.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            }
+        }
+
+        private void dgvCollections_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (!ShouldHandleValueChangedImmediately(dgvCollections, e))
+            {
+                return;
+            }
+
+            HandleCollectionCellChanged(e.RowIndex);
+        }
+
+        private void dgvCollections_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (IsImmediateCommitColumn(dgvCollections, e.ColumnIndex))
+            {
+                return;
+            }
+
+            HandleCollectionCellChanged(e.RowIndex);
+        }
+
+        private void HandleCollectionCellChanged(int rowIndex)
+        {
+            if (isLoading || rowIndex < 0)
+            {
+                return;
+            }
+
+            if (dgvCollections.Rows[rowIndex].DataBoundItem is not CollectionGridRow row)
+            {
+                return;
+            }
+
+            ConfigurationCollection? collection = FindCollectionById(row.Id);
+            if (collection == null)
+            {
+                return;
+            }
+
+            collection.Name = string.IsNullOrWhiteSpace(row.Name) ? collection.Name : row.Name.Trim();
+            collection.ActivationMode = row.ActivationMode;
+            RefreshCollectionRow(collection);
+        }
+
+        private void dgvCollections_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
+        {
+            string propertyName = dgvCollections.Columns[e.ColumnIndex].DataPropertyName;
+            if (propertyName == nameof(CollectionGridRow.Name) && string.IsNullOrWhiteSpace(e.FormattedValue?.ToString()))
+            {
+                e.Cancel = true;
+                dgvCollections.Rows[e.RowIndex].ErrorText = "Collection name is required.";
+                return;
+            }
+
+            dgvCollections.Rows[e.RowIndex].ErrorText = string.Empty;
+        }
+
+        private void dgvCollections_DataError(object? sender, DataGridViewDataErrorEventArgs e)
+        {
+            e.ThrowException = false;
+        }
+
+        private void GlobalShortcutManager_ShortcutKeyDown(object? sender, GlobalShortcutEventArgs e)
+        {
+            if (e.IsRepeat)
+            {
+                return;
+            }
+
+            SafeUi(() => _ = HandleGlobalShortcutDownAsync(e.Shortcut));
+        }
+
+        private void GlobalShortcutManager_ShortcutKeyUp(object? sender, GlobalShortcutEventArgs e)
+        {
+            SafeUi(() => _ = HandleGlobalShortcutUpAsync());
+        }
+
+        private async Task HandleGlobalShortcutDownAsync(KeyboardShortcutConfig shortcut)
+        {
+            if (shortcut.IsEmpty || !shortcut.IsUsable)
+            {
+                return;
+            }
+
+            if (appConfig.ResetShortcut != null && !appConfig.ResetShortcut.IsEmpty && shortcut.Matches(appConfig.ResetShortcut))
+            {
+                await StopCollectionOverrideAsync(resumeDefault: true);
+                return;
+            }
+
+            ConfigurationCollection? collection = appConfig.Collections
+                .FirstOrDefault(item => item.Shortcut != null && !item.Shortcut.IsEmpty && shortcut.Matches(item.Shortcut));
+            if (collection == null)
+            {
+                return;
+            }
+
+            if (string.Equals(activeCollectionId, collection.Id, StringComparison.Ordinal)
+                && activeCollectionMode == collection.ActivationMode)
+            {
+                return;
+            }
+
+            KeyboardShortcutConfig? holdShortcut = collection.ActivationMode == CollectionActivationMode.Hold
+                ? shortcut
+                : null;
+            await StartCollectionOverrideAsync(collection, collection.ActivationMode, holdShortcut);
+        }
+
+        private async Task HandleGlobalShortcutUpAsync()
+        {
+            if (!collectionOverrideActive || activeCollectionMode != CollectionActivationMode.Hold || activeHoldShortcut == null)
+            {
+                return;
+            }
+
+            if (globalShortcutManager == null || !globalShortcutManager.IsShortcutPressed(activeHoldShortcut))
+            {
+                await StopCollectionOverrideAsync(resumeDefault: true);
             }
         }
 
@@ -1100,6 +1797,13 @@ namespace Ledqualizer
             }
 
             string propertyName = dgvDevices.Columns[e.ColumnIndex].DataPropertyName;
+            if (row.Kind == DeviceRowKind.Device
+                && propertyName == nameof(DeviceGridRow.AssignedSceneId))
+            {
+                e.Cancel = true;
+                return;
+            }
+
             if (row.Kind == DeviceRowKind.Strip
                 && propertyName is nameof(DeviceGridRow.Name)
                     or nameof(DeviceGridRow.Host)
@@ -1134,6 +1838,12 @@ namespace Ledqualizer
             else if (propertyName == nameof(DeviceGridRow.LedCount))
             {
                 e.Value = row.LedCount.ToString();
+                e.FormattingApplied = true;
+            }
+            else if (row.Kind == DeviceRowKind.Device
+                && propertyName == nameof(DeviceGridRow.AssignedSceneId))
+            {
+                e.Value = string.Empty;
                 e.FormattingApplied = true;
             }
             else if (row.Kind == DeviceRowKind.Strip
@@ -1347,7 +2057,7 @@ namespace Ledqualizer
 
             foreach (DeviceGridRow row in deviceRows)
             {
-                if (!IsLedSceneAssigned(row.AssignedSceneId))
+                if (row.Kind == DeviceRowKind.Strip && !IsLedSceneAssigned(row.AssignedSceneId))
                 {
                     row.AssignedSceneId = fallbackLedSceneId;
                 }
@@ -1605,9 +2315,10 @@ namespace Ledqualizer
             }
 
             bool isAssigned = deviceRows.Any(device =>
-                string.Equals(device.AssignedSceneId, selectedScene.Id, StringComparison.Ordinal)
-                || string.Equals(device.AssignedLaserSceneId, selectedScene.Id, StringComparison.Ordinal)
-                || string.Equals(device.AssignedStrobeSceneId, selectedScene.Id, StringComparison.Ordinal));
+                (device.Kind == DeviceRowKind.Strip && string.Equals(device.AssignedSceneId, selectedScene.Id, StringComparison.Ordinal))
+                || (device.Kind == DeviceRowKind.Device
+                    && (string.Equals(device.AssignedLaserSceneId, selectedScene.Id, StringComparison.Ordinal)
+                        || string.Equals(device.AssignedStrobeSceneId, selectedScene.Id, StringComparison.Ordinal))));
             if (isAssigned)
             {
                 MessageBox.Show(this, "This scene is still assigned to one or more devices.", "Scene In Use", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1860,7 +2571,7 @@ namespace Ledqualizer
                     Dictionary<int, DeviceGridRow> existingStripRows = GetStripRows(row.Id)
                         .ToDictionary(stripRow => stripRow.StripIndex, stripRow => stripRow);
 
-                    if (metadata.StripCount >= 2)
+                    if (metadata.StripCount >= 1)
                     {
                         foreach (DeviceStripMetadata stripMetadata in metadata.Strips)
                         {
@@ -1894,14 +2605,6 @@ namespace Ledqualizer
                     foreach (DeviceGridRow obsoleteStrip in existingStripRows.Values.Where(stripRow => metadata.Strips.All(strip => strip.Index != stripRow.StripIndex)).ToList())
                     {
                         deviceRows.Remove(obsoleteStrip);
-                    }
-
-                    if (metadata.StripCount < 2)
-                    {
-                        foreach (DeviceGridRow obsoleteStrip in existingStripRows.Values.ToList())
-                        {
-                            deviceRows.Remove(obsoleteStrip);
-                        }
                     }
 
                     DeviceConfig? config = appConfig.Devices.FirstOrDefault(device => device.Id == row.Id);
@@ -1981,9 +2684,12 @@ namespace Ledqualizer
 
             try
             {
+                await StopCollectionOverrideAsync(resumeDefault: false);
                 await StopAllDeviceRunsAsync();
                 SyncConfigFromUi();
-                appConfig.SaveToIni();
+                appConfig.Save();
+                globalShortcutManager?.Dispose();
+                globalShortcutManager = null;
                 shutdownCompleted = true;
                 Close();
             }

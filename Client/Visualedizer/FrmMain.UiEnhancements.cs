@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
@@ -755,6 +756,8 @@ namespace Ledqualizer
     {
         private const int ArrowAreaWidth = 18;
 
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public ContextMenuStrip? DropDownMenu { get; set; }
 
         public void ShowDropDown()
