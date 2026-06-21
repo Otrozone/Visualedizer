@@ -885,10 +885,22 @@ namespace Ledqualizer
 
     internal readonly record struct AuxiliaryTriggerEvaluation(bool Triggered, bool StateChanged, bool OutputActive);
 
+    internal readonly record struct AuxiliaryDmxTransmissionOptions(bool SendFullPacket, int RequestedChannelCount);
+
     internal static class AuxiliaryPayloadBuilder
     {
         private static readonly byte[] Magic = { (byte)'V', (byte)'A', (byte)'U', (byte)'X' };
-        private const byte Version = 1;
+        private const byte LegacyVersion = 1;
+        private const byte Version = 2;
+        private const byte StrobeEnabledFlag = 0x01;
+        private const byte SendFullPacketFlag = 0x02;
+        private const int LegacyHeaderLength = 7;
+        private const int HeaderLength = 9;
+        private const int MaxDmxChannelCount = 512;
+        public const int DefaultCompactChannelCount = 6;
+
+        public static AuxiliaryDmxTransmissionOptions DefaultTransmissionOptions { get; } =
+            new(false, DefaultCompactChannelCount);
 
         public static byte[] BuildLaserPayload(
             LaserDmxSceneConfig config,
@@ -925,41 +937,117 @@ namespace Ledqualizer
                 .OrderBy(item => item.Channel)
                 .ToList();
 
-            return BuildPayload(resolvedChannels, strobeEnabled);
+            return BuildPayload(resolvedChannels, strobeEnabled, GetTransmissionOptions(config));
         }
 
         public static byte[] BuildStrobePayload(bool enabled)
         {
-            return BuildPayload(Array.Empty<(int Channel, int Value)>(), enabled);
+            return BuildStrobePayload(enabled, DefaultTransmissionOptions);
+        }
+
+        public static byte[] BuildStrobePayload(bool enabled, AuxiliaryDmxTransmissionOptions transmissionOptions)
+        {
+            return BuildPayload(Array.Empty<(int Channel, int Value)>(), enabled, transmissionOptions);
         }
 
         public static byte[] BuildExplicitPayload(IReadOnlyList<(int Channel, int Value)> channels, bool strobeEnabled)
         {
-            return BuildPayload(channels, strobeEnabled);
+            return BuildExplicitPayload(channels, strobeEnabled, DefaultTransmissionOptions);
+        }
+
+        public static byte[] BuildExplicitPayload(
+            IReadOnlyList<(int Channel, int Value)> channels,
+            bool strobeEnabled,
+            AuxiliaryDmxTransmissionOptions transmissionOptions)
+        {
+            return BuildPayload(channels, strobeEnabled, transmissionOptions);
         }
 
         public static byte[] BuildOffPayload()
         {
-            return BuildPayload(Array.Empty<(int Channel, int Value)>(), false);
+            return BuildOffPayload(DefaultTransmissionOptions);
+        }
+
+        public static byte[] BuildOffPayload(AuxiliaryDmxTransmissionOptions transmissionOptions)
+        {
+            return BuildPayload(Array.Empty<(int Channel, int Value)>(), false, transmissionOptions);
+        }
+
+        public static AuxiliaryDmxTransmissionOptions GetTransmissionOptions(LaserDmxSceneConfig? config)
+        {
+            if (config == null)
+            {
+                return DefaultTransmissionOptions;
+            }
+
+            if (config.SendFullDmxPacket)
+            {
+                return new AuxiliaryDmxTransmissionOptions(true, MaxDmxChannelCount);
+            }
+
+            int highestConfiguredChannel = config.Channels.Count == 0
+                ? 0
+                : config.Channels.Max(channel => Math.Clamp(channel.Channel, 1, MaxDmxChannelCount));
+            return new AuxiliaryDmxTransmissionOptions(
+                false,
+                Math.Max(DefaultCompactChannelCount, highestConfiguredChannel));
         }
 
         public static bool TryParsePayload(byte[] payload, out List<(int Channel, int Value)> channels, out bool strobeEnabled)
         {
+            return TryParsePayload(payload, out channels, out strobeEnabled, out _);
+        }
+
+        public static bool TryParsePayload(
+            byte[] payload,
+            out List<(int Channel, int Value)> channels,
+            out bool strobeEnabled,
+            out AuxiliaryDmxTransmissionOptions transmissionOptions)
+        {
             channels = new List<(int Channel, int Value)>();
             strobeEnabled = false;
-            if (payload.Length < 7
+            transmissionOptions = DefaultTransmissionOptions;
+            if (payload.Length < LegacyHeaderLength
                 || payload[0] != Magic[0]
                 || payload[1] != Magic[1]
                 || payload[2] != Magic[2]
-                || payload[3] != Magic[3]
-                || payload[4] != Version)
+                || payload[3] != Magic[3])
             {
                 return false;
             }
 
-            strobeEnabled = payload[5] != 0;
-            int channelCount = payload[6];
-            int expectedLength = 7 + (channelCount * 3);
+            byte version = payload[4];
+            int headerLength;
+            int channelCount;
+            if (version == LegacyVersion)
+            {
+                headerLength = LegacyHeaderLength;
+                strobeEnabled = payload[5] != 0;
+                channelCount = payload[6];
+                transmissionOptions = new AuxiliaryDmxTransmissionOptions(true, MaxDmxChannelCount);
+            }
+            else if (version == Version)
+            {
+                if (payload.Length < HeaderLength)
+                {
+                    return false;
+                }
+
+                headerLength = HeaderLength;
+                byte flags = payload[5];
+                strobeEnabled = (flags & StrobeEnabledFlag) != 0;
+                channelCount = payload[6];
+                int requestedChannelCount = payload[7] | (payload[8] << 8);
+                transmissionOptions = new AuxiliaryDmxTransmissionOptions(
+                    (flags & SendFullPacketFlag) != 0,
+                    requestedChannelCount);
+            }
+            else
+            {
+                return false;
+            }
+
+            int expectedLength = headerLength + (channelCount * 3);
             if (payload.Length < expectedLength)
             {
                 return false;
@@ -967,39 +1055,76 @@ namespace Ledqualizer
 
             for (int i = 0; i < channelCount; i++)
             {
-                int offset = 7 + (i * 3);
+                int offset = headerLength + (i * 3);
                 int channel = payload[offset] | (payload[offset + 1] << 8);
                 int value = payload[offset + 2];
                 channels.Add((channel, value));
             }
 
+            int highestPairChannel = channels.Count == 0
+                ? 0
+                : channels.Max(channel => Math.Clamp(channel.Channel, 1, MaxDmxChannelCount));
+            transmissionOptions = NormalizeTransmissionOptions(transmissionOptions, highestPairChannel);
             return true;
         }
 
-        private static byte[] BuildPayload(IReadOnlyList<(int Channel, int Value)> channels, bool strobeEnabled)
+        private static byte[] BuildPayload(
+            IReadOnlyList<(int Channel, int Value)> channels,
+            bool strobeEnabled,
+            AuxiliaryDmxTransmissionOptions transmissionOptions)
         {
-            int channelCount = Math.Min(channels.Count, byte.MaxValue);
-            byte[] payload = new byte[7 + channelCount * 3];
+            List<(int Channel, int Value)> normalizedChannels = channels
+                .Take(byte.MaxValue)
+                .Select(channel => (
+                    Channel: Math.Clamp(channel.Channel, 1, MaxDmxChannelCount),
+                    Value: Math.Clamp(channel.Value, 0, 255)))
+                .ToList();
+            int highestPairChannel = normalizedChannels.Count == 0
+                ? 0
+                : normalizedChannels.Max(channel => channel.Channel);
+            transmissionOptions = NormalizeTransmissionOptions(transmissionOptions, highestPairChannel);
+
+            int channelCount = normalizedChannels.Count;
+            byte[] payload = new byte[HeaderLength + channelCount * 3];
             Array.Copy(Magic, payload, Magic.Length);
             payload[4] = Version;
-            payload[5] = strobeEnabled ? (byte)1 : (byte)0;
+            payload[5] = (byte)((strobeEnabled ? StrobeEnabledFlag : 0)
+                | (transmissionOptions.SendFullPacket ? SendFullPacketFlag : 0));
             payload[6] = (byte)channelCount;
+            payload[7] = (byte)(transmissionOptions.RequestedChannelCount & 0xFF);
+            payload[8] = (byte)((transmissionOptions.RequestedChannelCount >> 8) & 0xFF);
 
             for (int i = 0; i < channelCount; i++)
             {
-                int offset = 7 + i * 3;
-                payload[offset] = (byte)(channels[i].Channel & 0xFF);
-                payload[offset + 1] = (byte)((channels[i].Channel >> 8) & 0xFF);
-                payload[offset + 2] = (byte)Math.Clamp(channels[i].Value, 0, 255);
+                int offset = HeaderLength + i * 3;
+                payload[offset] = (byte)(normalizedChannels[i].Channel & 0xFF);
+                payload[offset + 1] = (byte)((normalizedChannels[i].Channel >> 8) & 0xFF);
+                payload[offset + 2] = (byte)normalizedChannels[i].Value;
             }
 
             return payload;
         }
 
+        private static AuxiliaryDmxTransmissionOptions NormalizeTransmissionOptions(
+            AuxiliaryDmxTransmissionOptions transmissionOptions,
+            int highestPairChannel)
+        {
+            if (transmissionOptions.SendFullPacket)
+            {
+                return new AuxiliaryDmxTransmissionOptions(true, MaxDmxChannelCount);
+            }
+
+            int requestedChannelCount = Math.Clamp(transmissionOptions.RequestedChannelCount, 1, MaxDmxChannelCount);
+            requestedChannelCount = Math.Max(requestedChannelCount, DefaultCompactChannelCount);
+            requestedChannelCount = Math.Max(requestedChannelCount, Math.Clamp(highestPairChannel, 0, MaxDmxChannelCount));
+            return new AuxiliaryDmxTransmissionOptions(false, requestedChannelCount);
+        }
+
         private static string BuildLaserSignature(LaserDmxSceneConfig config)
         {
-            return string.Join("|", config.Channels.Select(channel =>
+            string channelSignature = string.Join("|", config.Channels.Select(channel =>
                 $"{channel.Channel}:{channel.Mode}:{channel.ConstantValue}:{channel.RangeMin}:{channel.RangeMax}:{string.Join(",", channel.Values)}:{channel.RefreshEnabled}:{channel.RefreshIntervalSeconds:F3}"));
+            return $"{config.SendFullDmxPacket}:{channelSignature}";
         }
     }
 
@@ -1100,6 +1225,7 @@ namespace Ledqualizer
         private bool strobeOutputActive;
         private string? lastLaserSceneId;
         private string? lastStrobeSceneId;
+        private AuxiliaryDmxTransmissionOptions lastAuxiliaryTransmissionOptions = AuxiliaryPayloadBuilder.DefaultTransmissionOptions;
         private readonly HashSet<string> registeredImageSceneIds = new(StringComparer.Ordinal);
         private static readonly object SharedImageSceneStatesLock = new();
         private static readonly Dictionary<string, ImageScenePlaybackState> SharedImageSceneStates = new(StringComparer.Ordinal);
@@ -1226,7 +1352,7 @@ namespace Ledqualizer
             {
                 if (auxiliaryWasActive || laserOutputActive || strobeOutputActive)
                 {
-                    byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
+                    byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload(lastAuxiliaryTransmissionOptions);
                     foreach (DeviceTarget device in devices)
                     {
                         await device.Session.SendFrameAsync(offFrame, CancellationToken.None).ConfigureAwait(false);
@@ -1259,6 +1385,11 @@ namespace Ledqualizer
             bool hasLaserScene = laserScene?.Type == SceneType.LaserDmx;
             bool hasStrobeScene = strobeScene?.Type == SceneType.Strobe;
             bool hasAuxiliaryScene = hasLaserScene || hasStrobeScene;
+            AuxiliaryDmxTransmissionOptions currentTransmissionOptions = hasLaserScene && laserScene != null
+                ? AuxiliaryPayloadBuilder.GetTransmissionOptions(laserScene.LaserDmx)
+                : lastAuxiliaryTransmissionOptions;
+            bool transmissionOptionsChanged = hasLaserScene
+                && !currentTransmissionOptions.Equals(lastAuxiliaryTransmissionOptions);
 
             if (!hasAuxiliaryScene)
             {
@@ -1276,7 +1407,7 @@ namespace Ledqualizer
                 laserOutputActive = false;
                 strobeOutputActive = false;
 
-                byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
+                byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload(lastAuxiliaryTransmissionOptions);
                 bool offFrameSent = false;
                 foreach (DeviceTarget device in devices)
                 {
@@ -1284,6 +1415,7 @@ namespace Ledqualizer
                     AuxiliaryRuntimeRegistry.Clear(device.Config.Id);
                 }
 
+                lastAuxiliaryTransmissionOptions = AuxiliaryPayloadBuilder.DefaultTransmissionOptions;
                 return offFrameSent;
             }
 
@@ -1308,6 +1440,10 @@ namespace Ledqualizer
             DateTime nowUtc = DateTime.UtcNow;
             AuxiliaryTriggerEvaluation laserEvaluation = default;
             AuxiliaryTriggerEvaluation strobeEvaluation = default;
+            if (hasLaserScene && laserScene != null)
+            {
+                lastAuxiliaryTransmissionOptions = currentTransmissionOptions;
+            }
 
             if (hasLaserScene && laserScene != null)
             {
@@ -1357,6 +1493,7 @@ namespace Ledqualizer
                 || refreshChannels.Count > 0
                 || laserSceneChanged
                 || strobeSceneChanged
+                || transmissionOptionsChanged
                 || (laserOutputActive != previousLaserOutputActive)
                 || (strobeOutputActive != previousStrobeOutputActive);
 
@@ -1371,7 +1508,7 @@ namespace Ledqualizer
                 }
 
                 auxiliaryWasActive = false;
-                byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload();
+                byte[] offFrame = AuxiliaryPayloadBuilder.BuildOffPayload(currentTransmissionOptions);
                 bool anyOffSent = false;
                 foreach (DeviceTarget device in devices)
                 {
@@ -1388,14 +1525,21 @@ namespace Ledqualizer
                 return true;
             }
 
-            byte[] payload = laserOutputActive && laserScene != null
-                ? AuxiliaryPayloadBuilder.BuildLaserPayload(
+            byte[] payload;
+            if (laserOutputActive && laserScene != null)
+            {
+                lastAuxiliaryTransmissionOptions = AuxiliaryPayloadBuilder.GetTransmissionOptions(laserScene.LaserDmx);
+                payload = AuxiliaryPayloadBuilder.BuildLaserPayload(
                     laserScene.LaserDmx,
                     auxiliaryLaserRuntimeState,
                     refreshAll,
                     refreshChannels,
-                    strobeOutputActive)
-                : AuxiliaryPayloadBuilder.BuildStrobePayload(strobeOutputActive);
+                    strobeOutputActive);
+            }
+            else
+            {
+                payload = AuxiliaryPayloadBuilder.BuildStrobePayload(strobeOutputActive, currentTransmissionOptions);
+            }
 
             bool anySent = false;
             foreach (DeviceTarget device in devices)

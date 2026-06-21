@@ -69,6 +69,7 @@ void setup() {
 
 void loop() {
   pollWebSocket();
+  pollAuxiliaryOutputs();
 
   if (dmxEnabled) {
     #ifdef ESP32S3

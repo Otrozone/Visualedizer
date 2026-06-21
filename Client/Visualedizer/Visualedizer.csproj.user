@@ -4,6 +4,9 @@
     <Compile Update="FrmMain.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="FrmMain.GridReordering.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="FrmMain.UiEnhancements.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -17,6 +20,9 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Update="ScreenRowCaptureSceneEditorForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="ShortcutCaptureForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Update="SolidColorSceneEditorForm.cs">

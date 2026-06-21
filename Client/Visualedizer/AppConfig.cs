@@ -206,56 +206,77 @@ namespace Ledqualizer
 
         private static void EnsureStripDefaults(DeviceConfig device, string fallbackSceneId, Func<string, SceneType?> findSceneType)
         {
-            Dictionary<int, DeviceStripConfig> existing = device.Strips
-                .Where(strip => strip.StripIndex >= 0)
-                .GroupBy(strip => strip.StripIndex)
-                .ToDictionary(group => group.Key, group => group.First());
-
             var normalized = new List<DeviceStripConfig>();
+            var activeStrips = new List<DeviceStripConfig>();
+            var extraStrips = new List<DeviceStripConfig>();
+            var seenActiveIndices = new HashSet<int>();
             int fallbackLedCount = device.StripCount > 0 ? Math.Max(device.LedCount / Math.Max(device.StripCount, 1), 0) : 0;
-            for (int i = 0; i < device.StripCount; i++)
-            {
-                if (!existing.TryGetValue(i, out DeviceStripConfig? strip))
-                {
-                    strip = new DeviceStripConfig
-                    {
-                        StripIndex = i,
-                        AssignedSceneId = fallbackSceneId
-                    };
-                }
 
-                if (string.IsNullOrWhiteSpace(strip.AssignedSceneId))
+            foreach (DeviceStripConfig strip in device.Strips.Where(strip => strip.StripIndex >= 0))
+            {
+                if (strip.StripIndex < device.StripCount)
                 {
-                    strip.AssignedSceneId = fallbackSceneId;
+                    if (seenActiveIndices.Add(strip.StripIndex))
+                    {
+                        activeStrips.Add(strip);
+                    }
                 }
                 else
                 {
-                    SceneType? sceneType = findSceneType(strip.AssignedSceneId);
-                    if (sceneType == null || !SceneTypeRules.SupportsStripAssignment(sceneType.Value))
-                    {
-                        strip.AssignedSceneId = fallbackSceneId;
-                    }
+                    extraStrips.Add(strip);
                 }
+            }
 
-                if (strip.LedCount <= 0)
-                {
-                    strip.LedCount = fallbackLedCount;
-                }
-
+            foreach (DeviceStripConfig strip in activeStrips)
+            {
+                NormalizeStrip(strip, fallbackSceneId, fallbackLedCount, findSceneType);
                 normalized.Add(strip);
             }
 
-            foreach (DeviceStripConfig extraStrip in existing.Values.Where(strip => strip.StripIndex >= device.StripCount).OrderBy(strip => strip.StripIndex))
+            for (int i = 0; i < device.StripCount; i++)
             {
-                if (string.IsNullOrWhiteSpace(extraStrip.AssignedSceneId))
+                if (seenActiveIndices.Contains(i))
                 {
-                    extraStrip.AssignedSceneId = fallbackSceneId;
+                    continue;
                 }
 
+                var strip = new DeviceStripConfig
+                {
+                    StripIndex = i,
+                    AssignedSceneId = fallbackSceneId
+                };
+                NormalizeStrip(strip, fallbackSceneId, fallbackLedCount, findSceneType);
+                normalized.Add(strip);
+            }
+
+            foreach (DeviceStripConfig extraStrip in extraStrips)
+            {
+                NormalizeStrip(extraStrip, fallbackSceneId, fallbackLedCount, findSceneType);
                 normalized.Add(extraStrip);
             }
 
             device.Strips = normalized;
+        }
+
+        private static void NormalizeStrip(DeviceStripConfig strip, string fallbackSceneId, int fallbackLedCount, Func<string, SceneType?> findSceneType)
+        {
+            if (string.IsNullOrWhiteSpace(strip.AssignedSceneId))
+            {
+                strip.AssignedSceneId = fallbackSceneId;
+            }
+            else
+            {
+                SceneType? sceneType = findSceneType(strip.AssignedSceneId);
+                if (sceneType == null || !SceneTypeRules.SupportsStripAssignment(sceneType.Value))
+                {
+                    strip.AssignedSceneId = fallbackSceneId;
+                }
+            }
+
+            if (strip.LedCount <= 0)
+            {
+                strip.LedCount = fallbackLedCount;
+            }
         }
 
         private SceneType? FindSceneType(string sceneId)

@@ -51,7 +51,6 @@ extern uint16_t dmxUniverse;
 extern uint16_t dmxUniverseCount;
 extern bool laserEnabled;
 extern int laserTxPin;
-extern int laserRxPin;
 extern int laserEnablePin;
 extern bool strobeEnabled;
 extern int strobePin;

@@ -35,6 +35,7 @@ namespace Ledqualizer
             {
                 EnsureSelectorDataLoaded();
                 LoadTrigger(scene.LaserDmx.Trigger);
+                chkSendFullDmxPacket.Checked = scene.LaserDmx.SendFullDmxPacket;
 
                 rows.Clear();
                 foreach (LaserDmxChannelRow channel in scene.LaserDmx.Channels)
@@ -219,6 +220,11 @@ namespace Ledqualizer
             CommitTriggerToScene();
         }
 
+        private void DmxPacketControlChanged(object? sender, EventArgs e)
+        {
+            CommitDmxPacketSettingsToScene();
+        }
+
         private void UpdateTriggerPanelVisibility()
         {
             AuxiliaryTriggerEventType eventType = cbEventType.SelectedItem is AuxiliaryTriggerEventType value
@@ -235,6 +241,7 @@ namespace Ledqualizer
         private void CommitAll()
         {
             CommitTriggerToScene();
+            CommitDmxPacketSettingsToScene();
             CommitRowsToScene();
         }
 
@@ -265,6 +272,17 @@ namespace Ledqualizer
             trigger.ScreenCapture.Height = (int)numScreenHeight.Value;
             trigger.ScreenCapture.BrightnessThresholdPercent = (int)numScreenBrightnessThreshold.Value;
 
+            SceneChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void CommitDmxPacketSettingsToScene()
+        {
+            if (isLoading || CurrentScene == null)
+            {
+                return;
+            }
+
+            CurrentScene.LaserDmx.SendFullDmxPacket = chkSendFullDmxPacket.Checked;
             SceneChanged?.Invoke(this, EventArgs.Empty);
         }
 

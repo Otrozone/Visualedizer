@@ -49,6 +49,7 @@ namespace Ledqualizer
         private NumericUpDown numScreenBrightnessThreshold = null!;
         private Button btnPickArea = null!;
         private DataGridView dgvChannels = null!;
+        private CheckBox chkSendFullDmxPacket = null!;
         private Button btnAddRow = null!;
         private Button btnRemoveRow = null!;
         private Button btnSend = null!;
@@ -111,6 +112,7 @@ namespace Ledqualizer
             numScreenBrightnessThreshold = new NumericUpDown();
             dgvChannels = new DataGridView();
             panelActions = new FlowLayoutPanel();
+            chkSendFullDmxPacket = new CheckBox();
             btnAddRow = new Button();
             btnRemoveRow = new Button();
             btnSend = new Button();
@@ -401,6 +403,11 @@ namespace Ledqualizer
             panelActions.Dock = DockStyle.Fill;
             panelActions.FlowDirection = FlowDirection.LeftToRight;
 
+            chkSendFullDmxPacket.AutoSize = true;
+            chkSendFullDmxPacket.Margin = new Padding(0, 6, 18, 0);
+            chkSendFullDmxPacket.Text = "Send full DMX packet (512 channels)";
+            chkSendFullDmxPacket.CheckedChanged += DmxPacketControlChanged;
+
             btnAddRow.AutoSize = true;
             btnAddRow.Text = "Add Row";
             btnAddRow.Click += btnAddRow_Click;
@@ -413,6 +420,7 @@ namespace Ledqualizer
             btnSend.Text = "Send";
             btnSend.Click += btnSend_Click;
 
+            panelActions.Controls.Add(chkSendFullDmxPacket);
             panelActions.Controls.Add(btnAddRow);
             panelActions.Controls.Add(btnRemoveRow);
             panelActions.Controls.Add(btnSend);

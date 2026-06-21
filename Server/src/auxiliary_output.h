@@ -8,5 +8,6 @@ bool isAuxiliaryBinaryFrame(const uint8_t* payload, size_t length);
 void initAuxiliaryOutputs();
 void applyAuxiliaryBinaryFrame(const uint8_t* payload, size_t length);
 void clearAuxiliaryOutputs();
+void pollAuxiliaryOutputs();
 
 #endif  // AUXILIARY_OUTPUT_H

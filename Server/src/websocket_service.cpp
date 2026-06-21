@@ -2,7 +2,6 @@
 
 #include <WebSocketsServer.h>
 
-#include "auxiliary_output.h"
 #include "command_service.h"
 #include "led.h"
 #include "main.h"
@@ -46,7 +45,6 @@ void webSocketEvent(uint8_t clientNum, WStype_t type, uint8_t* payload, size_t l
     forEachLedStrip([](LedStripDvc& dvc) {
       requestOff(dvc.ledIdx);
     });
-    clearAuxiliaryOutputs();
   }
 }
 }  // namespace

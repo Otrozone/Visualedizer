@@ -119,6 +119,7 @@ namespace Ledqualizer
             ConfigureDeviceGrid();
             ConfigureSceneGrid();
             ConfigureCollectionGrid();
+            InitializeGridReordering();
             InitializeGlobalShortcutManager();
         }
 
@@ -456,7 +457,7 @@ namespace Ledqualizer
                 yield break;
             }
 
-            foreach (DeviceStripConfig strip in device.Strips.OrderBy(strip => strip.StripIndex))
+            foreach (DeviceStripConfig strip in device.Strips)
             {
                 yield return DeviceGridRow.FromStripConfig(device, strip);
             }
@@ -476,7 +477,6 @@ namespace Ledqualizer
         {
             return deviceRows
                 .Where(row => row.Kind == DeviceRowKind.Strip && string.Equals(row.ParentDeviceId, deviceId, StringComparison.Ordinal))
-                .OrderBy(row => row.StripIndex)
                 .ToList();
         }
 
@@ -807,7 +807,6 @@ namespace Ledqualizer
                 AssignedLaserSceneId = snapshot.LaserScene?.Id ?? string.Empty,
                 AssignedStrobeSceneId = snapshot.StrobeScene?.Id ?? string.Empty,
                 Strips = snapshot.Strips
-                    .OrderBy(strip => strip.StripIndex)
                     .Select(strip => new DeviceStripConfig
                     {
                         StripIndex = strip.StripIndex,
@@ -837,7 +836,6 @@ namespace Ledqualizer
         {
             return snapshot.Strips
                 .Where(strip => strip.Scene != null && strip.LedCount > 0)
-                .OrderBy(strip => strip.StripIndex)
                 .Select(strip => new DeviceSceneAssignment
                 {
                     Scene = strip.Scene!,
@@ -850,7 +848,6 @@ namespace Ledqualizer
         private static string BuildSnapshotRunSignature(CollectionDeviceSnapshot snapshot)
         {
             string stripSignature = string.Join("|", snapshot.Strips
-                .OrderBy(strip => strip.StripIndex)
                 .Select(strip => $"{strip.StripIndex}:{strip.StartIndex}:{strip.LedCount}:{strip.Scene?.Id}:{strip.Scene?.Type}"));
             return $"{snapshot.Host}|{snapshot.Port}|{snapshot.LedCount}|{snapshot.StripCount}|{snapshot.LaserScene?.Id}:{snapshot.LaserScene?.Type}|{snapshot.StrobeScene?.Id}:{snapshot.StrobeScene?.Type}|{stripSignature}";
         }
@@ -936,7 +933,6 @@ namespace Ledqualizer
             string laserSceneType = FindSceneById(config.AssignedLaserSceneId)?.Type.ToString() ?? string.Empty;
             string strobeSceneType = FindSceneById(config.AssignedStrobeSceneId)?.Type.ToString() ?? string.Empty;
             string stripSignature = string.Join("|", config.Strips
-                .OrderBy(strip => strip.StripIndex)
                 .Select(strip => $"{strip.StripIndex}:{strip.LedCount}:{strip.Enabled}:{strip.AssignedSceneId}:{FindSceneById(strip.AssignedSceneId)?.Type.ToString() ?? string.Empty}"));
             return $"{config.Host}|{config.Port}|{config.LedCount}|{config.StripCount}|{config.Enabled}|{config.AssignedLaserSceneId}|{laserSceneType}|{config.AssignedStrobeSceneId}|{strobeSceneType}|{stripSignature}";
         }
@@ -1254,8 +1250,9 @@ namespace Ledqualizer
             bool hasRuntimeState = AuxiliaryRuntimeRegistry.TryGet(row.Id, out byte[] currentPayload, out bool laserActive, out bool strobeActive);
             bool strobeEnabled = strobeEnabledOverride ?? strobeActive;
             List<(int Channel, int Value)> currentChannels = new();
+            AuxiliaryDmxTransmissionOptions transmissionOptions = AuxiliaryPayloadBuilder.DefaultTransmissionOptions;
             bool parsedCurrentPayload = hasRuntimeState
-                && AuxiliaryPayloadBuilder.TryParsePayload(currentPayload, out currentChannels, out _);
+                && AuxiliaryPayloadBuilder.TryParsePayload(currentPayload, out currentChannels, out _, out transmissionOptions);
 
             if (laserScene?.Type == SceneType.LaserDmx)
             {
@@ -1275,12 +1272,12 @@ namespace Ledqualizer
 
             if (laserActive && parsedCurrentPayload)
             {
-                return AuxiliaryPayloadBuilder.BuildExplicitPayload(currentChannels, strobeEnabled);
+                return AuxiliaryPayloadBuilder.BuildExplicitPayload(currentChannels, strobeEnabled, transmissionOptions);
             }
 
             return strobeEnabled
-                ? AuxiliaryPayloadBuilder.BuildStrobePayload(true)
-                : AuxiliaryPayloadBuilder.BuildOffPayload();
+                ? AuxiliaryPayloadBuilder.BuildStrobePayload(true, transmissionOptions)
+                : AuxiliaryPayloadBuilder.BuildOffPayload(transmissionOptions);
         }
 
         private async Task SendAuxiliaryPayloadToDevicesAsync(IReadOnlyList<DeviceConfig> devices, byte[] payload)
@@ -2573,6 +2570,7 @@ namespace Ledqualizer
 
                     if (metadata.StripCount >= 1)
                     {
+                        int insertIndex = deviceRows.IndexOf(row) + 1 + GetStripRows(row.Id).Count;
                         foreach (DeviceStripMetadata stripMetadata in metadata.Strips)
                         {
                             if (!existingStripRows.TryGetValue(stripMetadata.Index, out DeviceGridRow? stripRow))
@@ -2591,8 +2589,8 @@ namespace Ledqualizer
                                     Status = row.Enabled ? row.Status : "Disconnected"
                                 };
 
-                                int insertIndex = deviceRows.IndexOf(row) + 1 + deviceRows.Count(item => item.Kind == DeviceRowKind.Strip && string.Equals(item.ParentDeviceId, row.Id, StringComparison.Ordinal) && item.StripIndex < stripMetadata.Index);
                                 deviceRows.Insert(insertIndex, stripRow);
+                                insertIndex++;
                             }
 
                             stripRow.Host = row.Host;
@@ -2613,15 +2611,47 @@ namespace Ledqualizer
                         config.Name = metadata.Name;
                         config.LedCount = metadata.TotalLedCount;
                         config.StripCount = metadata.StripCount;
-                        config.Strips = metadata.Strips
-                            .Select(strip => new DeviceStripConfig
+                        Dictionary<int, DeviceStripConfig> existingConfigStrips = config.Strips
+                            .GroupBy(strip => strip.StripIndex)
+                            .ToDictionary(group => group.Key, group => group.First());
+                        var refreshedStrips = new List<DeviceStripConfig>();
+
+                        foreach (DeviceStripConfig existingStrip in config.Strips)
+                        {
+                            DeviceStripMetadata? metadataStrip = metadata.Strips.FirstOrDefault(strip => strip.Index == existingStrip.StripIndex);
+                            if (metadataStrip == null)
                             {
-                                StripIndex = strip.Index,
-                                LedCount = strip.LedCount,
-                                Enabled = config.Strips.FirstOrDefault(existing => existing.StripIndex == strip.Index)?.Enabled ?? false,
-                                AssignedSceneId = config.Strips.FirstOrDefault(existing => existing.StripIndex == strip.Index)?.AssignedSceneId ?? config.AssignedSceneId
-                            })
-                            .ToList();
+                                continue;
+                            }
+
+                            refreshedStrips.Add(new DeviceStripConfig
+                            {
+                                StripIndex = metadataStrip.Index,
+                                LedCount = metadataStrip.LedCount,
+                                Enabled = existingStrip.Enabled,
+                                AssignedSceneId = existingStrip.AssignedSceneId
+                            });
+                        }
+
+                        foreach (DeviceStripMetadata metadataStrip in metadata.Strips)
+                        {
+                            if (refreshedStrips.Any(strip => strip.StripIndex == metadataStrip.Index))
+                            {
+                                continue;
+                            }
+
+                            refreshedStrips.Add(new DeviceStripConfig
+                            {
+                                StripIndex = metadataStrip.Index,
+                                LedCount = metadataStrip.LedCount,
+                                Enabled = existingConfigStrips.TryGetValue(metadataStrip.Index, out DeviceStripConfig? existingStrip) && existingStrip.Enabled,
+                                AssignedSceneId = existingConfigStrips.TryGetValue(metadataStrip.Index, out existingStrip)
+                                    ? existingStrip.AssignedSceneId
+                                    : config.AssignedSceneId
+                            });
+                        }
+
+                        config.Strips = refreshedStrips;
                     }
 
                     if (!HasAnyEnabledTarget(row.Id))

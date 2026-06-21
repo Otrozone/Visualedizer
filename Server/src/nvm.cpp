@@ -64,8 +64,7 @@ void initConf() {
   dmxUniverseCount = preferences.getUInt(NVM_DMX_UNIVERSE_COUNT, DMX_UNIVERSE_COUNT);
   laserEnabled = preferences.getBool(NVM_LASER_ENABLED, laserEnabled);
   laserTxPin = preferences.getInt(NVM_LASER_TX_PIN, laserTxPin);
-  laserRxPin = preferences.getInt(NVM_LASER_RX_PIN, laserRxPin);
-  laserEnablePin = preferences.getInt(NVM_LASER_EN_PIN, laserEnablePin);
+  laserEnablePin = preferences.getInt(NVM_LASER_ENABLE_PIN, laserEnablePin);
   strobeEnabled = preferences.getBool(NVM_STROBE_ENABLED, strobeEnabled);
   strobePin = preferences.getInt(NVM_STROBE_PIN, strobePin);
 
@@ -129,8 +128,7 @@ void handleGetConf(AsyncWebServerRequest *request) {
   jsonDoc[NVM_DMX_UNIVERSE_COUNT] = dmxUniverseCount;
   jsonDoc[NVM_LASER_ENABLED] = laserEnabled;
   jsonDoc[NVM_LASER_TX_PIN] = laserTxPin;
-  jsonDoc[NVM_LASER_RX_PIN] = laserRxPin;
-  jsonDoc[NVM_LASER_EN_PIN] = laserEnablePin;
+  jsonDoc[NVM_LASER_ENABLE_PIN] = laserEnablePin;
   jsonDoc[NVM_STROBE_ENABLED] = strobeEnabled;
   jsonDoc[NVM_STROBE_PIN] = strobePin;
 
@@ -183,8 +181,7 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   const int paramDmxUniverseCount = jsonDoc[NVM_DMX_UNIVERSE_COUNT].as<uint>();
   const bool paramLaserEnabled = jsonDoc[NVM_LASER_ENABLED].as<bool>();
   const int paramLaserTxPin = jsonDoc[NVM_LASER_TX_PIN].as<int>();
-  const int paramLaserRxPin = jsonDoc[NVM_LASER_RX_PIN].as<int>();
-  const int paramLaserEnablePin = jsonDoc[NVM_LASER_EN_PIN].as<int>();
+  const int paramLaserEnablePin = jsonDoc[NVM_LASER_ENABLE_PIN].as<int>();
   const bool paramStrobeEnabled = jsonDoc[NVM_STROBE_ENABLED].as<bool>();
   const int paramStrobePin = jsonDoc[NVM_STROBE_PIN].as<int>();
   
@@ -233,8 +230,7 @@ void handleSetConf(AsyncWebServerRequest *request, uint8_t *data, size_t len, si
   preferences.putUInt(NVM_DMX_UNIVERSE_COUNT, paramDmxUniverseCount);
   preferences.putBool(NVM_LASER_ENABLED, paramLaserEnabled);
   preferences.putInt(NVM_LASER_TX_PIN, paramLaserTxPin);
-  preferences.putInt(NVM_LASER_RX_PIN, paramLaserRxPin);
-  preferences.putInt(NVM_LASER_EN_PIN, paramLaserEnablePin);
+  preferences.putInt(NVM_LASER_ENABLE_PIN, paramLaserEnablePin);
   preferences.putBool(NVM_STROBE_ENABLED, paramStrobeEnabled);
   preferences.putInt(NVM_STROBE_PIN, paramStrobePin);
   preferences.putString(NVM_DEVICE_NAME, paramDeviceName);

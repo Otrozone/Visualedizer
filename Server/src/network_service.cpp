@@ -8,13 +8,59 @@
 namespace {
 constexpr uint8_t kWifiTimeoutSeconds = 15;
 unsigned long lastReconnectAttempt = 0;
+bool autoFallbackApConfigured = false;
 
-void confWifi() {
+void configureHostname() {
   if (deviceName != "Unnamed") {
     String hostname = deviceName;
     hostname.toLowerCase();
     WiFi.setHostname(hostname.c_str());
   }
+}
+
+bool startSoftAp() {
+  if (WiFi.softAP(wifiApSsid.c_str(), wifiApPassword.c_str())) {
+    Serial.println("AP started successfully.");
+    return true;
+  }
+
+  Serial.println("AP start failed.");
+  return false;
+}
+
+void startAutoFallbackAp() {
+  WiFi.mode(WIFI_AP);
+  autoFallbackApConfigured = true;
+  startSoftAp();
+}
+
+void ensureAutoFallbackAp() {
+  if (autoFallbackApConfigured) {
+    return;
+  }
+
+  Serial.println("WiFi disconnected in AUTO mode, enabling fallback AP.");
+  startAutoFallbackAp();
+}
+
+void startAutoReconnectWithFallbackAp() {
+  configureHostname();
+  WiFi.mode(WIFI_AP_STA);
+  autoFallbackApConfigured = true;
+  startSoftAp();
+  WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
+  WiFi.reconnect();
+}
+
+void switchAutoToStaMode() {
+  configureHostname();
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  autoFallbackApConfigured = false;
+}
+
+void confWifi() {
+  configureHostname();
 
   switch (wifiMode) {
     case DEVICE_WIFI_MODE_STA:
@@ -122,13 +168,15 @@ void initWifi() {
     ipAddress = WiFi.localIP();
     WiFi.setSleep(false);
   } else if (wifiMode == DEVICE_WIFI_MODE_AUTO || wifiMode == DEVICE_WIFI_MODE_AP_STA) {
-    Serial.print("Unable to connect to WiFi, switching to AP mode");
-    WiFi.mode(WIFI_AP);
-    if (WiFi.softAP(wifiApSsid.c_str(), wifiApPassword.c_str())) {
-      Serial.println("AP started successfully.");
+    Serial.println("Unable to connect to WiFi, switching to AP mode");
+    if (wifiMode == DEVICE_WIFI_MODE_AUTO) {
+      startAutoFallbackAp();
       ipAddress = WiFi.softAPIP();
     } else {
-      Serial.println("AP start failed.");
+      WiFi.mode(WIFI_AP);
+      if (startSoftAp()) {
+        ipAddress = WiFi.softAPIP();
+      }
     }
   } else if (wifiMode == DEVICE_WIFI_MODE_AP) {
     ipAddress = WiFi.softAPIP();
@@ -139,7 +187,18 @@ void initWifi() {
 
 void reconnectWifi() {
   if (WiFi.status() == WL_CONNECTED) {
+    if (wifiMode == DEVICE_WIFI_MODE_AUTO && autoFallbackApConfigured) {
+      switchAutoToStaMode();
+    }
     return;
+  }
+
+  if (wifiMode == DEVICE_WIFI_MODE_AP) {
+    return;
+  }
+
+  if (wifiMode == DEVICE_WIFI_MODE_AUTO) {
+    ensureAutoFallbackAp();
   }
 
   unsigned long now = millis();
@@ -149,6 +208,19 @@ void reconnectWifi() {
 
   lastReconnectAttempt = now;
   Serial.println("Attempting to reconnect to WiFi...");
+
+  if (wifiMode == DEVICE_WIFI_MODE_AUTO) {
+    startAutoReconnectWithFallbackAp();
+    waitForWifiConnection(kWifiTimeoutSeconds);
+
+    if (WiFi.status() == WL_CONNECTED) {
+      switchAutoToStaMode();
+    } else {
+      startAutoFallbackAp();
+    }
+    return;
+  }
+
   confWifi();
   WiFi.reconnect();
   waitForWifiConnection(kWifiTimeoutSeconds);

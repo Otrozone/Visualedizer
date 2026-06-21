@@ -490,6 +490,7 @@ namespace Ledqualizer
     public sealed class LaserDmxSceneConfig
     {
         public AuxiliaryTriggerConfig Trigger { get; set; } = new();
+        public bool SendFullDmxPacket { get; set; }
         public List<LaserDmxChannelRow> Channels { get; set; } = new();
 
         public LaserDmxSceneConfig Clone()
@@ -497,6 +498,7 @@ namespace Ledqualizer
             return new LaserDmxSceneConfig
             {
                 Trigger = Trigger.Clone(),
+                SendFullDmxPacket = SendFullDmxPacket,
                 Channels = Channels.Select(channel => channel.Clone()).ToList()
             };
         }
@@ -822,7 +824,8 @@ namespace Ledqualizer
         {
             int refreshCount = config.Channels.Count(channel => channel.RefreshEnabled);
             string channelSummary = $"{config.Channels.Count} channels" + (refreshCount > 0 ? $", {refreshCount} refreshing" : string.Empty);
-            return $"{BuildTriggerSummary(config.Trigger)}, {channelSummary}";
+            string packetSummary = config.SendFullDmxPacket ? ", full DMX packet" : string.Empty;
+            return $"{BuildTriggerSummary(config.Trigger)}, {channelSummary}{packetSummary}";
         }
 
         private static string BuildTriggerSummary(AuxiliaryTriggerConfig trigger)
