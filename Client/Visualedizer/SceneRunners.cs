@@ -1206,6 +1206,38 @@ namespace Ledqualizer
             }
         }
 
+        private sealed class SparkleAndFlashSceneState
+        {
+            public object SyncRoot { get; } = new();
+            public string ConfigSignature { get; set; } = string.Empty;
+            public List<SparkleSegmentEvent> SegmentEvents { get; } = new();
+            public SparkleFullStripEvent? FullStripEvent { get; set; }
+            public DateTime NextSegmentUtc { get; set; } = DateTime.MinValue;
+            public DateTime NextFullStripUtc { get; set; } = DateTime.MaxValue;
+            public DateTime NextSparkleHueChangeUtc { get; set; } = DateTime.MinValue;
+            public DateTime SparkleHueTransitionStartedUtc { get; set; } = DateTime.MinValue;
+            public DateTime SparkleHueTransitionEndsUtc { get; set; } = DateTime.MinValue;
+            public double CurrentSparkleHue { get; set; }
+            public double SparkleHueFrom { get; set; }
+            public double SparkleHueTo { get; set; }
+            public Random Random { get; } = new();
+        }
+
+        private sealed class SparkleSegmentEvent
+        {
+            public DateTime HoldUntilUtc { get; init; }
+            public DateTime EndUtc { get; init; }
+            public double StartFraction { get; init; }
+            public int Length { get; init; }
+        }
+
+        private sealed class SparkleFullStripEvent
+        {
+            public DateTime HoldUntilUtc { get; init; }
+            public DateTime EndUtc { get; init; }
+            public double Hue { get; init; }
+        }
+
         private readonly Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider;
         private readonly Func<SceneConfig?> laserSceneProvider;
         private readonly Func<SceneConfig?> strobeSceneProvider;
@@ -1227,9 +1259,13 @@ namespace Ledqualizer
         private string? lastStrobeSceneId;
         private AuxiliaryDmxTransmissionOptions lastAuxiliaryTransmissionOptions = AuxiliaryPayloadBuilder.DefaultTransmissionOptions;
         private readonly HashSet<string> registeredImageSceneIds = new(StringComparer.Ordinal);
+        private readonly HashSet<string> registeredSparkleSceneIds = new(StringComparer.Ordinal);
         private static readonly object SharedImageSceneStatesLock = new();
         private static readonly Dictionary<string, ImageScenePlaybackState> SharedImageSceneStates = new(StringComparer.Ordinal);
         private static readonly Dictionary<string, int> SharedImageSceneUsageCounts = new(StringComparer.Ordinal);
+        private static readonly object SharedSparkleSceneStatesLock = new();
+        private static readonly Dictionary<string, SparkleAndFlashSceneState> SharedSparkleSceneStates = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, int> SharedSparkleSceneUsageCounts = new(StringComparer.Ordinal);
 
         public CompositeSceneRunner(
             Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider,
@@ -1279,6 +1315,7 @@ namespace Ledqualizer
                     }
 
                     CleanupImageSceneStates(assignments);
+                    CleanupSparkleSceneStates(assignments);
 
                     bool needsSpectral = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysis)
                         || laserScene?.LaserDmx.Trigger.EventType == AuxiliaryTriggerEventType.SpectralAnalysis
@@ -1373,6 +1410,13 @@ namespace Ledqualizer
                 }
 
                 registeredImageSceneIds.Clear();
+
+                foreach (string sceneId in registeredSparkleSceneIds.ToList())
+                {
+                    ReleaseSharedSparkleSceneState(sceneId);
+                }
+
+                registeredSparkleSceneIds.Clear();
             }
         }
 
@@ -1708,6 +1752,28 @@ namespace Ledqualizer
             }
         }
 
+        private void CleanupSparkleSceneStates(IReadOnlyList<DeviceSceneAssignment> assignments)
+        {
+            HashSet<string> activeIds = assignments
+                .Where(assignment => assignment.Scene.Type == SceneType.SparkleAndFlash)
+                .Select(assignment => assignment.Scene.Id)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (string sceneId in registeredSparkleSceneIds.Where(sceneId => !activeIds.Contains(sceneId)).ToList())
+            {
+                ReleaseSharedSparkleSceneState(sceneId);
+                registeredSparkleSceneIds.Remove(sceneId);
+            }
+
+            foreach (string sceneId in activeIds)
+            {
+                if (registeredSparkleSceneIds.Add(sceneId))
+                {
+                    AcquireSharedSparkleSceneState(sceneId);
+                }
+            }
+        }
+
         private byte[] BuildAssignmentFrame(
             DeviceSceneAssignment assignment,
             Func<string?> audioDeviceIdProvider,
@@ -1725,6 +1791,7 @@ namespace Ledqualizer
                 SceneType.ScreenRowCapture => BuildScreenCaptureFrame(assignment.Scene.Id, assignment.Scene.ScreenRowCapture, assignment.LedCount, capturePreviewUpdater),
                 SceneType.SpectralAnalysis => BuildSpectralFrame(assignment.Scene, assignment.LedCount, spectralAnalysis, ref lastSpectralDb, spectralProgressReporter),
                 SceneType.ImageRowCapture => BuildImageCaptureFrame(assignment.Scene.Id, assignment.Scene.ImageRowCapture, assignment.LedCount, capturePreviewUpdater),
+                SceneType.SparkleAndFlash => BuildSparkleAndFlashFrame(assignment.Scene.Id, assignment.Scene.SparkleAndFlash, assignment.LedCount),
                 SceneType.LaserDmx => new byte[assignment.LedCount * 3],
                 SceneType.Strobe => new byte[assignment.LedCount * 3],
                 _ => BuildSolidFrame(assignment.LedCount, assignment.Scene.SolidColor),
@@ -1761,6 +1828,403 @@ namespace Ledqualizer
             }
 
             return frame;
+        }
+
+        private byte[] BuildSparkleAndFlashFrame(string sceneId, SparkleAndFlashSceneConfig config, int ledCount)
+        {
+            byte[] frame = new byte[Math.Max(ledCount, 0) * 3];
+            if (ledCount <= 0)
+            {
+                return frame;
+            }
+
+            SparkleAndFlashSceneState state = GetOrCreateSparkleSceneState(sceneId);
+            lock (state.SyncRoot)
+            {
+                DateTime nowUtc = DateTime.UtcNow;
+                string signature = BuildSparkleAndFlashSceneSignature(config);
+                if (!string.Equals(state.ConfigSignature, signature, StringComparison.Ordinal))
+                {
+                    ResetSparkleAndFlashState(state, config, signature, nowUtc);
+                }
+
+                AdvanceSparkleAndFlashState(state, config, nowUtc);
+
+                double[] intensities = new double[ledCount];
+                if (state.FullStripEvent != null)
+                {
+                    PaintFullStripFlash(frame, intensities, state.FullStripEvent, config, nowUtc);
+                }
+
+                double sparkleHue = UpdateSparkleHue(state, config, nowUtc);
+                foreach (SparkleSegmentEvent sparkle in state.SegmentEvents)
+                {
+                    PaintSparkleSegment(frame, intensities, sparkle, config, sparkleHue, nowUtc);
+                }
+
+                return frame;
+            }
+        }
+
+        private static void AdvanceSparkleAndFlashState(
+            SparkleAndFlashSceneState state,
+            SparkleAndFlashSceneConfig config,
+            DateTime nowUtc)
+        {
+            state.SegmentEvents.RemoveAll(sparkle => nowUtc >= sparkle.EndUtc);
+            if (state.FullStripEvent != null && nowUtc >= state.FullStripEvent.EndUtc)
+            {
+                state.FullStripEvent = null;
+            }
+
+            int maxActiveSparkles = Math.Max(1, config.MaxActiveSparkles);
+            if (nowUtc >= state.NextSegmentUtc)
+            {
+                if (state.SegmentEvents.Count < maxActiveSparkles)
+                {
+                    state.SegmentEvents.Add(CreateSparkleSegmentEvent(config, state.Random, nowUtc));
+                }
+
+                state.NextSegmentUtc = nowUtc.AddMilliseconds(GetRandomDelayMs(
+                    state.Random,
+                    config.SegmentIntervalMinMs,
+                    config.SegmentIntervalMaxMs));
+            }
+
+            if (!config.FullStripFlashEnabled)
+            {
+                state.FullStripEvent = null;
+                state.NextFullStripUtc = DateTime.MaxValue;
+                return;
+            }
+
+            if (state.FullStripEvent == null && nowUtc >= state.NextFullStripUtc)
+            {
+                state.FullStripEvent = CreateFullStripEvent(config, state.Random, nowUtc);
+                state.NextFullStripUtc = nowUtc.AddMilliseconds(GetRandomDelayMs(
+                    state.Random,
+                    config.FullStripFlashIntervalMinMs,
+                    config.FullStripFlashIntervalMaxMs));
+            }
+        }
+
+        private static SparkleSegmentEvent CreateSparkleSegmentEvent(
+            SparkleAndFlashSceneConfig config,
+            Random random,
+            DateTime nowUtc)
+        {
+            (int segmentMin, int segmentMax) = NormalizeRange(config.SegmentSizeMin, config.SegmentSizeMax, 1);
+            int holdMs = Math.Max(1, config.SegmentHoldMs);
+            int fadeMs = config.SmoothFadeAndBlur ? Math.Max(0, config.FadeDurationMs) : 0;
+            return new SparkleSegmentEvent
+            {
+                HoldUntilUtc = nowUtc.AddMilliseconds(holdMs),
+                EndUtc = nowUtc.AddMilliseconds(holdMs + fadeMs),
+                StartFraction = random.NextDouble(),
+                Length = GetRandomIntInclusive(random, segmentMin, segmentMax)
+            };
+        }
+
+        private static SparkleFullStripEvent CreateFullStripEvent(
+            SparkleAndFlashSceneConfig config,
+            Random random,
+            DateTime nowUtc)
+        {
+            int holdMs = Math.Max(1, config.FullStripFlashHoldMs);
+            int fadeMs = config.FullStripSmoothFade ? Math.Max(0, config.FullStripFadeDurationMs) : 0;
+            return new SparkleFullStripEvent
+            {
+                HoldUntilUtc = nowUtc.AddMilliseconds(holdMs),
+                EndUtc = nowUtc.AddMilliseconds(holdMs + fadeMs),
+                Hue = random.NextDouble() * 360.0
+            };
+        }
+
+        private static void PaintFullStripFlash(
+            byte[] frame,
+            double[] intensities,
+            SparkleFullStripEvent flash,
+            SparkleAndFlashSceneConfig config,
+            DateTime nowUtc)
+        {
+            double brightness = ComputeSparkleBrightness(flash.HoldUntilUtc, flash.EndUtc, config.FullStripSmoothFade, nowUtc);
+            if (brightness <= 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < intensities.Length; i++)
+            {
+                PaintPixelIfBrighter(frame, intensities, i, flash.Hue, brightness);
+            }
+        }
+
+        private static void PaintSparkleSegment(
+            byte[] frame,
+            double[] intensities,
+            SparkleSegmentEvent sparkle,
+            SparkleAndFlashSceneConfig config,
+            double hue,
+            DateTime nowUtc)
+        {
+            int ledCount = intensities.Length;
+            if (ledCount == 0)
+            {
+                return;
+            }
+
+            double brightness = ComputeSparkleBrightness(sparkle.HoldUntilUtc, sparkle.EndUtc, config.SmoothFadeAndBlur, nowUtc);
+            if (brightness <= 0)
+            {
+                return;
+            }
+
+            int length = Math.Clamp(sparkle.Length, 1, ledCount);
+            int start = Math.Clamp((int)Math.Round(sparkle.StartFraction * Math.Max(ledCount - length, 0)), 0, Math.Max(ledCount - length, 0));
+            int end = Math.Min(ledCount, start + length);
+
+            for (int i = start; i < end; i++)
+            {
+                PaintPixelIfBrighter(frame, intensities, i, hue, brightness);
+            }
+
+            int blurRadius = Math.Max(0, config.BlurRadius);
+            if (!config.SmoothFadeAndBlur || nowUtc < sparkle.HoldUntilUtc || blurRadius == 0)
+            {
+                return;
+            }
+
+            for (int distance = 1; distance <= blurRadius; distance++)
+            {
+                double blurBrightness = brightness * (1.0 - (distance / (blurRadius + 1.0)));
+                PaintPixelIfBrighter(frame, intensities, start - distance, hue, blurBrightness);
+                PaintPixelIfBrighter(frame, intensities, end - 1 + distance, hue, blurBrightness);
+            }
+        }
+
+        private static double UpdateSparkleHue(
+            SparkleAndFlashSceneState state,
+            SparkleAndFlashSceneConfig config,
+            DateTime nowUtc)
+        {
+            if (config.ContinuousSparkleHueChange)
+            {
+                while (nowUtc >= state.SparkleHueTransitionEndsUtc)
+                {
+                    state.SparkleHueFrom = state.SparkleHueTo;
+                    state.SparkleHueTo = GetRandomHue(state.Random, config);
+                    state.SparkleHueTransitionStartedUtc = nowUtc;
+                    state.SparkleHueTransitionEndsUtc = nowUtc.AddMilliseconds(GetRandomDelayMs(
+                        state.Random,
+                        config.SparkleHueChangeIntervalMinMs,
+                        config.SparkleHueChangeIntervalMaxMs));
+                }
+
+                double transitionMs = (state.SparkleHueTransitionEndsUtc - state.SparkleHueTransitionStartedUtc).TotalMilliseconds;
+                if (transitionMs <= 0)
+                {
+                    state.CurrentSparkleHue = state.SparkleHueTo;
+                    return state.CurrentSparkleHue;
+                }
+
+                double elapsedMs = (nowUtc - state.SparkleHueTransitionStartedUtc).TotalMilliseconds;
+                double progress = Math.Clamp(elapsedMs / transitionMs, 0.0, 1.0);
+                state.CurrentSparkleHue = state.SparkleHueFrom + ((state.SparkleHueTo - state.SparkleHueFrom) * progress);
+                return state.CurrentSparkleHue;
+            }
+
+            if (nowUtc >= state.NextSparkleHueChangeUtc)
+            {
+                state.CurrentSparkleHue = GetRandomHue(state.Random, config);
+                state.SparkleHueFrom = state.CurrentSparkleHue;
+                state.SparkleHueTo = state.CurrentSparkleHue;
+                state.NextSparkleHueChangeUtc = nowUtc.AddMilliseconds(GetRandomDelayMs(
+                    state.Random,
+                    config.SparkleHueChangeIntervalMinMs,
+                    config.SparkleHueChangeIntervalMaxMs));
+            }
+
+            return state.CurrentSparkleHue;
+        }
+
+        private static double ComputeSparkleBrightness(
+            DateTime holdUntilUtc,
+            DateTime endUtc,
+            bool smoothFade,
+            DateTime nowUtc)
+        {
+            if (nowUtc < holdUntilUtc)
+            {
+                return 1.0;
+            }
+
+            if (!smoothFade || nowUtc >= endUtc)
+            {
+                return 0.0;
+            }
+
+            double fadeMs = (endUtc - holdUntilUtc).TotalMilliseconds;
+            if (fadeMs <= 0)
+            {
+                return 0.0;
+            }
+
+            double elapsedFadeMs = (nowUtc - holdUntilUtc).TotalMilliseconds;
+            return Math.Clamp(1.0 - (elapsedFadeMs / fadeMs), 0.0, 1.0);
+        }
+
+        private static void PaintPixelIfBrighter(
+            byte[] frame,
+            double[] intensities,
+            int ledIndex,
+            double hue,
+            double brightness)
+        {
+            if (ledIndex < 0 || ledIndex >= intensities.Length || brightness <= 0)
+            {
+                return;
+            }
+
+            double clampedBrightness = Math.Clamp(brightness, 0.0, 1.0);
+            if (clampedBrightness < intensities[ledIndex])
+            {
+                return;
+            }
+
+            Color color = Common.HSVToRGB(hue, 1.0, clampedBrightness);
+            int index = ledIndex * 3;
+            frame[index] = color.R;
+            frame[index + 1] = color.G;
+            frame[index + 2] = color.B;
+            intensities[ledIndex] = clampedBrightness;
+        }
+
+        private SparkleAndFlashSceneState GetOrCreateSparkleSceneState(string sceneId)
+        {
+            lock (SharedSparkleSceneStatesLock)
+            {
+                if (!SharedSparkleSceneStates.TryGetValue(sceneId, out SparkleAndFlashSceneState? state))
+                {
+                    state = new SparkleAndFlashSceneState();
+                    SharedSparkleSceneStates[sceneId] = state;
+                }
+
+                return state;
+            }
+        }
+
+        private static void AcquireSharedSparkleSceneState(string sceneId)
+        {
+            lock (SharedSparkleSceneStatesLock)
+            {
+                SharedSparkleSceneUsageCounts[sceneId] = SharedSparkleSceneUsageCounts.TryGetValue(sceneId, out int count)
+                    ? count + 1
+                    : 1;
+            }
+        }
+
+        private static void ReleaseSharedSparkleSceneState(string sceneId)
+        {
+            lock (SharedSparkleSceneStatesLock)
+            {
+                if (!SharedSparkleSceneUsageCounts.TryGetValue(sceneId, out int count))
+                {
+                    return;
+                }
+
+                if (count > 1)
+                {
+                    SharedSparkleSceneUsageCounts[sceneId] = count - 1;
+                    return;
+                }
+
+                SharedSparkleSceneUsageCounts.Remove(sceneId);
+                SharedSparkleSceneStates.Remove(sceneId);
+            }
+        }
+
+        private static string BuildSparkleAndFlashSceneSignature(SparkleAndFlashSceneConfig config)
+        {
+            return string.Join("|",
+                config.SegmentSizeMin,
+                config.SegmentSizeMax,
+                config.SegmentHoldMs,
+                config.SegmentIntervalMinMs,
+                config.SegmentIntervalMaxMs,
+                config.SparkleHueMin.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                config.SparkleHueMax.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                config.SparkleHueChangeIntervalMinMs,
+                config.SparkleHueChangeIntervalMaxMs,
+                config.ContinuousSparkleHueChange,
+                config.SmoothFadeAndBlur,
+                config.FadeDurationMs,
+                config.BlurRadius,
+                config.MaxActiveSparkles,
+                config.FullStripFlashEnabled,
+                config.FullStripFlashHoldMs,
+                config.FullStripSmoothFade,
+                config.FullStripFadeDurationMs,
+                config.FullStripFlashIntervalMinMs,
+                config.FullStripFlashIntervalMaxMs);
+        }
+
+        private static void ResetSparkleAndFlashState(
+            SparkleAndFlashSceneState state,
+            SparkleAndFlashSceneConfig config,
+            string signature,
+            DateTime nowUtc)
+        {
+            state.ConfigSignature = signature;
+            state.SegmentEvents.Clear();
+            state.FullStripEvent = null;
+            state.CurrentSparkleHue = GetRandomHue(state.Random, config);
+            state.SparkleHueFrom = state.CurrentSparkleHue;
+            state.SparkleHueTo = config.ContinuousSparkleHueChange
+                ? GetRandomHue(state.Random, config)
+                : state.CurrentSparkleHue;
+            state.NextSparkleHueChangeUtc = nowUtc.AddMilliseconds(GetRandomDelayMs(
+                state.Random,
+                config.SparkleHueChangeIntervalMinMs,
+                config.SparkleHueChangeIntervalMaxMs));
+            state.SparkleHueTransitionStartedUtc = nowUtc;
+            state.SparkleHueTransitionEndsUtc = nowUtc.AddMilliseconds(GetRandomDelayMs(
+                state.Random,
+                config.SparkleHueChangeIntervalMinMs,
+                config.SparkleHueChangeIntervalMaxMs));
+            state.NextSegmentUtc = nowUtc;
+            state.NextFullStripUtc = config.FullStripFlashEnabled
+                ? nowUtc.AddMilliseconds(GetRandomDelayMs(
+                    state.Random,
+                    config.FullStripFlashIntervalMinMs,
+                    config.FullStripFlashIntervalMaxMs))
+                : DateTime.MaxValue;
+        }
+
+        private static double GetRandomHue(Random random, SparkleAndFlashSceneConfig config)
+        {
+            double min = Math.Clamp(Math.Min(config.SparkleHueMin, config.SparkleHueMax), 0.0, 360.0);
+            double max = Math.Clamp(Math.Max(config.SparkleHueMin, config.SparkleHueMax), min, 360.0);
+            return Math.Abs(max - min) < 0.0001
+                ? min
+                : min + (random.NextDouble() * (max - min));
+        }
+
+        private static int GetRandomDelayMs(Random random, int configuredMin, int configuredMax)
+        {
+            (int min, int max) = NormalizeRange(configuredMin, configuredMax, 1);
+            return GetRandomIntInclusive(random, min, max);
+        }
+
+        private static int GetRandomIntInclusive(Random random, int min, int max)
+        {
+            return min >= max ? min : random.Next(min, max == int.MaxValue ? int.MaxValue : max + 1);
+        }
+
+        private static (int Min, int Max) NormalizeRange(int configuredMin, int configuredMax, int minimum)
+        {
+            int min = Math.Max(minimum, Math.Min(configuredMin, configuredMax));
+            int max = Math.Max(min, Math.Max(configuredMin, configuredMax));
+            return (min, max);
         }
 
         private static byte[] BuildVolumeFrame(

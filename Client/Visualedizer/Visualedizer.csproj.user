@@ -28,6 +28,9 @@
     <Compile Update="SolidColorSceneEditorForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="SparkleAndFlashSceneEditorForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="SpectralAnalysisSceneEditorForm.cs">
       <SubType>Form</SubType>
     </Compile>

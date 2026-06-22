@@ -131,6 +131,7 @@ namespace Ledqualizer
             var screenRowEditor = new ScreenRowCaptureSceneEditorForm();
             var spectralEditor = new SpectralAnalysisSceneEditorForm();
             var imageRowEditor = new ImageRowCaptureSceneEditorForm();
+            var sparkleAndFlashEditor = new SparkleAndFlashSceneEditorForm();
             var laserDmxEditor = new LaserDmxSceneEditorForm();
             var strobeEditor = new StrobeSceneEditorForm();
 
@@ -144,6 +145,7 @@ namespace Ledqualizer
             spectralEditor.SceneChanged += Editor_SceneChanged;
             spectralEditor.SelectedAudioDeviceChanged += SpectralEditor_SelectedAudioDeviceChanged;
             imageRowEditor.SceneChanged += Editor_SceneChanged;
+            sparkleAndFlashEditor.SceneChanged += Editor_SceneChanged;
             laserDmxEditor.SceneChanged += Editor_SceneChanged;
             strobeEditor.SceneChanged += Editor_SceneChanged;
             laserDmxEditor.SendRequested += LaserDmxEditor_SendRequested;
@@ -155,6 +157,7 @@ namespace Ledqualizer
             sceneEditors[SceneType.ScreenRowCapture] = screenRowEditor;
             sceneEditors[SceneType.SpectralAnalysis] = spectralEditor;
             sceneEditors[SceneType.ImageRowCapture] = imageRowEditor;
+            sceneEditors[SceneType.SparkleAndFlash] = sparkleAndFlashEditor;
             sceneEditors[SceneType.LaserDmx] = laserDmxEditor;
             sceneEditors[SceneType.Strobe] = strobeEditor;
 

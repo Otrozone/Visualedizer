@@ -658,25 +658,7 @@ namespace Ledqualizer
 
         private static string FormatSceneTypeName(SceneType sceneType)
         {
-            var raw = sceneType.ToString();
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return string.Empty;
-            }
-
-            var chars = new List<char>(raw.Length + 8);
-            for (var index = 0; index < raw.Length; index++)
-            {
-                var current = raw[index];
-                if (index > 0 && char.IsUpper(current) && !char.IsUpper(raw[index - 1]))
-                {
-                    chars.Add(' ');
-                }
-
-                chars.Add(current);
-            }
-
-            return new string(chars.ToArray());
+            return SceneTypeNames.GetDisplayName(sceneType);
         }
 
         private static void TryApplySplitterDistance(SplitContainer splitContainer, int distance)

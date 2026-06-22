@@ -11,6 +11,7 @@ namespace Ledqualizer
         ScreenRowCapture,
         SpectralAnalysis,
         ImageRowCapture,
+        SparkleAndFlash,
         LaserDmx,
         Strobe
     }
@@ -246,6 +247,7 @@ namespace Ledqualizer
         public ScreenRowCaptureSceneConfig ScreenRowCapture { get; set; } = new();
         public SpectralAnalysisSceneConfig SpectralAnalysis { get; set; } = new();
         public ImageRowCaptureSceneConfig ImageRowCapture { get; set; } = new();
+        public SparkleAndFlashSceneConfig SparkleAndFlash { get; set; } = new();
         public LaserDmxSceneConfig LaserDmx { get; set; } = new();
         public StrobeSceneConfig Strobe { get; set; } = new();
 
@@ -262,6 +264,7 @@ namespace Ledqualizer
                 ScreenRowCapture = ScreenRowCapture.Clone(),
                 SpectralAnalysis = SpectralAnalysis.Clone(),
                 ImageRowCapture = ImageRowCapture.Clone(),
+                SparkleAndFlash = SparkleAndFlash.Clone(),
                 LaserDmx = LaserDmx.Clone(),
                 Strobe = Strobe.Clone()
             };
@@ -302,6 +305,35 @@ namespace Ledqualizer
         public GradientSceneConfig Clone()
         {
             return (GradientSceneConfig)MemberwiseClone();
+        }
+    }
+
+    public sealed class SparkleAndFlashSceneConfig
+    {
+        public int SegmentSizeMin { get; set; } = 1;
+        public int SegmentSizeMax { get; set; } = 3;
+        public int SegmentHoldMs { get; set; } = 1000;
+        public int SegmentIntervalMinMs { get; set; } = 250;
+        public int SegmentIntervalMaxMs { get; set; } = 1500;
+        public double SparkleHueMin { get; set; }
+        public double SparkleHueMax { get; set; } = 360;
+        public int SparkleHueChangeIntervalMinMs { get; set; } = 5000;
+        public int SparkleHueChangeIntervalMaxMs { get; set; } = 15000;
+        public bool ContinuousSparkleHueChange { get; set; }
+        public bool SmoothFadeAndBlur { get; set; } = true;
+        public int FadeDurationMs { get; set; } = 700;
+        public int BlurRadius { get; set; } = 2;
+        public int MaxActiveSparkles { get; set; } = 8;
+        public bool FullStripFlashEnabled { get; set; } = true;
+        public int FullStripFlashHoldMs { get; set; } = 1000;
+        public bool FullStripSmoothFade { get; set; } = true;
+        public int FullStripFadeDurationMs { get; set; } = 700;
+        public int FullStripFlashIntervalMinMs { get; set; } = 15000;
+        public int FullStripFlashIntervalMaxMs { get; set; } = 45000;
+
+        public SparkleAndFlashSceneConfig Clone()
+        {
+            return (SparkleAndFlashSceneConfig)MemberwiseClone();
         }
     }
 
@@ -762,6 +794,7 @@ namespace Ledqualizer
                 SceneType.ScreenRowCapture => "Screen Row Capture",
                 SceneType.SpectralAnalysis => "Spectral Analysis",
                 SceneType.ImageRowCapture => "Image Row Capture",
+                SceneType.SparkleAndFlash => "Sparkle and Flash",
                 SceneType.LaserDmx => "Laser DMX",
                 SceneType.Strobe => "Strobe",
                 _ => type.ToString()
@@ -804,6 +837,7 @@ namespace Ledqualizer
                 SceneType.ScreenRowCapture => $"Display {scene.ScreenRowCapture.MonitorIndex + 1}, Row {scene.ScreenRowCapture.CaptureY}" + (scene.ScreenRowCapture.Reverse ? ", Reversed" : string.Empty),
                 SceneType.SpectralAnalysis => $"{scene.SpectralAnalysis.FrequencyLowHz:F0}-{scene.SpectralAnalysis.FrequencyHighHz:F0} Hz, Sat {scene.SpectralAnalysis.Saturation}%",
                 SceneType.ImageRowCapture => BuildImageRowSummary(scene.ImageRowCapture),
+                SceneType.SparkleAndFlash => BuildSparkleAndFlashSummary(scene.SparkleAndFlash),
                 SceneType.LaserDmx => BuildLaserDmxSummary(scene.LaserDmx),
                 SceneType.Strobe => $"{BuildTriggerSummary(scene.Strobe.Trigger)}, Strobe output",
                 _ => string.Empty
@@ -818,6 +852,26 @@ namespace Ledqualizer
                 : $"{config.SpeedMin:F2}-{config.SpeedMax:F2} row/tick";
             string loop = config.Loop ? ", Loop" : string.Empty;
             return $"{source}, {config.Direction}, {speed}{loop}";
+        }
+
+        private static string BuildSparkleAndFlashSummary(SparkleAndFlashSceneConfig config)
+        {
+            int segmentMin = Math.Max(1, Math.Min(config.SegmentSizeMin, config.SegmentSizeMax));
+            int segmentMax = Math.Max(segmentMin, Math.Max(config.SegmentSizeMin, config.SegmentSizeMax));
+            int intervalMin = Math.Max(1, Math.Min(config.SegmentIntervalMinMs, config.SegmentIntervalMaxMs));
+            int intervalMax = Math.Max(intervalMin, Math.Max(config.SegmentIntervalMinMs, config.SegmentIntervalMaxMs));
+            double hueMin = Math.Max(0, Math.Min(config.SparkleHueMin, config.SparkleHueMax));
+            double hueMax = Math.Min(360, Math.Max(config.SparkleHueMin, config.SparkleHueMax));
+            int hueIntervalMin = Math.Max(1, Math.Min(config.SparkleHueChangeIntervalMinMs, config.SparkleHueChangeIntervalMaxMs));
+            int hueIntervalMax = Math.Max(hueIntervalMin, Math.Max(config.SparkleHueChangeIntervalMinMs, config.SparkleHueChangeIntervalMaxMs));
+            string hueMode = config.ContinuousSparkleHueChange ? "continuous" : "random";
+            string smooth = config.SmoothFadeAndBlur
+                ? $", fade {Math.Max(0, config.FadeDurationMs)} ms, blur {Math.Max(0, config.BlurRadius)}"
+                : ", hard on/off";
+            string fullFlash = config.FullStripFlashEnabled
+                ? $", full flash {Math.Max(1, config.FullStripFlashHoldMs)} ms" + (config.FullStripSmoothFade ? $", flash fade {Math.Max(0, config.FullStripFadeDurationMs)} ms" : ", hard flash")
+                : ", no full flash";
+            return $"Sparkles {segmentMin}-{segmentMax} LED every {intervalMin}-{intervalMax} ms, hue {hueMin:F0}-{hueMax:F0} {hueMode} {hueIntervalMin}-{hueIntervalMax} ms{smooth}{fullFlash}";
         }
 
         private static string BuildLaserDmxSummary(LaserDmxSceneConfig config)
