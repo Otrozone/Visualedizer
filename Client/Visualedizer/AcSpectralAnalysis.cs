@@ -12,12 +12,15 @@ namespace Ledqualizer
 
         private readonly SampleAggregator sampleAggregator = new(FftLength);
         private readonly object settingsLock = new();
+        private readonly object spectrumLock = new();
 
         private WasapiLoopbackCapture? capture;
         private int sampleRate;
         private float currentStrength;
         private double currentBandLevelDb = SilenceFloorDb;
         private SpectralBandSettings bandSettings = SpectralBandSettings.Default;
+        private double[] latestBinPowers = Array.Empty<double>();
+        private double latestBinWidth;
 
         public AcSpectralAnalysis()
         {
@@ -38,6 +41,11 @@ namespace Ledqualizer
             Stop();
             currentStrength = 0.0f;
             currentBandLevelDb = SilenceFloorDb;
+            lock (spectrumLock)
+            {
+                latestBinPowers = Array.Empty<double>();
+                latestBinWidth = 0.0;
+            }
 
             try
             {
@@ -60,6 +68,29 @@ namespace Ledqualizer
         public float GetCurrentStrength() => currentStrength;
 
         public double GetCurrentBandLevelDb() => currentBandLevelDb;
+
+        public double GetBandLevelDb(double frequencyLowHz, double frequencyHighHz)
+        {
+            lock (spectrumLock)
+            {
+                return ComputeBandLevelDb(latestBinPowers, latestBinWidth, frequencyLowHz, frequencyHighHz);
+            }
+        }
+
+        public double[] GetBandLevelsDb(IReadOnlyList<SpectralFrequencyRange> ranges)
+        {
+            double[] levels = new double[ranges.Count];
+            lock (spectrumLock)
+            {
+                for (int i = 0; i < ranges.Count; i++)
+                {
+                    SpectralFrequencyRange range = ranges[i].Normalize();
+                    levels[i] = ComputeBandLevelDb(latestBinPowers, latestBinWidth, range.FrequencyLowHz, range.FrequencyHighHz);
+                }
+            }
+
+            return levels;
+        }
 
         public void Stop()
         {
@@ -162,31 +193,30 @@ namespace Ledqualizer
             {
                 currentStrength = 0.0f;
                 currentBandLevelDb = SilenceFloorDb;
+                lock (spectrumLock)
+                {
+                    latestBinPowers = Array.Empty<double>();
+                    latestBinWidth = 0.0;
+                }
+
                 return;
             }
 
             double binWidth = sampleRate / (double)FftLength;
-            int startIndex = Math.Max(1, (int)Math.Floor(settings.FrequencyLowHz / binWidth));
-            int endIndex = Math.Min(usableBins - 1, (int)Math.Ceiling(settings.FrequencyHighHz / binWidth));
-            if (endIndex < startIndex)
-            {
-                currentStrength = 0.0f;
-                currentBandLevelDb = SilenceFloorDb;
-                return;
-            }
-
-            double power = 0.0;
-            int count = 0;
-            for (int i = startIndex; i <= endIndex; i++)
+            double[] binPowers = new double[usableBins];
+            for (int i = 0; i < usableBins; i++)
             {
                 double magnitude = Math.Sqrt((e.Result[i].X * e.Result[i].X) + (e.Result[i].Y * e.Result[i].Y));
-                power += magnitude * magnitude;
-                count++;
+                binPowers[i] = magnitude * magnitude;
             }
 
-            double rmsMagnitude = count == 0 ? 0.0 : Math.Sqrt(power / count);
-            double bandLevelDb = 20.0 * Math.Log10(rmsMagnitude + LevelEpsilon);
-            bandLevelDb = Math.Max(SilenceFloorDb, Math.Min(0.0, bandLevelDb));
+            lock (spectrumLock)
+            {
+                latestBinPowers = binPowers;
+                latestBinWidth = binWidth;
+            }
+
+            double bandLevelDb = ComputeBandLevelDb(binPowers, binWidth, settings.FrequencyLowHz, settings.FrequencyHighHz);
 
             float targetStrength = (float)Math.Clamp(
                 Common.MapValue(bandLevelDb, settings.LevelLowDb, settings.LevelHighDb, 0.0, 1.0),
@@ -197,6 +227,39 @@ namespace Ledqualizer
             float smoothing = targetStrength >= previous ? 0.45f : 0.20f;
             currentStrength = previous + ((targetStrength - previous) * smoothing);
             currentBandLevelDb = bandLevelDb;
+        }
+
+        private static double ComputeBandLevelDb(
+            IReadOnlyList<double> binPowers,
+            double binWidth,
+            double frequencyLowHz,
+            double frequencyHighHz)
+        {
+            if (binPowers.Count == 0 || binWidth <= 0)
+            {
+                return SilenceFloorDb;
+            }
+
+            double lowHz = Math.Clamp(Math.Min(frequencyLowHz, frequencyHighHz), 20.0, 20000.0);
+            double highHz = Math.Clamp(Math.Max(frequencyLowHz, frequencyHighHz), lowHz, 20000.0);
+            int startIndex = Math.Max(1, (int)Math.Floor(lowHz / binWidth));
+            int endIndex = Math.Min(binPowers.Count - 1, (int)Math.Ceiling(highHz / binWidth));
+            if (endIndex < startIndex)
+            {
+                return SilenceFloorDb;
+            }
+
+            double power = 0.0;
+            int count = 0;
+            for (int i = startIndex; i <= endIndex; i++)
+            {
+                power += binPowers[i];
+                count++;
+            }
+
+            double rmsMagnitude = count == 0 ? 0.0 : Math.Sqrt(power / count);
+            double bandLevelDb = 20.0 * Math.Log10(rmsMagnitude + LevelEpsilon);
+            return Math.Max(SilenceFloorDb, Math.Min(0.0, bandLevelDb));
         }
 
         private void Capture_RecordingStopped(object? sender, StoppedEventArgs e)
@@ -254,6 +317,25 @@ namespace Ledqualizer
             }
 
             return new SpectralBandSettings(lowHz, highHz, lowDb, highDb);
+        }
+    }
+
+    internal readonly struct SpectralFrequencyRange
+    {
+        public SpectralFrequencyRange(double frequencyLowHz, double frequencyHighHz)
+        {
+            FrequencyLowHz = frequencyLowHz;
+            FrequencyHighHz = frequencyHighHz;
+        }
+
+        public double FrequencyLowHz { get; }
+        public double FrequencyHighHz { get; }
+
+        public SpectralFrequencyRange Normalize()
+        {
+            double lowHz = Math.Clamp(Math.Min(FrequencyLowHz, FrequencyHighHz), 20.0, 20000.0);
+            double highHz = Math.Clamp(Math.Max(FrequencyLowHz, FrequencyHighHz), lowHz, 20000.0);
+            return new SpectralFrequencyRange(lowHz, highHz);
         }
     }
 }

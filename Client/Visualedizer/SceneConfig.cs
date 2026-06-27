@@ -10,10 +10,12 @@ namespace Ledqualizer
         VolumeReactive,
         ScreenRowCapture,
         SpectralAnalysis,
+        SpectralAnalysisSegments,
         ImageRowCapture,
         SparkleAndFlash,
         LaserDmx,
-        Strobe
+        Strobe,
+        LedStrobe
     }
 
     public enum ImageSourceMode
@@ -31,12 +33,52 @@ namespace Ledqualizer
         Random
     }
 
+    public enum SpectralSegmentHueMode
+    {
+        FixedRange,
+        RandomInRange,
+        RandomRange
+    }
+
+    public enum SpectralSegmentSaturationMode
+    {
+        Fixed,
+        RandomRange
+    }
+
+    public enum SpectralSegmentBrightnessMode
+    {
+        Fixed,
+        LevelMapped
+    }
+
+    public enum SpectralSegmentSizeMode
+    {
+        Full,
+        StartToEnd,
+        EndToStart,
+        CenterOut,
+        CenterPoint
+    }
+
     public enum LaserDmxValueMode
     {
         Constant,
         RandomRange,
         ValueList,
         RandomValueFromList
+    }
+
+    public enum StrobeTimingMode
+    {
+        Constant,
+        RandomRange
+    }
+
+    public enum StrobeHueMode
+    {
+        Constant,
+        RandomRange
     }
 
     public enum AuxiliaryTriggerEventType
@@ -246,10 +288,12 @@ namespace Ledqualizer
         public VolumeReactiveSceneConfig VolumeReactive { get; set; } = new();
         public ScreenRowCaptureSceneConfig ScreenRowCapture { get; set; } = new();
         public SpectralAnalysisSceneConfig SpectralAnalysis { get; set; } = new();
+        public SpectralAnalysisSegmentsSceneConfig SpectralAnalysisSegments { get; set; } = new();
         public ImageRowCaptureSceneConfig ImageRowCapture { get; set; } = new();
         public SparkleAndFlashSceneConfig SparkleAndFlash { get; set; } = new();
         public LaserDmxSceneConfig LaserDmx { get; set; } = new();
         public StrobeSceneConfig Strobe { get; set; } = new();
+        public LedStrobeSceneConfig LedStrobe { get; set; } = new();
 
         public SceneConfig Clone()
         {
@@ -263,10 +307,12 @@ namespace Ledqualizer
                 VolumeReactive = VolumeReactive.Clone(),
                 ScreenRowCapture = ScreenRowCapture.Clone(),
                 SpectralAnalysis = SpectralAnalysis.Clone(),
+                SpectralAnalysisSegments = SpectralAnalysisSegments.Clone(),
                 ImageRowCapture = ImageRowCapture.Clone(),
                 SparkleAndFlash = SparkleAndFlash.Clone(),
                 LaserDmx = LaserDmx.Clone(),
-                Strobe = Strobe.Clone()
+                Strobe = Strobe.Clone(),
+                LedStrobe = LedStrobe.Clone()
             };
         }
 
@@ -334,6 +380,29 @@ namespace Ledqualizer
         public SparkleAndFlashSceneConfig Clone()
         {
             return (SparkleAndFlashSceneConfig)MemberwiseClone();
+        }
+    }
+
+    public sealed class LedStrobeSceneConfig
+    {
+        public StrobeTimingMode OnDurationMode { get; set; } = StrobeTimingMode.Constant;
+        public int OnDurationMs { get; set; } = 80;
+        public int OnDurationMinMs { get; set; } = 80;
+        public int OnDurationMaxMs { get; set; } = 160;
+        public StrobeTimingMode OffDurationMode { get; set; } = StrobeTimingMode.Constant;
+        public int OffDurationMs { get; set; } = 80;
+        public int OffDurationMinMs { get; set; } = 40;
+        public int OffDurationMaxMs { get; set; } = 160;
+        public StrobeHueMode HueMode { get; set; } = StrobeHueMode.Constant;
+        public double Hue { get; set; }
+        public double HueMin { get; set; }
+        public double HueMax { get; set; } = 360;
+        public int Saturation { get; set; } = 100;
+        public int Brightness { get; set; } = 100;
+
+        public LedStrobeSceneConfig Clone()
+        {
+            return (LedStrobeSceneConfig)MemberwiseClone();
         }
     }
 
@@ -412,6 +481,185 @@ namespace Ledqualizer
                 LevelLowDb = LevelLowDb,
                 LevelHighDb = LevelHighDb
             };
+        }
+    }
+
+    public sealed class SpectralAnalysisSegmentsSceneConfig
+    {
+        public List<SpectralAnalysisSegmentConfig> Segments { get; set; } = CreateDefaultSegments();
+
+        public SpectralAnalysisSegmentsSceneConfig Clone()
+        {
+            EnsureSegmentDefaults();
+            return new SpectralAnalysisSegmentsSceneConfig
+            {
+                Segments = Segments.Select(segment => segment.Clone()).ToList()
+            };
+        }
+
+        public void EnsureSegmentDefaults()
+        {
+            Segments ??= CreateDefaultSegments();
+            for (int i = 0; i < Segments.Count; i++)
+            {
+                Segments[i] = NormalizeSegment(Segments[i], i);
+            }
+        }
+
+        public static List<SpectralAnalysisSegmentConfig> CreateDefaultSegments()
+        {
+            var segments = new List<SpectralAnalysisSegmentConfig>
+            {
+                CreateFullStripAccentSegment()
+            };
+
+            for (int i = 0; i < 5; i++)
+            {
+                segments.Add(CreateDefaultBandSegment(i));
+            }
+
+            return segments;
+        }
+
+        public static SpectralAnalysisSegmentConfig CreateFullStripAccentSegment()
+        {
+            return new SpectralAnalysisSegmentConfig
+            {
+                Name = "Full strip accent",
+                RatioDenominator = 1,
+                SegmentIndex = 0,
+                FrequencyLowHz = 20,
+                FrequencyHighHz = 20000,
+                ThresholdDb = -25,
+                BrightnessMode = SpectralSegmentBrightnessMode.LevelMapped,
+                BrightnessLow = 20,
+                LevelLowDb = -25,
+                LevelHighDb = -15,
+                SizeMode = SpectralSegmentSizeMode.CenterOut,
+                CenterPointWidthPercent = 10,
+                HueMode = SpectralSegmentHueMode.RandomInRange,
+                HueStart = 0,
+                HueEnd = 360
+            };
+        }
+
+        public static SpectralAnalysisSegmentConfig CreateDefaultBandSegment(int bandIndex)
+        {
+            double[] lows = { 20, 80, 316, 1260, 5012 };
+            double[] highs = { 80, 316, 1260, 5012, 20000 };
+            int normalizedIndex = Math.Clamp(bandIndex, 0, 4);
+            return new SpectralAnalysisSegmentConfig
+            {
+                Name = $"Band {normalizedIndex + 1}",
+                RatioDenominator = 5,
+                SegmentIndex = normalizedIndex,
+                FrequencyLowHz = lows[normalizedIndex],
+                FrequencyHighHz = highs[normalizedIndex],
+                ThresholdDb = -35,
+                BrightnessMode = SpectralSegmentBrightnessMode.LevelMapped,
+                BrightnessLow = 20,
+                LevelLowDb = -35,
+                LevelHighDb = -15,
+                SizeMode = SpectralSegmentSizeMode.CenterOut,
+                CenterPointWidthPercent = 10,
+                HueMode = SpectralSegmentHueMode.FixedRange,
+                HueStart = normalizedIndex * 72,
+                HueEnd = (normalizedIndex + 1) * 72
+            };
+        }
+
+        public static SpectralAnalysisSegmentConfig NormalizeSegment(SpectralAnalysisSegmentConfig? segment, int fallbackIndex)
+        {
+            SpectralAnalysisSegmentConfig normalized = segment?.Clone() ?? CreateDefaultBandSegment(fallbackIndex % 5);
+            if (string.IsNullOrWhiteSpace(normalized.Id))
+            {
+                normalized.Id = Guid.NewGuid().ToString("N");
+            }
+
+            if (string.IsNullOrWhiteSpace(normalized.Name))
+            {
+                normalized.Name = $"Segment {fallbackIndex + 1}";
+            }
+
+            normalized.RatioDenominator = Math.Clamp(normalized.RatioDenominator, 1, 1000);
+            normalized.SegmentIndex = Math.Clamp(normalized.SegmentIndex, 0, normalized.RatioDenominator - 1);
+            double lowHz = Math.Clamp(Math.Min(normalized.FrequencyLowHz, normalized.FrequencyHighHz), 20.0, 20000.0);
+            double highHz = Math.Clamp(Math.Max(normalized.FrequencyLowHz, normalized.FrequencyHighHz), lowHz, 20000.0);
+            normalized.FrequencyLowHz = lowHz;
+            normalized.FrequencyHighHz = highHz;
+            normalized.ThresholdDb = Math.Clamp(normalized.ThresholdDb, -90.0, 0.0);
+            normalized.LightUpMs = Math.Clamp(normalized.LightUpMs, 1, 60000);
+            normalized.FadeOutMs = Math.Clamp(normalized.FadeOutMs, 0, 60000);
+            normalized.BrightnessLow = Math.Clamp(normalized.BrightnessLow, 0, 100);
+            normalized.Brightness = Math.Clamp(normalized.Brightness, 0, 100);
+            if (normalized.BrightnessLow > normalized.Brightness)
+            {
+                normalized.BrightnessLow = normalized.Brightness;
+            }
+
+            double levelLowDb = Math.Clamp(Math.Min(normalized.LevelLowDb, normalized.LevelHighDb), -90.0, 0.0);
+            double levelHighDb = Math.Clamp(Math.Max(normalized.LevelLowDb, normalized.LevelHighDb), -90.0, 0.0);
+            if (levelHighDb - levelLowDb < 0.1)
+            {
+                if (levelHighDb >= 0.0)
+                {
+                    levelLowDb = Math.Max(-90.0, levelHighDb - 0.1);
+                }
+                else
+                {
+                    levelHighDb = Math.Min(0.0, levelLowDb + 0.1);
+                }
+            }
+
+            normalized.LevelLowDb = levelLowDb;
+            normalized.LevelHighDb = levelHighDb;
+            if (!Enum.IsDefined(normalized.SizeMode))
+            {
+                normalized.SizeMode = SpectralSegmentSizeMode.Full;
+            }
+
+            normalized.CenterPointWidthPercent = Math.Clamp(normalized.CenterPointWidthPercent, 1, 100);
+            normalized.HueStart = Math.Clamp(normalized.HueStart, 0.0, 360.0);
+            normalized.HueEnd = Math.Clamp(normalized.HueEnd, 0.0, 360.0);
+            normalized.Saturation = Math.Clamp(normalized.Saturation, 0, 100);
+            int saturationMin = Math.Clamp(Math.Min(normalized.SaturationMin, normalized.SaturationMax), 0, 100);
+            int saturationMax = Math.Clamp(Math.Max(normalized.SaturationMin, normalized.SaturationMax), saturationMin, 100);
+            normalized.SaturationMin = saturationMin;
+            normalized.SaturationMax = saturationMax;
+            return normalized;
+        }
+    }
+
+    public sealed class SpectralAnalysisSegmentConfig
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public bool Enabled { get; set; } = true;
+        public string Name { get; set; } = "Segment";
+        public int RatioDenominator { get; set; } = 5;
+        public int SegmentIndex { get; set; }
+        public double FrequencyLowHz { get; set; } = 20;
+        public double FrequencyHighHz { get; set; } = 20000;
+        public double ThresholdDb { get; set; } = -35;
+        public int LightUpMs { get; set; } = 70;
+        public int FadeOutMs { get; set; } = 1000;
+        public SpectralSegmentBrightnessMode BrightnessMode { get; set; } = SpectralSegmentBrightnessMode.Fixed;
+        public int BrightnessLow { get; set; } = 20;
+        public int Brightness { get; set; } = 100;
+        public double LevelLowDb { get; set; } = -35;
+        public double LevelHighDb { get; set; } = -15;
+        public SpectralSegmentSizeMode SizeMode { get; set; } = SpectralSegmentSizeMode.Full;
+        public int CenterPointWidthPercent { get; set; } = 10;
+        public SpectralSegmentHueMode HueMode { get; set; } = SpectralSegmentHueMode.FixedRange;
+        public double HueStart { get; set; }
+        public double HueEnd { get; set; } = 360;
+        public SpectralSegmentSaturationMode SaturationMode { get; set; } = SpectralSegmentSaturationMode.Fixed;
+        public int Saturation { get; set; } = 100;
+        public int SaturationMin { get; set; } = 100;
+        public int SaturationMax { get; set; } = 100;
+
+        public SpectralAnalysisSegmentConfig Clone()
+        {
+            return (SpectralAnalysisSegmentConfig)MemberwiseClone();
         }
     }
 
@@ -793,10 +1041,12 @@ namespace Ledqualizer
                 SceneType.VolumeReactive => "Volume Reactive",
                 SceneType.ScreenRowCapture => "Screen Row Capture",
                 SceneType.SpectralAnalysis => "Spectral Analysis",
+                SceneType.SpectralAnalysisSegments => "Spectral Analysis Segments",
                 SceneType.ImageRowCapture => "Image Row Capture",
                 SceneType.SparkleAndFlash => "Sparkle and Flash",
                 SceneType.LaserDmx => "Laser DMX",
-                SceneType.Strobe => "Strobe",
+                SceneType.Strobe => "Auxiliary Strobe",
+                SceneType.LedStrobe => "Strobe",
                 _ => type.ToString()
             };
         }
@@ -836,10 +1086,12 @@ namespace Ledqualizer
                 SceneType.VolumeReactive => $"Mode {scene.VolumeReactive.Mode}, Sat {scene.VolumeReactive.Saturation}%, Norm {scene.VolumeReactive.Normalization}",
                 SceneType.ScreenRowCapture => $"Display {scene.ScreenRowCapture.MonitorIndex + 1}, Row {scene.ScreenRowCapture.CaptureY}" + (scene.ScreenRowCapture.Reverse ? ", Reversed" : string.Empty),
                 SceneType.SpectralAnalysis => $"{scene.SpectralAnalysis.FrequencyLowHz:F0}-{scene.SpectralAnalysis.FrequencyHighHz:F0} Hz, Sat {scene.SpectralAnalysis.Saturation}%",
+                SceneType.SpectralAnalysisSegments => BuildSpectralAnalysisSegmentsSummary(scene.SpectralAnalysisSegments),
                 SceneType.ImageRowCapture => BuildImageRowSummary(scene.ImageRowCapture),
                 SceneType.SparkleAndFlash => BuildSparkleAndFlashSummary(scene.SparkleAndFlash),
                 SceneType.LaserDmx => BuildLaserDmxSummary(scene.LaserDmx),
-                SceneType.Strobe => $"{BuildTriggerSummary(scene.Strobe.Trigger)}, Strobe output",
+                SceneType.Strobe => $"{BuildTriggerSummary(scene.Strobe.Trigger)}, Auxiliary strobe output",
+                SceneType.LedStrobe => BuildLedStrobeSummary(scene.LedStrobe),
                 _ => string.Empty
             };
         }
@@ -852,6 +1104,23 @@ namespace Ledqualizer
                 : $"{config.SpeedMin:F2}-{config.SpeedMax:F2} row/tick";
             string loop = config.Loop ? ", Loop" : string.Empty;
             return $"{source}, {config.Direction}, {speed}{loop}";
+        }
+
+        private static string BuildSpectralAnalysisSegmentsSummary(SpectralAnalysisSegmentsSceneConfig config)
+        {
+            config.EnsureSegmentDefaults();
+            int total = config.Segments.Count;
+            int enabled = config.Segments.Count(segment => segment.Enabled);
+            if (total == 0)
+            {
+                return "0 segments";
+            }
+
+            double minHz = config.Segments.Min(segment => Math.Min(segment.FrequencyLowHz, segment.FrequencyHighHz));
+            double maxHz = config.Segments.Max(segment => Math.Max(segment.FrequencyLowHz, segment.FrequencyHighHz));
+            int holdMs = (int)Math.Round(config.Segments.Average(segment => Math.Max(1, segment.LightUpMs)));
+            int fadeMs = (int)Math.Round(config.Segments.Average(segment => Math.Max(0, segment.FadeOutMs)));
+            return $"{enabled}/{total} segments, {minHz:F0}-{maxHz:F0} Hz, hold {holdMs} ms, fade {fadeMs} ms";
         }
 
         private static string BuildSparkleAndFlashSummary(SparkleAndFlashSceneConfig config)
@@ -872,6 +1141,40 @@ namespace Ledqualizer
                 ? $", full flash {Math.Max(1, config.FullStripFlashHoldMs)} ms" + (config.FullStripSmoothFade ? $", flash fade {Math.Max(0, config.FullStripFadeDurationMs)} ms" : ", hard flash")
                 : ", no full flash";
             return $"Sparkles {segmentMin}-{segmentMax} LED every {intervalMin}-{intervalMax} ms, hue {hueMin:F0}-{hueMax:F0} {hueMode} {hueIntervalMin}-{hueIntervalMax} ms{smooth}{fullFlash}";
+        }
+
+        private static string BuildLedStrobeSummary(LedStrobeSceneConfig config)
+        {
+            string on = BuildStrobeDurationSummary(config.OnDurationMode, config.OnDurationMs, config.OnDurationMinMs, config.OnDurationMaxMs);
+            string off = BuildStrobeDurationSummary(config.OffDurationMode, config.OffDurationMs, config.OffDurationMinMs, config.OffDurationMaxMs);
+            string hue = BuildStrobeHueSummary(config);
+            return $"On {on}, off {off}, hue {hue}, Sat {Math.Clamp(config.Saturation, 0, 100)}%, Bright {Math.Clamp(config.Brightness, 0, 100)}%";
+        }
+
+        private static string BuildStrobeDurationSummary(StrobeTimingMode mode, int constantMs, int minMs, int maxMs)
+        {
+            if (mode == StrobeTimingMode.RandomRange)
+            {
+                int min = Math.Max(1, Math.Min(minMs, maxMs));
+                int max = Math.Max(min, Math.Max(minMs, maxMs));
+                return min == max ? $"{min} ms" : $"{min}-{max} ms random";
+            }
+
+            return $"{Math.Max(1, constantMs)} ms";
+        }
+
+        private static string BuildStrobeHueSummary(LedStrobeSceneConfig config)
+        {
+            if (config.HueMode == StrobeHueMode.RandomRange)
+            {
+                double min = Math.Clamp(Math.Min(config.HueMin, config.HueMax), 0.0, 360.0);
+                double max = Math.Clamp(Math.Max(config.HueMin, config.HueMax), min, 360.0);
+                return Math.Abs(max - min) < 0.0001
+                    ? $"{min:F0}"
+                    : $"{min:F0}-{max:F0} random";
+            }
+
+            return $"{Math.Clamp(config.Hue, 0.0, 360.0):F0}";
         }
 
         private static string BuildLaserDmxSummary(LaserDmxSceneConfig config)

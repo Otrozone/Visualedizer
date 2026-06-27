@@ -1238,6 +1238,57 @@ namespace Ledqualizer
             public double Hue { get; init; }
         }
 
+        private sealed class LedStrobeSceneState
+        {
+            public object SyncRoot { get; } = new();
+            public string ConfigSignature { get; set; } = string.Empty;
+            public bool IsOn { get; set; }
+            public DateTime NextTransitionUtc { get; set; } = DateTime.MinValue;
+            public double CurrentHue { get; set; }
+            public Random Random { get; } = new();
+        }
+
+        private sealed class SpectralAnalysisSegmentsSceneState
+        {
+            public object SyncRoot { get; } = new();
+            public string ConfigSignature { get; set; } = string.Empty;
+            public Dictionary<string, SpectralAnalysisSegmentRuntimeState> SegmentStates { get; } = new(StringComparer.Ordinal);
+            public Random Random { get; } = new();
+        }
+
+        private sealed class SpectralAnalysisSegmentRuntimeState
+        {
+            public DateTime HoldUntilUtc { get; set; } = DateTime.MinValue;
+            public DateTime EndUtc { get; set; } = DateTime.MinValue;
+            public double HueStart { get; set; }
+            public double HueEnd { get; set; }
+            public int Saturation { get; set; } = 100;
+            public double LastTriggerBandLevelDb { get; set; } = -90.0;
+        }
+
+        private sealed class SharedSpectralAnalysisLease : IDisposable
+        {
+            private bool disposed;
+
+            public SharedSpectralAnalysisLease(AcSpectralAnalysis analyzer)
+            {
+                Analyzer = analyzer;
+            }
+
+            public AcSpectralAnalysis Analyzer { get; }
+
+            public void Dispose()
+            {
+                if (disposed)
+                {
+                    return;
+                }
+
+                disposed = true;
+                ReleaseSharedSpectralSegmentAnalysis(this);
+            }
+        }
+
         private readonly Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider;
         private readonly Func<SceneConfig?> laserSceneProvider;
         private readonly Func<SceneConfig?> strobeSceneProvider;
@@ -1257,15 +1308,29 @@ namespace Ledqualizer
         private bool strobeOutputActive;
         private string? lastLaserSceneId;
         private string? lastStrobeSceneId;
+        private SharedSpectralAnalysisLease? sharedSpectralSegmentAnalysisLease;
         private AuxiliaryDmxTransmissionOptions lastAuxiliaryTransmissionOptions = AuxiliaryPayloadBuilder.DefaultTransmissionOptions;
         private readonly HashSet<string> registeredImageSceneIds = new(StringComparer.Ordinal);
         private readonly HashSet<string> registeredSparkleSceneIds = new(StringComparer.Ordinal);
+        private readonly HashSet<string> registeredLedStrobeSceneIds = new(StringComparer.Ordinal);
+        private readonly HashSet<string> registeredSpectralSegmentSceneIds = new(StringComparer.Ordinal);
         private static readonly object SharedImageSceneStatesLock = new();
         private static readonly Dictionary<string, ImageScenePlaybackState> SharedImageSceneStates = new(StringComparer.Ordinal);
         private static readonly Dictionary<string, int> SharedImageSceneUsageCounts = new(StringComparer.Ordinal);
         private static readonly object SharedSparkleSceneStatesLock = new();
         private static readonly Dictionary<string, SparkleAndFlashSceneState> SharedSparkleSceneStates = new(StringComparer.Ordinal);
         private static readonly Dictionary<string, int> SharedSparkleSceneUsageCounts = new(StringComparer.Ordinal);
+        private static readonly object SharedLedStrobeSceneStatesLock = new();
+        private static readonly Dictionary<string, LedStrobeSceneState> SharedLedStrobeSceneStates = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, int> SharedLedStrobeSceneUsageCounts = new(StringComparer.Ordinal);
+        private static readonly object SharedSpectralSegmentSceneStatesLock = new();
+        private static readonly Dictionary<string, SpectralAnalysisSegmentsSceneState> SharedSpectralSegmentSceneStates = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, int> SharedSpectralSegmentSceneUsageCounts = new(StringComparer.Ordinal);
+        private static readonly object SharedSpectralSegmentAnalysisLock = new();
+        private static AcSpectralAnalysis? SharedSpectralSegmentAnalysis;
+        private static int SharedSpectralSegmentAnalysisUsageCount;
+        private static string? SharedSpectralSegmentAnalysisDeviceId;
+        private static bool SharedSpectralSegmentAnalysisStarted;
 
         public CompositeSceneRunner(
             Func<IReadOnlyList<DeviceSceneAssignment>> assignmentsProvider,
@@ -1316,18 +1381,32 @@ namespace Ledqualizer
 
                     CleanupImageSceneStates(assignments);
                     CleanupSparkleSceneStates(assignments);
+                    CleanupLedStrobeSceneStates(assignments);
+                    CleanupSpectralSegmentSceneStates(assignments);
 
-                    bool needsSpectral = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysis)
-                        || laserScene?.LaserDmx.Trigger.EventType == AuxiliaryTriggerEventType.SpectralAnalysis
+                    bool needsSingleBandSpectral = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysis);
+                    bool needsSpectralSegments = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysisSegments);
+                    bool needsAuxiliarySpectral = laserScene?.LaserDmx.Trigger.EventType == AuxiliaryTriggerEventType.SpectralAnalysis
                         || strobeScene?.Strobe.Trigger.EventType == AuxiliaryTriggerEventType.SpectralAnalysis;
-                    if (needsSpectral)
+                    bool needsSpectral = needsSingleBandSpectral || needsSpectralSegments || needsAuxiliarySpectral;
+                    string? requestedAudioDeviceId = audioDeviceIdProvider();
+                    if (needsSingleBandSpectral)
                     {
-                        string? requestedDeviceId = audioDeviceIdProvider();
-                        if (!string.Equals(activeAudioDeviceId, requestedDeviceId, StringComparison.Ordinal))
+                        if (!string.Equals(activeAudioDeviceId, requestedAudioDeviceId, StringComparison.Ordinal))
                         {
-                            spectralAnalysis.Start(requestedDeviceId);
-                            activeAudioDeviceId = requestedDeviceId;
+                            spectralAnalysis.Start(requestedAudioDeviceId);
+                            activeAudioDeviceId = requestedAudioDeviceId;
                         }
+                    }
+
+                    if (needsSpectralSegments)
+                    {
+                        sharedSpectralSegmentAnalysisLease ??= AcquireSharedSpectralSegmentAnalysis();
+                        EnsureSharedSpectralSegmentAnalysisStarted(sharedSpectralSegmentAnalysisLease, requestedAudioDeviceId);
+                    }
+                    else
+                    {
+                        ReleaseSharedSpectralSegmentAnalysis();
                     }
 
                     float? sharedVolume = null;
@@ -1346,6 +1425,7 @@ namespace Ledqualizer
                                 audioDeviceIdProvider,
                                 ref sharedVolume,
                                 spectralAnalysis,
+                                sharedSpectralSegmentAnalysisLease?.Analyzer,
                                 ref lastSpectralDb,
                                 devicePreviewUpdater,
                                 volumeProgressReporter,
@@ -1403,6 +1483,7 @@ namespace Ledqualizer
                 }
 
                 auxiliarySpectralMeters.Clear();
+                ReleaseSharedSpectralSegmentAnalysis();
 
                 foreach (string sceneId in registeredImageSceneIds.ToList())
                 {
@@ -1417,6 +1498,20 @@ namespace Ledqualizer
                 }
 
                 registeredSparkleSceneIds.Clear();
+
+                foreach (string sceneId in registeredLedStrobeSceneIds.ToList())
+                {
+                    ReleaseSharedLedStrobeSceneState(sceneId);
+                }
+
+                registeredLedStrobeSceneIds.Clear();
+
+                foreach (string sceneId in registeredSpectralSegmentSceneIds.ToList())
+                {
+                    ReleaseSharedSpectralSegmentSceneState(sceneId);
+                }
+
+                registeredSpectralSegmentSceneIds.Clear();
             }
         }
 
@@ -1774,11 +1869,56 @@ namespace Ledqualizer
             }
         }
 
+        private void CleanupLedStrobeSceneStates(IReadOnlyList<DeviceSceneAssignment> assignments)
+        {
+            HashSet<string> activeIds = assignments
+                .Where(assignment => assignment.Scene.Type == SceneType.LedStrobe)
+                .Select(assignment => assignment.Scene.Id)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (string sceneId in registeredLedStrobeSceneIds.Where(sceneId => !activeIds.Contains(sceneId)).ToList())
+            {
+                ReleaseSharedLedStrobeSceneState(sceneId);
+                registeredLedStrobeSceneIds.Remove(sceneId);
+            }
+
+            foreach (string sceneId in activeIds)
+            {
+                if (registeredLedStrobeSceneIds.Add(sceneId))
+                {
+                    AcquireSharedLedStrobeSceneState(sceneId);
+                }
+            }
+        }
+
+        private void CleanupSpectralSegmentSceneStates(IReadOnlyList<DeviceSceneAssignment> assignments)
+        {
+            HashSet<string> activeIds = assignments
+                .Where(assignment => assignment.Scene.Type == SceneType.SpectralAnalysisSegments)
+                .Select(assignment => assignment.Scene.Id)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (string sceneId in registeredSpectralSegmentSceneIds.Where(sceneId => !activeIds.Contains(sceneId)).ToList())
+            {
+                ReleaseSharedSpectralSegmentSceneState(sceneId);
+                registeredSpectralSegmentSceneIds.Remove(sceneId);
+            }
+
+            foreach (string sceneId in activeIds)
+            {
+                if (registeredSpectralSegmentSceneIds.Add(sceneId))
+                {
+                    AcquireSharedSpectralSegmentSceneState(sceneId);
+                }
+            }
+        }
+
         private byte[] BuildAssignmentFrame(
             DeviceSceneAssignment assignment,
             Func<string?> audioDeviceIdProvider,
             ref float? sharedVolume,
             AcSpectralAnalysis spectralAnalysis,
+            AcSpectralAnalysis? spectralSegmentAnalysis,
             ref double? lastSpectralDb,
             Action<CaptureScenePreview>? capturePreviewUpdater,
             Action<int> volumeProgressReporter,
@@ -1790,8 +1930,10 @@ namespace Ledqualizer
                 SceneType.VolumeReactive => BuildVolumeFrame(assignment.Scene, assignment.LedCount, audioDeviceIdProvider, ref sharedVolume, volumeProgressReporter),
                 SceneType.ScreenRowCapture => BuildScreenCaptureFrame(assignment.Scene.Id, assignment.Scene.ScreenRowCapture, assignment.LedCount, capturePreviewUpdater),
                 SceneType.SpectralAnalysis => BuildSpectralFrame(assignment.Scene, assignment.LedCount, spectralAnalysis, ref lastSpectralDb, spectralProgressReporter),
+                SceneType.SpectralAnalysisSegments => BuildSpectralAnalysisSegmentsFrame(assignment.Scene.Id, assignment.Scene.SpectralAnalysisSegments, assignment.LedCount, spectralSegmentAnalysis ?? spectralAnalysis, ref lastSpectralDb, spectralProgressReporter),
                 SceneType.ImageRowCapture => BuildImageCaptureFrame(assignment.Scene.Id, assignment.Scene.ImageRowCapture, assignment.LedCount, capturePreviewUpdater),
                 SceneType.SparkleAndFlash => BuildSparkleAndFlashFrame(assignment.Scene.Id, assignment.Scene.SparkleAndFlash, assignment.LedCount),
+                SceneType.LedStrobe => BuildLedStrobeFrame(assignment.Scene.Id, assignment.Scene.LedStrobe, assignment.LedCount),
                 SceneType.LaserDmx => new byte[assignment.LedCount * 3],
                 SceneType.Strobe => new byte[assignment.LedCount * 3],
                 _ => BuildSolidFrame(assignment.LedCount, assignment.Scene.SolidColor),
@@ -1828,6 +1970,617 @@ namespace Ledqualizer
             }
 
             return frame;
+        }
+
+        private byte[] BuildSpectralAnalysisSegmentsFrame(
+            string sceneId,
+            SpectralAnalysisSegmentsSceneConfig config,
+            int ledCount,
+            AcSpectralAnalysis spectralAnalysis,
+            ref double? lastSpectralDb,
+            Action<int> progressReporter)
+        {
+            byte[] frame = new byte[Math.Max(ledCount, 0) * 3];
+            if (ledCount <= 0)
+            {
+                progressReporter(0);
+                lastSpectralDb = null;
+                return frame;
+            }
+
+            List<SpectralAnalysisSegmentConfig> allSegments = GetSpectralAnalysisSegmentsSnapshot(config);
+            List<SpectralAnalysisSegmentConfig> segments = allSegments
+                .Where(segment => segment.Enabled)
+                .ToList();
+            if (segments.Count == 0)
+            {
+                progressReporter(0);
+                lastSpectralDb = null;
+                return frame;
+            }
+
+            SpectralFrequencyRange[] ranges = segments
+                .Select(segment => new SpectralFrequencyRange(segment.FrequencyLowHz, segment.FrequencyHighHz))
+                .ToArray();
+            double[] bandLevels = spectralAnalysis.GetBandLevelsDb(ranges);
+            double maxBandLevel = bandLevels.Length == 0 ? -90.0 : bandLevels.Max();
+            lastSpectralDb = maxBandLevel;
+            progressReporter((int)Math.Round(Math.Clamp(Common.MapValue(maxBandLevel, -90.0, 0.0, 0.0, 100.0), 0.0, 100.0)));
+
+            SpectralAnalysisSegmentsSceneState state = GetOrCreateSpectralSegmentSceneState(sceneId);
+            lock (state.SyncRoot)
+            {
+                DateTime nowUtc = DateTime.UtcNow;
+                string signature = BuildSpectralAnalysisSegmentsSignature(allSegments);
+                if (!string.Equals(state.ConfigSignature, signature, StringComparison.Ordinal))
+                {
+                    ResetSpectralAnalysisSegmentsState(state, signature);
+                }
+
+                double[] intensities = new double[ledCount];
+                for (int i = 0; i < segments.Count; i++)
+                {
+                    SpectralAnalysisSegmentConfig segment = segments[i];
+                    SpectralAnalysisSegmentRuntimeState segmentState = GetOrCreateSpectralSegmentRuntimeState(state, segment.Id);
+                    double bandLevel = i < bandLevels.Length ? bandLevels[i] : -90.0;
+                    if (bandLevel >= segment.ThresholdDb)
+                    {
+                        bool wasInactive = nowUtc >= segmentState.EndUtc;
+                        if (wasInactive)
+                        {
+                            ChooseSpectralSegmentColor(segment, segmentState, state.Random);
+                        }
+
+                        segmentState.HoldUntilUtc = nowUtc.AddMilliseconds(Math.Max(1, segment.LightUpMs));
+                        segmentState.EndUtc = segmentState.HoldUntilUtc.AddMilliseconds(Math.Max(0, segment.FadeOutMs));
+                        segmentState.LastTriggerBandLevelDb = bandLevel;
+                    }
+
+                    double activity = ComputeSpectralSegmentActivity(segmentState, nowUtc);
+                    if (activity <= 0)
+                    {
+                        continue;
+                    }
+
+                    PaintSpectralSegment(frame, intensities, segment, segmentState, bandLevel, activity, ledCount);
+                }
+
+                return frame;
+            }
+        }
+
+        private static List<SpectralAnalysisSegmentConfig> GetSpectralAnalysisSegmentsSnapshot(SpectralAnalysisSegmentsSceneConfig config)
+        {
+            List<SpectralAnalysisSegmentConfig>? source = config.Segments;
+            SpectralAnalysisSegmentConfig[] snapshot = source == null
+                ? SpectralAnalysisSegmentsSceneConfig.CreateDefaultSegments().ToArray()
+                : source.ToArray();
+
+            return snapshot
+                .Select((segment, index) => SpectralAnalysisSegmentsSceneConfig.NormalizeSegment(segment, index))
+                .ToList();
+        }
+
+        private static SpectralAnalysisSegmentRuntimeState GetOrCreateSpectralSegmentRuntimeState(
+            SpectralAnalysisSegmentsSceneState sceneState,
+            string segmentId)
+        {
+            if (!sceneState.SegmentStates.TryGetValue(segmentId, out SpectralAnalysisSegmentRuntimeState? segmentState))
+            {
+                segmentState = new SpectralAnalysisSegmentRuntimeState();
+                sceneState.SegmentStates[segmentId] = segmentState;
+            }
+
+            return segmentState;
+        }
+
+        private static void ChooseSpectralSegmentColor(
+            SpectralAnalysisSegmentConfig segment,
+            SpectralAnalysisSegmentRuntimeState segmentState,
+            Random random)
+        {
+            double hueMin = Math.Clamp(Math.Min(segment.HueStart, segment.HueEnd), 0.0, 360.0);
+            double hueMax = Math.Clamp(Math.Max(segment.HueStart, segment.HueEnd), hueMin, 360.0);
+            switch (segment.HueMode)
+            {
+                case SpectralSegmentHueMode.RandomInRange:
+                    double hue = GetRandomDouble(random, hueMin, hueMax);
+                    segmentState.HueStart = hue;
+                    segmentState.HueEnd = hue;
+                    break;
+                case SpectralSegmentHueMode.RandomRange:
+                    segmentState.HueStart = GetRandomDouble(random, hueMin, hueMax);
+                    segmentState.HueEnd = GetRandomDouble(random, hueMin, hueMax);
+                    break;
+                default:
+                    segmentState.HueStart = segment.HueStart;
+                    segmentState.HueEnd = segment.HueEnd;
+                    break;
+            }
+
+            if (segment.SaturationMode == SpectralSegmentSaturationMode.RandomRange)
+            {
+                int saturationMin = Math.Clamp(Math.Min(segment.SaturationMin, segment.SaturationMax), 0, 100);
+                int saturationMax = Math.Clamp(Math.Max(segment.SaturationMin, segment.SaturationMax), saturationMin, 100);
+                segmentState.Saturation = GetRandomIntInclusive(random, saturationMin, saturationMax);
+            }
+            else
+            {
+                segmentState.Saturation = Math.Clamp(segment.Saturation, 0, 100);
+            }
+        }
+
+        private static double ComputeSpectralSegmentActivity(
+            SpectralAnalysisSegmentRuntimeState segmentState,
+            DateTime nowUtc)
+        {
+            if (nowUtc < segmentState.HoldUntilUtc)
+            {
+                return 1.0;
+            }
+
+            if (nowUtc >= segmentState.EndUtc)
+            {
+                return 0.0;
+            }
+
+            double fadeMs = (segmentState.EndUtc - segmentState.HoldUntilUtc).TotalMilliseconds;
+            if (fadeMs <= 0)
+            {
+                return 0.0;
+            }
+
+            double elapsedFadeMs = (nowUtc - segmentState.HoldUntilUtc).TotalMilliseconds;
+            return Math.Clamp(1.0 - (elapsedFadeMs / fadeMs), 0.0, 1.0);
+        }
+
+        private static void PaintSpectralSegment(
+            byte[] frame,
+            double[] intensities,
+            SpectralAnalysisSegmentConfig segment,
+            SpectralAnalysisSegmentRuntimeState segmentState,
+            double bandLevelDb,
+            double activity,
+            int ledCount)
+        {
+            int ratioDenominator = Math.Max(1, segment.RatioDenominator);
+            int segmentIndex = Math.Clamp(segment.SegmentIndex, 0, ratioDenominator - 1);
+            int startLed = Math.Clamp((int)Math.Floor(ledCount * (segmentIndex / (double)ratioDenominator)), 0, ledCount);
+            int endLed = Math.Clamp((int)Math.Ceiling(ledCount * ((segmentIndex + 1) / (double)ratioDenominator)), startLed, ledCount);
+            if (endLed <= startLed && startLed < ledCount)
+            {
+                endLed = startLed + 1;
+            }
+
+            int segmentLength = endLed - startLed;
+            if (segmentLength <= 0)
+            {
+                return;
+            }
+
+            double brightness = ComputeSpectralSegmentBrightness(segment, bandLevelDb, activity);
+            double sizeFactor = ComputeSpectralSegmentSizeFactor(segment, segmentState.LastTriggerBandLevelDb);
+            double saturation = Math.Clamp(segmentState.Saturation / 100.0, 0.0, 1.0);
+            for (int led = startLed; led < endLed; led++)
+            {
+                int segmentOffset = led - startLed;
+                if (!IsSpectralSegmentLedActive(segment, segmentOffset, segmentLength, sizeFactor))
+                {
+                    continue;
+                }
+
+                double position = segmentLength <= 1 ? 0.0 : segmentOffset / (double)(segmentLength - 1);
+                double hue = segmentState.HueStart + ((segmentState.HueEnd - segmentState.HueStart) * position);
+                PaintPixelIfBrighter(frame, intensities, led, hue, saturation, brightness);
+            }
+        }
+
+        private static double ComputeSpectralSegmentSizeFactor(
+            SpectralAnalysisSegmentConfig segment,
+            double bandLevelDb)
+        {
+            if (segment.SizeMode == SpectralSegmentSizeMode.Full)
+            {
+                return 1.0;
+            }
+
+            return Math.Clamp(Common.MapValue(
+                bandLevelDb,
+                segment.LevelLowDb,
+                segment.LevelHighDb,
+                0.0,
+                1.0), 0.0, 1.0);
+        }
+
+        private static bool IsSpectralSegmentLedActive(
+            SpectralAnalysisSegmentConfig segment,
+            int segmentOffset,
+            int segmentLength,
+            double sizeFactor)
+        {
+            if (segmentLength <= 0)
+            {
+                return false;
+            }
+
+            if (segment.SizeMode == SpectralSegmentSizeMode.Full)
+            {
+                return true;
+            }
+
+            int activeLedCount = ComputeSpectralSegmentActiveLedCount(segmentLength, sizeFactor);
+            switch (segment.SizeMode)
+            {
+                case SpectralSegmentSizeMode.StartToEnd:
+                    return segmentOffset < activeLedCount;
+                case SpectralSegmentSizeMode.EndToStart:
+                    return segmentOffset >= segmentLength - activeLedCount;
+                case SpectralSegmentSizeMode.CenterOut:
+                    int centerStart = (segmentLength - activeLedCount) / 2;
+                    return segmentOffset >= centerStart && segmentOffset < centerStart + activeLedCount;
+                case SpectralSegmentSizeMode.CenterPoint:
+                    int pointWidth = Math.Clamp(
+                        (int)Math.Round(segmentLength * (segment.CenterPointWidthPercent / 100.0)),
+                        1,
+                        segmentLength);
+                    double center = (segmentLength - 1) / 2.0;
+                    double targetDistance = sizeFactor * center;
+                    double halfWidth = pointWidth / 2.0;
+                    return Math.Abs(Math.Abs(segmentOffset - center) - targetDistance) <= halfWidth;
+                default:
+                    return true;
+            }
+        }
+
+        private static int ComputeSpectralSegmentActiveLedCount(int segmentLength, double sizeFactor)
+        {
+            if (segmentLength <= 0 || sizeFactor <= 0.0)
+            {
+                return 0;
+            }
+
+            return Math.Clamp((int)Math.Ceiling(segmentLength * sizeFactor), 1, segmentLength);
+        }
+
+        private static double ComputeSpectralSegmentBrightness(
+            SpectralAnalysisSegmentConfig segment,
+            double bandLevelDb,
+            double activity)
+        {
+            double brightnessPercent = segment.Brightness;
+            if (segment.BrightnessMode == SpectralSegmentBrightnessMode.LevelMapped)
+            {
+                brightnessPercent = Common.MapValue(
+                    bandLevelDb,
+                    segment.LevelLowDb,
+                    segment.LevelHighDb,
+                    segment.BrightnessLow,
+                    segment.Brightness);
+            }
+
+            return Math.Clamp((brightnessPercent / 100.0) * activity, 0.0, 1.0);
+        }
+
+        private SpectralAnalysisSegmentsSceneState GetOrCreateSpectralSegmentSceneState(string sceneId)
+        {
+            lock (SharedSpectralSegmentSceneStatesLock)
+            {
+                if (!SharedSpectralSegmentSceneStates.TryGetValue(sceneId, out SpectralAnalysisSegmentsSceneState? state))
+                {
+                    state = new SpectralAnalysisSegmentsSceneState();
+                    SharedSpectralSegmentSceneStates[sceneId] = state;
+                }
+
+                return state;
+            }
+        }
+
+        private static void AcquireSharedSpectralSegmentSceneState(string sceneId)
+        {
+            lock (SharedSpectralSegmentSceneStatesLock)
+            {
+                SharedSpectralSegmentSceneUsageCounts[sceneId] = SharedSpectralSegmentSceneUsageCounts.TryGetValue(sceneId, out int count)
+                    ? count + 1
+                    : 1;
+            }
+        }
+
+        private static void ReleaseSharedSpectralSegmentSceneState(string sceneId)
+        {
+            lock (SharedSpectralSegmentSceneStatesLock)
+            {
+                if (!SharedSpectralSegmentSceneUsageCounts.TryGetValue(sceneId, out int count))
+                {
+                    return;
+                }
+
+                if (count > 1)
+                {
+                    SharedSpectralSegmentSceneUsageCounts[sceneId] = count - 1;
+                    return;
+                }
+
+                SharedSpectralSegmentSceneUsageCounts.Remove(sceneId);
+                SharedSpectralSegmentSceneStates.Remove(sceneId);
+            }
+        }
+
+        private static SharedSpectralAnalysisLease AcquireSharedSpectralSegmentAnalysis()
+        {
+            lock (SharedSpectralSegmentAnalysisLock)
+            {
+                SharedSpectralSegmentAnalysis ??= new AcSpectralAnalysis();
+                SharedSpectralSegmentAnalysisUsageCount++;
+                return new SharedSpectralAnalysisLease(SharedSpectralSegmentAnalysis);
+            }
+        }
+
+        private void ReleaseSharedSpectralSegmentAnalysis()
+        {
+            SharedSpectralAnalysisLease? lease = sharedSpectralSegmentAnalysisLease;
+            if (lease == null)
+            {
+                return;
+            }
+
+            sharedSpectralSegmentAnalysisLease = null;
+            lease.Dispose();
+        }
+
+        private static void EnsureSharedSpectralSegmentAnalysisStarted(
+            SharedSpectralAnalysisLease lease,
+            string? audioDeviceId)
+        {
+            lock (SharedSpectralSegmentAnalysisLock)
+            {
+                if (!ReferenceEquals(SharedSpectralSegmentAnalysis, lease.Analyzer))
+                {
+                    return;
+                }
+
+                if (SharedSpectralSegmentAnalysisStarted
+                    && string.Equals(SharedSpectralSegmentAnalysisDeviceId, audioDeviceId, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                lease.Analyzer.Start(audioDeviceId);
+                SharedSpectralSegmentAnalysisDeviceId = audioDeviceId;
+                SharedSpectralSegmentAnalysisStarted = true;
+            }
+        }
+
+        private static void ReleaseSharedSpectralSegmentAnalysis(SharedSpectralAnalysisLease lease)
+        {
+            AcSpectralAnalysis? analyzerToDispose = null;
+            lock (SharedSpectralSegmentAnalysisLock)
+            {
+                if (!ReferenceEquals(SharedSpectralSegmentAnalysis, lease.Analyzer))
+                {
+                    return;
+                }
+
+                SharedSpectralSegmentAnalysisUsageCount = Math.Max(0, SharedSpectralSegmentAnalysisUsageCount - 1);
+                if (SharedSpectralSegmentAnalysisUsageCount == 0)
+                {
+                    analyzerToDispose = SharedSpectralSegmentAnalysis;
+                    SharedSpectralSegmentAnalysis = null;
+                    SharedSpectralSegmentAnalysisDeviceId = null;
+                    SharedSpectralSegmentAnalysisStarted = false;
+                }
+            }
+
+            analyzerToDispose?.Dispose();
+        }
+
+        private static string BuildSpectralAnalysisSegmentsSignature(IReadOnlyList<SpectralAnalysisSegmentConfig> segments)
+        {
+            return string.Join("|", segments.Select(segment => string.Join(":",
+                segment.Id,
+                segment.Enabled,
+                segment.Name,
+                segment.RatioDenominator,
+                segment.SegmentIndex,
+                segment.FrequencyLowHz.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                segment.FrequencyHighHz.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                segment.ThresholdDb.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                segment.LightUpMs,
+                segment.FadeOutMs,
+                segment.BrightnessMode,
+                segment.BrightnessLow,
+                segment.Brightness,
+                segment.LevelLowDb.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                segment.LevelHighDb.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                segment.SizeMode,
+                segment.CenterPointWidthPercent,
+                segment.HueMode,
+                segment.HueStart.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                segment.HueEnd.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                segment.SaturationMode,
+                segment.Saturation,
+                segment.SaturationMin,
+                segment.SaturationMax)));
+        }
+
+        private static void ResetSpectralAnalysisSegmentsState(
+            SpectralAnalysisSegmentsSceneState state,
+            string signature)
+        {
+            state.ConfigSignature = signature;
+            state.SegmentStates.Clear();
+        }
+
+        private static double GetRandomDouble(Random random, double min, double max)
+        {
+            return Math.Abs(max - min) < 0.0001
+                ? min
+                : min + (random.NextDouble() * (max - min));
+        }
+
+        private byte[] BuildLedStrobeFrame(string sceneId, LedStrobeSceneConfig config, int ledCount)
+        {
+            byte[] frame = new byte[Math.Max(ledCount, 0) * 3];
+            if (ledCount <= 0)
+            {
+                return frame;
+            }
+
+            LedStrobeSceneState state = GetOrCreateLedStrobeSceneState(sceneId);
+            lock (state.SyncRoot)
+            {
+                DateTime nowUtc = DateTime.UtcNow;
+                string signature = BuildLedStrobeSceneSignature(config);
+                if (!string.Equals(state.ConfigSignature, signature, StringComparison.Ordinal))
+                {
+                    ResetLedStrobeState(state, config, signature, nowUtc);
+                }
+
+                int transitions = 0;
+                while (nowUtc >= state.NextTransitionUtc && transitions < 32)
+                {
+                    AdvanceLedStrobePhase(state, config, state.NextTransitionUtc);
+                    transitions++;
+                }
+
+                if (nowUtc >= state.NextTransitionUtc)
+                {
+                    ResetLedStrobeState(state, config, signature, nowUtc);
+                }
+
+                if (!state.IsOn)
+                {
+                    return frame;
+                }
+
+                Color color = Common.HSVToRGB(
+                    Math.Clamp(state.CurrentHue, 0.0, 360.0),
+                    Math.Clamp(config.Saturation, 0, 100) / 100.0,
+                    Math.Clamp(config.Brightness, 0, 100) / 100.0);
+                for (int i = 0; i < ledCount; i++)
+                {
+                    int index = i * 3;
+                    frame[index] = color.R;
+                    frame[index + 1] = color.G;
+                    frame[index + 2] = color.B;
+                }
+
+                return frame;
+            }
+        }
+
+        private static void ResetLedStrobeState(
+            LedStrobeSceneState state,
+            LedStrobeSceneConfig config,
+            string signature,
+            DateTime nowUtc)
+        {
+            state.ConfigSignature = signature;
+            state.IsOn = true;
+            state.CurrentHue = ResolveLedStrobeHue(config, state.Random);
+            state.NextTransitionUtc = nowUtc.AddMilliseconds(ResolveLedStrobeDurationMs(config, state.Random, true));
+        }
+
+        private static void AdvanceLedStrobePhase(
+            LedStrobeSceneState state,
+            LedStrobeSceneConfig config,
+            DateTime transitionUtc)
+        {
+            state.IsOn = !state.IsOn;
+            if (state.IsOn)
+            {
+                state.CurrentHue = ResolveLedStrobeHue(config, state.Random);
+            }
+
+            state.NextTransitionUtc = transitionUtc.AddMilliseconds(ResolveLedStrobeDurationMs(config, state.Random, state.IsOn));
+        }
+
+        private static int ResolveLedStrobeDurationMs(LedStrobeSceneConfig config, Random random, bool onPhase)
+        {
+            StrobeTimingMode mode = onPhase ? config.OnDurationMode : config.OffDurationMode;
+            if (mode == StrobeTimingMode.RandomRange)
+            {
+                return GetRandomDelayMs(
+                    random,
+                    onPhase ? config.OnDurationMinMs : config.OffDurationMinMs,
+                    onPhase ? config.OnDurationMaxMs : config.OffDurationMaxMs);
+            }
+
+            return Math.Max(1, onPhase ? config.OnDurationMs : config.OffDurationMs);
+        }
+
+        private static double ResolveLedStrobeHue(LedStrobeSceneConfig config, Random random)
+        {
+            if (config.HueMode == StrobeHueMode.RandomRange)
+            {
+                double min = Math.Clamp(Math.Min(config.HueMin, config.HueMax), 0.0, 360.0);
+                double max = Math.Clamp(Math.Max(config.HueMin, config.HueMax), min, 360.0);
+                return GetRandomDouble(random, min, max);
+            }
+
+            return Math.Clamp(config.Hue, 0.0, 360.0);
+        }
+
+        private LedStrobeSceneState GetOrCreateLedStrobeSceneState(string sceneId)
+        {
+            lock (SharedLedStrobeSceneStatesLock)
+            {
+                if (!SharedLedStrobeSceneStates.TryGetValue(sceneId, out LedStrobeSceneState? state))
+                {
+                    state = new LedStrobeSceneState();
+                    SharedLedStrobeSceneStates[sceneId] = state;
+                }
+
+                return state;
+            }
+        }
+
+        private static void AcquireSharedLedStrobeSceneState(string sceneId)
+        {
+            lock (SharedLedStrobeSceneStatesLock)
+            {
+                SharedLedStrobeSceneUsageCounts[sceneId] = SharedLedStrobeSceneUsageCounts.TryGetValue(sceneId, out int count)
+                    ? count + 1
+                    : 1;
+            }
+        }
+
+        private static void ReleaseSharedLedStrobeSceneState(string sceneId)
+        {
+            lock (SharedLedStrobeSceneStatesLock)
+            {
+                if (!SharedLedStrobeSceneUsageCounts.TryGetValue(sceneId, out int count))
+                {
+                    return;
+                }
+
+                if (count > 1)
+                {
+                    SharedLedStrobeSceneUsageCounts[sceneId] = count - 1;
+                    return;
+                }
+
+                SharedLedStrobeSceneUsageCounts.Remove(sceneId);
+                SharedLedStrobeSceneStates.Remove(sceneId);
+            }
+        }
+
+        private static string BuildLedStrobeSceneSignature(LedStrobeSceneConfig config)
+        {
+            return string.Join("|",
+                config.OnDurationMode,
+                config.OnDurationMs,
+                config.OnDurationMinMs,
+                config.OnDurationMaxMs,
+                config.OffDurationMode,
+                config.OffDurationMs,
+                config.OffDurationMinMs,
+                config.OffDurationMaxMs,
+                config.HueMode,
+                config.Hue.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                config.HueMin.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                config.HueMax.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                config.Saturation,
+                config.Brightness);
         }
 
         private byte[] BuildSparkleAndFlashFrame(string sceneId, SparkleAndFlashSceneConfig config, int ledCount)
@@ -2080,6 +2833,17 @@ namespace Ledqualizer
             double hue,
             double brightness)
         {
+            PaintPixelIfBrighter(frame, intensities, ledIndex, hue, 1.0, brightness);
+        }
+
+        private static void PaintPixelIfBrighter(
+            byte[] frame,
+            double[] intensities,
+            int ledIndex,
+            double hue,
+            double saturation,
+            double brightness)
+        {
             if (ledIndex < 0 || ledIndex >= intensities.Length || brightness <= 0)
             {
                 return;
@@ -2091,7 +2855,7 @@ namespace Ledqualizer
                 return;
             }
 
-            Color color = Common.HSVToRGB(hue, 1.0, clampedBrightness);
+            Color color = Common.HSVToRGB(hue, Math.Clamp(saturation, 0.0, 1.0), clampedBrightness);
             int index = ledIndex * 3;
             frame[index] = color.R;
             frame[index + 1] = color.G;

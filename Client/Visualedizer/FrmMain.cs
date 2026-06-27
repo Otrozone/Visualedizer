@@ -130,10 +130,12 @@ namespace Ledqualizer
             var volumeEditor = new VolumeReactiveSceneEditorForm();
             var screenRowEditor = new ScreenRowCaptureSceneEditorForm();
             var spectralEditor = new SpectralAnalysisSceneEditorForm();
+            var spectralSegmentsEditor = new SpectralAnalysisSegmentsSceneEditorForm();
             var imageRowEditor = new ImageRowCaptureSceneEditorForm();
             var sparkleAndFlashEditor = new SparkleAndFlashSceneEditorForm();
             var laserDmxEditor = new LaserDmxSceneEditorForm();
             var strobeEditor = new StrobeSceneEditorForm();
+            var ledStrobeEditor = new LedStrobeSceneEditorForm();
 
             solidColorEditor.SceneChanged += Editor_SceneChanged;
             gradientEditor.SceneChanged += Editor_SceneChanged;
@@ -144,10 +146,13 @@ namespace Ledqualizer
             screenRowEditor.CaptureRowChanged += ScreenRowEditor_CaptureRowChanged;
             spectralEditor.SceneChanged += Editor_SceneChanged;
             spectralEditor.SelectedAudioDeviceChanged += SpectralEditor_SelectedAudioDeviceChanged;
+            spectralSegmentsEditor.SceneChanged += Editor_SceneChanged;
+            spectralSegmentsEditor.SelectedAudioDeviceChanged += SpectralSegmentsEditor_SelectedAudioDeviceChanged;
             imageRowEditor.SceneChanged += Editor_SceneChanged;
             sparkleAndFlashEditor.SceneChanged += Editor_SceneChanged;
             laserDmxEditor.SceneChanged += Editor_SceneChanged;
             strobeEditor.SceneChanged += Editor_SceneChanged;
+            ledStrobeEditor.SceneChanged += Editor_SceneChanged;
             laserDmxEditor.SendRequested += LaserDmxEditor_SendRequested;
             strobeEditor.TestRequested += StrobeEditor_TestRequested;
 
@@ -156,10 +161,12 @@ namespace Ledqualizer
             sceneEditors[SceneType.VolumeReactive] = volumeEditor;
             sceneEditors[SceneType.ScreenRowCapture] = screenRowEditor;
             sceneEditors[SceneType.SpectralAnalysis] = spectralEditor;
+            sceneEditors[SceneType.SpectralAnalysisSegments] = spectralSegmentsEditor;
             sceneEditors[SceneType.ImageRowCapture] = imageRowEditor;
             sceneEditors[SceneType.SparkleAndFlash] = sparkleAndFlashEditor;
             sceneEditors[SceneType.LaserDmx] = laserDmxEditor;
             sceneEditors[SceneType.Strobe] = strobeEditor;
+            sceneEditors[SceneType.LedStrobe] = ledStrobeEditor;
 
             foreach (Form editor in sceneEditors.Values)
             {
@@ -524,6 +531,12 @@ namespace Ledqualizer
                 {
                     spectralEditor.LoadAudioDevices(selectedAudioDeviceId);
                     selectedAudioDeviceId ??= spectralEditor.GetSelectedAudioDeviceId();
+                }
+
+                if (sceneEditors[SceneType.SpectralAnalysisSegments] is SpectralAnalysisSegmentsSceneEditorForm spectralSegmentsEditor)
+                {
+                    spectralSegmentsEditor.LoadAudioDevices(selectedAudioDeviceId);
+                    selectedAudioDeviceId ??= spectralSegmentsEditor.GetSelectedAudioDeviceId();
                 }
             }
             finally
@@ -1173,6 +1186,11 @@ namespace Ledqualizer
             if (sceneEditors[SceneType.SpectralAnalysis] is SpectralAnalysisSceneEditorForm spectralEditor)
             {
                 spectralEditor.UpdateProgress(value);
+            }
+
+            if (sceneEditors[SceneType.SpectralAnalysisSegments] is SpectralAnalysisSegmentsSceneEditorForm spectralSegmentsEditor)
+            {
+                spectralSegmentsEditor.UpdateProgress(value);
             }
         }
 
@@ -2379,7 +2397,18 @@ namespace Ledqualizer
             SyncAudioDeviceEditors(excludeSpectral: true);
         }
 
-        private void SyncAudioDeviceEditors(bool excludeVolume = false, bool excludeSpectral = false)
+        private void SpectralSegmentsEditor_SelectedAudioDeviceChanged(object? sender, EventArgs e)
+        {
+            if (syncingAudioDeviceSelection || sender is not SpectralAnalysisSegmentsSceneEditorForm spectralSegmentsEditor)
+            {
+                return;
+            }
+
+            selectedAudioDeviceId = spectralSegmentsEditor.GetSelectedAudioDeviceId();
+            SyncAudioDeviceEditors(excludeSpectralSegments: true);
+        }
+
+        private void SyncAudioDeviceEditors(bool excludeVolume = false, bool excludeSpectral = false, bool excludeSpectralSegments = false)
         {
             syncingAudioDeviceSelection = true;
             try
@@ -2392,6 +2421,11 @@ namespace Ledqualizer
                 if (!excludeSpectral && sceneEditors[SceneType.SpectralAnalysis] is SpectralAnalysisSceneEditorForm spectralEditor)
                 {
                     spectralEditor.SelectAudioDevice(selectedAudioDeviceId);
+                }
+
+                if (!excludeSpectralSegments && sceneEditors[SceneType.SpectralAnalysisSegments] is SpectralAnalysisSegmentsSceneEditorForm spectralSegmentsEditor)
+                {
+                    spectralSegmentsEditor.SelectAudioDevice(selectedAudioDeviceId);
                 }
             }
             finally

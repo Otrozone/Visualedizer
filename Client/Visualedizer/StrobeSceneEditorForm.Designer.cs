@@ -61,7 +61,6 @@ namespace Ledqualizer
 
         private void InitializeComponent()
         {
-            components = new System.ComponentModel.Container();
             layoutRoot = new TableLayoutPanel();
             lblInfo = new Label();
             layoutTriggerHeader = new TableLayoutPanel();
@@ -140,14 +139,14 @@ namespace Ledqualizer
             layoutRoot.Controls.Add(layoutTriggerPanels, 0, 2);
             layoutRoot.Controls.Add(panelActions, 0, 3);
             layoutRoot.Dock = DockStyle.Fill;
+            layoutRoot.Location = new Point(0, 0);
+            layoutRoot.Name = "layoutRoot";
             layoutRoot.Padding = new Padding(12);
             layoutRoot.RowCount = 4;
             layoutRoot.RowStyles.Add(new RowStyle());
             layoutRoot.RowStyles.Add(new RowStyle());
             layoutRoot.RowStyles.Add(new RowStyle());
             layoutRoot.RowStyles.Add(new RowStyle());
-            layoutRoot.Location = new Point(0, 0);
-            layoutRoot.Name = "layoutRoot";
             layoutRoot.Size = new Size(860, 520);
             layoutRoot.TabIndex = 0;
             // 
@@ -156,7 +155,7 @@ namespace Ledqualizer
             lblInfo.AutoSize = true;
             lblInfo.Location = new Point(15, 12);
             lblInfo.Name = "lblInfo";
-            lblInfo.Size = new Size(720, 15);
+            lblInfo.Size = new Size(686, 15);
             lblInfo.TabIndex = 0;
             lblInfo.Text = "Configure what should trigger the strobe. The output turns on when the trigger fires and turns off when the trigger window ends.";
             // 
@@ -179,16 +178,17 @@ namespace Ledqualizer
             layoutTriggerHeader.Dock = DockStyle.Fill;
             layoutTriggerHeader.Location = new Point(15, 30);
             layoutTriggerHeader.Name = "layoutTriggerHeader";
-            layoutTriggerHeader.Size = new Size(830, 27);
+            layoutTriggerHeader.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
+            layoutTriggerHeader.Size = new Size(830, 20);
             layoutTriggerHeader.TabIndex = 1;
             // 
             // lblEventType
             // 
             lblEventType.Anchor = AnchorStyles.Left;
             lblEventType.AutoSize = true;
-            lblEventType.Location = new Point(3, 6);
+            lblEventType.Location = new Point(3, 2);
             lblEventType.Name = "lblEventType";
-            lblEventType.Size = new Size(35, 15);
+            lblEventType.Size = new Size(36, 15);
             lblEventType.TabIndex = 0;
             lblEventType.Text = "Event";
             // 
@@ -196,7 +196,7 @@ namespace Ledqualizer
             // 
             cbEventType.DropDownStyle = ComboBoxStyle.DropDownList;
             cbEventType.FormattingEnabled = true;
-            cbEventType.Location = new Point(44, 3);
+            cbEventType.Location = new Point(45, 3);
             cbEventType.Name = "cbEventType";
             cbEventType.Size = new Size(240, 23);
             cbEventType.TabIndex = 1;
@@ -206,7 +206,7 @@ namespace Ledqualizer
             // 
             lblRetriggerMode.Anchor = AnchorStyles.Left;
             lblRetriggerMode.AutoSize = true;
-            lblRetriggerMode.Location = new Point(290, 6);
+            lblRetriggerMode.Location = new Point(336, 2);
             lblRetriggerMode.Name = "lblRetriggerMode";
             lblRetriggerMode.Size = new Size(55, 15);
             lblRetriggerMode.TabIndex = 2;
@@ -216,7 +216,7 @@ namespace Ledqualizer
             // 
             cbRetriggerMode.DropDownStyle = ComboBoxStyle.DropDownList;
             cbRetriggerMode.FormattingEnabled = true;
-            cbRetriggerMode.Location = new Point(351, 3);
+            cbRetriggerMode.Location = new Point(397, 3);
             cbRetriggerMode.Name = "cbRetriggerMode";
             cbRetriggerMode.Size = new Size(240, 23);
             cbRetriggerMode.TabIndex = 3;
@@ -226,15 +226,15 @@ namespace Ledqualizer
             // 
             lblOnDuration.Anchor = AnchorStyles.Left;
             lblOnDuration.AutoSize = true;
-            lblOnDuration.Location = new Point(597, 6);
+            lblOnDuration.Location = new Point(688, 2);
             lblOnDuration.Name = "lblOnDuration";
-            lblOnDuration.Size = new Size(37, 15);
+            lblOnDuration.Size = new Size(42, 15);
             lblOnDuration.TabIndex = 4;
             lblOnDuration.Text = "On ms";
             // 
             // numOnDurationMs
             // 
-            numOnDurationMs.Location = new Point(640, 3);
+            numOnDurationMs.Location = new Point(736, 3);
             numOnDurationMs.Maximum = new decimal(new int[] { 60000, 0, 0, 0 });
             numOnDurationMs.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numOnDurationMs.Name = "numOnDurationMs";
@@ -252,13 +252,13 @@ namespace Ledqualizer
             layoutTriggerPanels.Controls.Add(pnlSpectral, 0, 1);
             layoutTriggerPanels.Controls.Add(pnlScreen, 0, 2);
             layoutTriggerPanels.Dock = DockStyle.Fill;
-            layoutTriggerPanels.Location = new Point(15, 63);
+            layoutTriggerPanels.Location = new Point(15, 56);
             layoutTriggerPanels.Name = "layoutTriggerPanels";
             layoutTriggerPanels.RowCount = 3;
             layoutTriggerPanels.RowStyles.Add(new RowStyle());
             layoutTriggerPanels.RowStyles.Add(new RowStyle());
             layoutTriggerPanels.RowStyles.Add(new RowStyle());
-            layoutTriggerPanels.Size = new Size(830, 95);
+            layoutTriggerPanels.Size = new Size(830, 119);
             layoutTriggerPanels.TabIndex = 2;
             // 
             // pnlVolume
@@ -268,7 +268,7 @@ namespace Ledqualizer
             pnlVolume.Dock = DockStyle.Fill;
             pnlVolume.Location = new Point(3, 3);
             pnlVolume.Name = "pnlVolume";
-            pnlVolume.Size = new Size(824, 29);
+            pnlVolume.Size = new Size(824, 20);
             pnlVolume.TabIndex = 0;
             // 
             // layoutVolume
@@ -286,16 +286,17 @@ namespace Ledqualizer
             layoutVolume.Dock = DockStyle.Fill;
             layoutVolume.Location = new Point(0, 0);
             layoutVolume.Name = "layoutVolume";
-            layoutVolume.Size = new Size(824, 29);
+            layoutVolume.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
+            layoutVolume.Size = new Size(824, 20);
             layoutVolume.TabIndex = 0;
             // 
             // lblVolumeAudioDevice
             // 
             lblVolumeAudioDevice.Anchor = AnchorStyles.Left;
             lblVolumeAudioDevice.AutoSize = true;
-            lblVolumeAudioDevice.Location = new Point(3, 7);
+            lblVolumeAudioDevice.Location = new Point(3, 2);
             lblVolumeAudioDevice.Name = "lblVolumeAudioDevice";
-            lblVolumeAudioDevice.Size = new Size(74, 15);
+            lblVolumeAudioDevice.Size = new Size(77, 15);
             lblVolumeAudioDevice.TabIndex = 0;
             lblVolumeAudioDevice.Text = "Audio Device";
             // 
@@ -303,7 +304,7 @@ namespace Ledqualizer
             // 
             cbVolumeAudioDevice.DropDownStyle = ComboBoxStyle.DropDownList;
             cbVolumeAudioDevice.FormattingEnabled = true;
-            cbVolumeAudioDevice.Location = new Point(83, 3);
+            cbVolumeAudioDevice.Location = new Point(86, 3);
             cbVolumeAudioDevice.Name = "cbVolumeAudioDevice";
             cbVolumeAudioDevice.Size = new Size(360, 23);
             cbVolumeAudioDevice.TabIndex = 1;
@@ -313,16 +314,15 @@ namespace Ledqualizer
             // 
             lblVolumeThreshold.Anchor = AnchorStyles.Left;
             lblVolumeThreshold.AutoSize = true;
-            lblVolumeThreshold.Location = new Point(449, 7);
+            lblVolumeThreshold.Location = new Point(662, 2);
             lblVolumeThreshold.Name = "lblVolumeThreshold";
-            lblVolumeThreshold.Size = new Size(68, 15);
+            lblVolumeThreshold.Size = new Size(73, 15);
             lblVolumeThreshold.TabIndex = 2;
             lblVolumeThreshold.Text = "Threshold %";
             // 
             // numVolumeThreshold
             // 
-            numVolumeThreshold.Location = new Point(523, 3);
-            numVolumeThreshold.Maximum = new decimal(new int[] { 100, 0, 0, 0 });
+            numVolumeThreshold.Location = new Point(741, 3);
             numVolumeThreshold.Name = "numVolumeThreshold";
             numVolumeThreshold.Size = new Size(80, 23);
             numVolumeThreshold.TabIndex = 3;
@@ -334,9 +334,9 @@ namespace Ledqualizer
             pnlSpectral.AutoSize = true;
             pnlSpectral.Controls.Add(layoutSpectral);
             pnlSpectral.Dock = DockStyle.Fill;
-            pnlSpectral.Location = new Point(3, 38);
+            pnlSpectral.Location = new Point(3, 29);
             pnlSpectral.Name = "pnlSpectral";
-            pnlSpectral.Size = new Size(824, 29);
+            pnlSpectral.Size = new Size(824, 20);
             pnlSpectral.TabIndex = 1;
             // 
             // layoutSpectral
@@ -362,16 +362,17 @@ namespace Ledqualizer
             layoutSpectral.Dock = DockStyle.Fill;
             layoutSpectral.Location = new Point(0, 0);
             layoutSpectral.Name = "layoutSpectral";
-            layoutSpectral.Size = new Size(824, 29);
+            layoutSpectral.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
+            layoutSpectral.Size = new Size(824, 20);
             layoutSpectral.TabIndex = 0;
             // 
             // lblSpectralAudioDevice
             // 
             lblSpectralAudioDevice.Anchor = AnchorStyles.Left;
             lblSpectralAudioDevice.AutoSize = true;
-            lblSpectralAudioDevice.Location = new Point(3, 7);
+            lblSpectralAudioDevice.Location = new Point(3, 2);
             lblSpectralAudioDevice.Name = "lblSpectralAudioDevice";
-            lblSpectralAudioDevice.Size = new Size(74, 15);
+            lblSpectralAudioDevice.Size = new Size(77, 15);
             lblSpectralAudioDevice.TabIndex = 0;
             lblSpectralAudioDevice.Text = "Audio Device";
             // 
@@ -379,7 +380,7 @@ namespace Ledqualizer
             // 
             cbSpectralAudioDevice.DropDownStyle = ComboBoxStyle.DropDownList;
             cbSpectralAudioDevice.FormattingEnabled = true;
-            cbSpectralAudioDevice.Location = new Point(83, 3);
+            cbSpectralAudioDevice.Location = new Point(86, 3);
             cbSpectralAudioDevice.Name = "cbSpectralAudioDevice";
             cbSpectralAudioDevice.Size = new Size(250, 23);
             cbSpectralAudioDevice.TabIndex = 1;
@@ -389,15 +390,15 @@ namespace Ledqualizer
             // 
             lblSpectralLowHz.Anchor = AnchorStyles.Left;
             lblSpectralLowHz.AutoSize = true;
-            lblSpectralLowHz.Location = new Point(339, 7);
+            lblSpectralLowHz.Location = new Point(378, 2);
             lblSpectralLowHz.Name = "lblSpectralLowHz";
-            lblSpectralLowHz.Size = new Size(43, 15);
+            lblSpectralLowHz.Size = new Size(46, 15);
             lblSpectralLowHz.TabIndex = 2;
             lblSpectralLowHz.Text = "Low Hz";
             // 
             // numSpectralLowHz
             // 
-            numSpectralLowHz.Location = new Point(388, 3);
+            numSpectralLowHz.Location = new Point(430, 3);
             numSpectralLowHz.Maximum = new decimal(new int[] { 20000, 0, 0, 0 });
             numSpectralLowHz.Minimum = new decimal(new int[] { 20, 0, 0, 0 });
             numSpectralLowHz.Name = "numSpectralLowHz";
@@ -410,15 +411,15 @@ namespace Ledqualizer
             // 
             lblSpectralHighHz.Anchor = AnchorStyles.Left;
             lblSpectralHighHz.AutoSize = true;
-            lblSpectralHighHz.Location = new Point(474, 7);
+            lblSpectralHighHz.Location = new Point(516, 2);
             lblSpectralHighHz.Name = "lblSpectralHighHz";
-            lblSpectralHighHz.Size = new Size(47, 15);
+            lblSpectralHighHz.Size = new Size(50, 15);
             lblSpectralHighHz.TabIndex = 4;
             lblSpectralHighHz.Text = "High Hz";
             // 
             // numSpectralHighHz
             // 
-            numSpectralHighHz.Location = new Point(527, 3);
+            numSpectralHighHz.Location = new Point(572, 3);
             numSpectralHighHz.Maximum = new decimal(new int[] { 20000, 0, 0, 0 });
             numSpectralHighHz.Minimum = new decimal(new int[] { 20, 0, 0, 0 });
             numSpectralHighHz.Name = "numSpectralHighHz";
@@ -431,15 +432,15 @@ namespace Ledqualizer
             // 
             lblSpectralThresholdDb.Anchor = AnchorStyles.Left;
             lblSpectralThresholdDb.AutoSize = true;
-            lblSpectralThresholdDb.Location = new Point(613, 7);
+            lblSpectralThresholdDb.Location = new Point(658, 2);
             lblSpectralThresholdDb.Name = "lblSpectralThresholdDb";
-            lblSpectralThresholdDb.Size = new Size(72, 15);
+            lblSpectralThresholdDb.Size = new Size(77, 15);
             lblSpectralThresholdDb.TabIndex = 6;
             lblSpectralThresholdDb.Text = "Threshold dB";
             // 
             // numSpectralThresholdDb
             // 
-            numSpectralThresholdDb.Location = new Point(691, 3);
+            numSpectralThresholdDb.Location = new Point(741, 3);
             numSpectralThresholdDb.Maximum = new decimal(new int[] { 0, 0, 0, 0 });
             numSpectralThresholdDb.Minimum = new decimal(new int[] { 90, 0, 0, int.MinValue });
             numSpectralThresholdDb.Name = "numSpectralThresholdDb";
@@ -453,9 +454,9 @@ namespace Ledqualizer
             pnlScreen.AutoSize = true;
             pnlScreen.Controls.Add(layoutScreenContainer);
             pnlScreen.Dock = DockStyle.Fill;
-            pnlScreen.Location = new Point(3, 73);
+            pnlScreen.Location = new Point(3, 55);
             pnlScreen.Name = "pnlScreen";
-            pnlScreen.Size = new Size(824, 19);
+            pnlScreen.Size = new Size(824, 61);
             pnlScreen.TabIndex = 2;
             // 
             // layoutScreenContainer
@@ -471,7 +472,7 @@ namespace Ledqualizer
             layoutScreenContainer.RowCount = 2;
             layoutScreenContainer.RowStyles.Add(new RowStyle());
             layoutScreenContainer.RowStyles.Add(new RowStyle());
-            layoutScreenContainer.Size = new Size(824, 19);
+            layoutScreenContainer.Size = new Size(824, 61);
             layoutScreenContainer.TabIndex = 0;
             // 
             // layoutScreen
@@ -501,16 +502,17 @@ namespace Ledqualizer
             layoutScreen.Dock = DockStyle.Fill;
             layoutScreen.Location = new Point(3, 3);
             layoutScreen.Name = "layoutScreen";
-            layoutScreen.Size = new Size(818, 29);
+            layoutScreen.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
+            layoutScreen.Size = new Size(818, 20);
             layoutScreen.TabIndex = 0;
             // 
             // lblScreenMonitor
             // 
             lblScreenMonitor.Anchor = AnchorStyles.Left;
             lblScreenMonitor.AutoSize = true;
-            lblScreenMonitor.Location = new Point(3, 7);
+            lblScreenMonitor.Location = new Point(3, 2);
             lblScreenMonitor.Name = "lblScreenMonitor";
-            lblScreenMonitor.Size = new Size(48, 15);
+            lblScreenMonitor.Size = new Size(50, 15);
             lblScreenMonitor.TabIndex = 0;
             lblScreenMonitor.Text = "Monitor";
             // 
@@ -518,7 +520,7 @@ namespace Ledqualizer
             // 
             cbScreenMonitor.DropDownStyle = ComboBoxStyle.DropDownList;
             cbScreenMonitor.FormattingEnabled = true;
-            cbScreenMonitor.Location = new Point(57, 3);
+            cbScreenMonitor.Location = new Point(59, 3);
             cbScreenMonitor.Name = "cbScreenMonitor";
             cbScreenMonitor.Size = new Size(250, 23);
             cbScreenMonitor.TabIndex = 1;
@@ -527,9 +529,9 @@ namespace Ledqualizer
             // btnPickArea
             // 
             btnPickArea.AutoSize = true;
-            btnPickArea.Location = new Point(313, 3);
+            btnPickArea.Location = new Point(418, 3);
             btnPickArea.Name = "btnPickArea";
-            btnPickArea.Size = new Size(68, 25);
+            btnPickArea.Size = new Size(68, 14);
             btnPickArea.TabIndex = 2;
             btnPickArea.Text = "Pick Area";
             btnPickArea.UseVisualStyleBackColor = true;
@@ -539,7 +541,7 @@ namespace Ledqualizer
             // 
             lblScreenX.Anchor = AnchorStyles.Left;
             lblScreenX.AutoSize = true;
-            lblScreenX.Location = new Point(387, 7);
+            lblScreenX.Location = new Point(492, 2);
             lblScreenX.Name = "lblScreenX";
             lblScreenX.Size = new Size(14, 15);
             lblScreenX.TabIndex = 3;
@@ -547,7 +549,7 @@ namespace Ledqualizer
             // 
             // numScreenX
             // 
-            numScreenX.Location = new Point(407, 3);
+            numScreenX.Location = new Point(512, 3);
             numScreenX.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
             numScreenX.Name = "numScreenX";
             numScreenX.Size = new Size(75, 23);
@@ -558,7 +560,7 @@ namespace Ledqualizer
             // 
             lblScreenY.Anchor = AnchorStyles.Left;
             lblScreenY.AutoSize = true;
-            lblScreenY.Location = new Point(488, 7);
+            lblScreenY.Location = new Point(593, 2);
             lblScreenY.Name = "lblScreenY";
             lblScreenY.Size = new Size(14, 15);
             lblScreenY.TabIndex = 5;
@@ -566,7 +568,7 @@ namespace Ledqualizer
             // 
             // numScreenY
             // 
-            numScreenY.Location = new Point(508, 3);
+            numScreenY.Location = new Point(613, 3);
             numScreenY.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
             numScreenY.Name = "numScreenY";
             numScreenY.Size = new Size(75, 23);
@@ -577,7 +579,7 @@ namespace Ledqualizer
             // 
             lblScreenWidth.Anchor = AnchorStyles.Left;
             lblScreenWidth.AutoSize = true;
-            lblScreenWidth.Location = new Point(589, 7);
+            lblScreenWidth.Location = new Point(694, 2);
             lblScreenWidth.Name = "lblScreenWidth";
             lblScreenWidth.Size = new Size(18, 15);
             lblScreenWidth.TabIndex = 7;
@@ -585,7 +587,7 @@ namespace Ledqualizer
             // 
             // numScreenWidth
             // 
-            numScreenWidth.Location = new Point(613, 3);
+            numScreenWidth.Location = new Point(718, 3);
             numScreenWidth.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
             numScreenWidth.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numScreenWidth.Name = "numScreenWidth";
@@ -598,9 +600,9 @@ namespace Ledqualizer
             // 
             lblScreenHeight.Anchor = AnchorStyles.Left;
             lblScreenHeight.AutoSize = true;
-            lblScreenHeight.Location = new Point(694, 7);
+            lblScreenHeight.Location = new Point(799, 2);
             lblScreenHeight.Name = "lblScreenHeight";
-            lblScreenHeight.Size = new Size(15, 15);
+            lblScreenHeight.Size = new Size(16, 15);
             lblScreenHeight.TabIndex = 9;
             lblScreenHeight.Text = "H";
             // 
@@ -611,8 +613,7 @@ namespace Ledqualizer
             panelScreenSecondRow.Controls.Add(lblScreenBrightness);
             panelScreenSecondRow.Controls.Add(numScreenBrightnessThreshold);
             panelScreenSecondRow.Dock = DockStyle.Fill;
-            panelScreenSecondRow.FlowDirection = FlowDirection.LeftToRight;
-            panelScreenSecondRow.Location = new Point(3, 38);
+            panelScreenSecondRow.Location = new Point(3, 29);
             panelScreenSecondRow.Name = "panelScreenSecondRow";
             panelScreenSecondRow.Size = new Size(818, 29);
             panelScreenSecondRow.TabIndex = 1;
@@ -631,17 +632,16 @@ namespace Ledqualizer
             // lblScreenBrightness
             // 
             lblScreenBrightness.AutoSize = true;
-            lblScreenBrightness.Location = new Point(90, 6);
+            lblScreenBrightness.Location = new Point(93, 6);
             lblScreenBrightness.Margin = new Padding(12, 6, 0, 0);
             lblScreenBrightness.Name = "lblScreenBrightness";
-            lblScreenBrightness.Size = new Size(68, 15);
+            lblScreenBrightness.Size = new Size(75, 15);
             lblScreenBrightness.TabIndex = 1;
             lblScreenBrightness.Text = "Brightness %";
             // 
             // numScreenBrightnessThreshold
             // 
-            numScreenBrightnessThreshold.Location = new Point(161, 3);
-            numScreenBrightnessThreshold.Maximum = new decimal(new int[] { 100, 0, 0, 0 });
+            numScreenBrightnessThreshold.Location = new Point(171, 3);
             numScreenBrightnessThreshold.Name = "numScreenBrightnessThreshold";
             numScreenBrightnessThreshold.Size = new Size(75, 23);
             numScreenBrightnessThreshold.TabIndex = 2;
@@ -653,10 +653,9 @@ namespace Ledqualizer
             panelActions.AutoSize = true;
             panelActions.Controls.Add(btnTest);
             panelActions.Dock = DockStyle.Fill;
-            panelActions.FlowDirection = FlowDirection.LeftToRight;
-            panelActions.Location = new Point(15, 164);
+            panelActions.Location = new Point(15, 181);
             panelActions.Name = "panelActions";
-            panelActions.Size = new Size(830, 31);
+            panelActions.Size = new Size(830, 324);
             panelActions.TabIndex = 3;
             // 
             // btnTest
