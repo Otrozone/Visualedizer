@@ -5,6 +5,9 @@ namespace Ledqualizer
 {
     public partial class FrmMain : Form
     {
+        private const int MinCollectionAutoSelectionPeriodSeconds = 1;
+        private const int MaxCollectionAutoSelectionPeriodSeconds = 3600;
+
         private sealed class DeviceRunEntry
         {
             public DeviceRunEntry(DeviceConfig config, string configSignature, RunController controller)
@@ -61,6 +64,8 @@ namespace Ledqualizer
         private readonly DeviceMetadataService deviceMetadataService = new();
         private readonly Dictionary<string, Task> metadataRefreshTasks = new();
         private readonly Dictionary<string, LaserDmxRuntimeState> manualLaserStates = new();
+        private readonly System.Windows.Forms.Timer collectionAutoSelectionTimer = new();
+        private readonly Random collectionAutoSelectionRandom = new();
         private readonly Font deviceGroupFont;
 
         private bool isLoading;
@@ -69,6 +74,8 @@ namespace Ledqualizer
         private bool closingInProgress;
         private bool shutdownCompleted;
         private bool syncingAudioDeviceSelection;
+        private bool syncingCollectionAutoSelectionControls;
+        private bool collectionAutoSelectionTickInProgress;
         private bool collectionOverrideActive;
         private bool collectionOverrideChanging;
         private string? selectedAudioDeviceId;
@@ -251,6 +258,12 @@ namespace Ledqualizer
 
             colCollectionMode.DataSource = Enum.GetValues<CollectionActivationMode>();
             colCollectionMode.DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton;
+            cmbCollectionAutoMode.DataSource = Enum.GetValues<CollectionAutoSelectionMode>();
+            cmbCollectionAutoMode.SelectedIndexChanged += cmbCollectionAutoMode_SelectedIndexChanged;
+            numCollectionAutoPeriod.Minimum = MinCollectionAutoSelectionPeriodSeconds;
+            numCollectionAutoPeriod.Maximum = MaxCollectionAutoSelectionPeriodSeconds;
+            numCollectionAutoPeriod.ValueChanged += numCollectionAutoPeriod_ValueChanged;
+            collectionAutoSelectionTimer.Tick += collectionAutoSelectionTimer_Tick;
         }
 
         private static void ApplyCompactRowHeight(DataGridView grid)
@@ -313,10 +326,12 @@ namespace Ledqualizer
         private async void frmMain_Load(object sender, EventArgs e)
         {
             isLoading = true;
+            CollectionAutoSelectionMode autoSelectionMode = CollectionAutoSelectionMode.Off;
             try
             {
                 appConfig.Load();
                 ApplyConfigToUi();
+                autoSelectionMode = appConfig.CollectionAutoSelection.Mode;
                 LoadAudioDevices();
                 CountHz();
             }
@@ -325,12 +340,19 @@ namespace Ledqualizer
                 isLoading = false;
             }
 
+            if (autoSelectionMode != CollectionAutoSelectionMode.Off
+                && await StartCollectionAutoSelectionAsync(autoSelectionMode, showMessage: false))
+            {
+                return;
+            }
+
             await ReconcileDeviceRunsAsync();
         }
 
         private void ApplyConfigToUi()
         {
             numDelay.Value = Math.Max(numDelay.Minimum, Math.Min(numDelay.Maximum, appConfig.Delay));
+            ApplyCollectionAutoSelectionSettingsToUi();
 
             sceneRows.Clear();
             foreach (SceneConfig scene in appConfig.Scenes)
@@ -370,10 +392,32 @@ namespace Ledqualizer
         private void SyncConfigFromUi()
         {
             appConfig.Delay = (int)numDelay.Value;
+            appConfig.CollectionAutoSelection.Mode = GetSelectedCollectionAutoSelectionMode();
+            appConfig.CollectionAutoSelection.PeriodSeconds = (int)numCollectionAutoPeriod.Value;
             appConfig.Devices = GetRootDeviceRows()
                 .Select(BuildDeviceConfigFromRows)
                 .ToList();
             SyncCollectionsFromRows();
+        }
+
+        private void ApplyCollectionAutoSelectionSettingsToUi()
+        {
+            syncingCollectionAutoSelectionControls = true;
+            try
+            {
+                CollectionAutoSelectionSettings settings = appConfig.CollectionAutoSelection ?? new CollectionAutoSelectionSettings();
+                cmbCollectionAutoMode.SelectedItem = Enum.IsDefined(typeof(CollectionAutoSelectionMode), settings.Mode)
+                    ? settings.Mode
+                    : CollectionAutoSelectionMode.Off;
+                numCollectionAutoPeriod.Value = Math.Max(
+                    numCollectionAutoPeriod.Minimum,
+                    Math.Min(numCollectionAutoPeriod.Maximum, settings.PeriodSeconds));
+                UpdateCollectionAutoSelectionTimerInterval();
+            }
+            finally
+            {
+                syncingCollectionAutoSelectionControls = false;
+            }
         }
 
         private void RefreshCollectionRows()
@@ -398,6 +442,7 @@ namespace Ledqualizer
             CollectionGridRow refreshed = CollectionGridRow.FromCollection(collection, IsCollectionActive(collection.Id));
             row.Name = refreshed.Name;
             row.ActivationMode = refreshed.ActivationMode;
+            row.IncludedInAutoSelection = refreshed.IncludedInAutoSelection;
             row.ShortcutText = refreshed.ShortcutText;
             row.TargetSummary = refreshed.TargetSummary;
             row.StatusText = refreshed.StatusText;
@@ -437,6 +482,7 @@ namespace Ledqualizer
 
                 collection.Name = string.IsNullOrWhiteSpace(row.Name) ? collection.Name : row.Name.Trim();
                 collection.ActivationMode = row.ActivationMode;
+                collection.IncludedInAutoSelection = row.IncludedInAutoSelection;
             }
         }
 
@@ -456,6 +502,228 @@ namespace Ledqualizer
         {
             string text = shortcut?.ToString() ?? string.Empty;
             return string.IsNullOrWhiteSpace(text) ? "none" : text;
+        }
+
+        private CollectionAutoSelectionMode GetSelectedCollectionAutoSelectionMode()
+        {
+            return cmbCollectionAutoMode.SelectedItem is CollectionAutoSelectionMode mode
+                && Enum.IsDefined(typeof(CollectionAutoSelectionMode), mode)
+                ? mode
+                : CollectionAutoSelectionMode.Off;
+        }
+
+        private void SetCollectionAutoSelectionMode(CollectionAutoSelectionMode mode)
+        {
+            appConfig.CollectionAutoSelection.Mode = mode;
+            syncingCollectionAutoSelectionControls = true;
+            try
+            {
+                cmbCollectionAutoMode.SelectedItem = mode;
+            }
+            finally
+            {
+                syncingCollectionAutoSelectionControls = false;
+            }
+        }
+
+        private bool IsCollectionAutoSelectionEnabled()
+        {
+            return collectionAutoSelectionTimer.Enabled
+                || appConfig.CollectionAutoSelection.Mode != CollectionAutoSelectionMode.Off;
+        }
+
+        private void UpdateCollectionAutoSelectionTimerInterval()
+        {
+            int periodSeconds = Math.Max(
+                MinCollectionAutoSelectionPeriodSeconds,
+                Math.Min(MaxCollectionAutoSelectionPeriodSeconds, appConfig.CollectionAutoSelection.PeriodSeconds));
+            appConfig.CollectionAutoSelection.PeriodSeconds = periodSeconds;
+
+            bool restartTimer = collectionAutoSelectionTimer.Enabled;
+            if (restartTimer)
+            {
+                collectionAutoSelectionTimer.Stop();
+            }
+
+            collectionAutoSelectionTimer.Interval = periodSeconds * 1000;
+            if (restartTimer)
+            {
+                collectionAutoSelectionTimer.Start();
+            }
+        }
+
+        private async Task<bool> StartCollectionAutoSelectionAsync(CollectionAutoSelectionMode mode, bool showMessage)
+        {
+            if (mode == CollectionAutoSelectionMode.Off)
+            {
+                await StopCollectionAutoSelectionAsync(resumeDefault: true);
+                return false;
+            }
+
+            bool wasAutoSelectionEnabled = IsCollectionAutoSelectionEnabled();
+            SyncCollectionsFromRows();
+            if (GetEligibleAutoSelectionCollections().Count == 0)
+            {
+                collectionAutoSelectionTimer.Stop();
+                SetCollectionAutoSelectionMode(CollectionAutoSelectionMode.Off);
+                if (wasAutoSelectionEnabled)
+                {
+                    await StopCollectionOverrideAsync(resumeDefault: true);
+                }
+
+                if (showMessage)
+                {
+                    MessageBox.Show(this, "Select at least one collection in the Auto column before enabling automatic collection switching.", "No Automatic Collections", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+
+                return false;
+            }
+
+            SetCollectionAutoSelectionMode(mode);
+            UpdateCollectionAutoSelectionTimerInterval();
+            if (!await SwitchToNextAutomaticCollectionAsync(isInitial: true))
+            {
+                return false;
+            }
+
+            collectionAutoSelectionTimer.Start();
+            return true;
+        }
+
+        private async Task StopCollectionAutoSelectionAsync(bool resumeDefault)
+        {
+            collectionAutoSelectionTimer.Stop();
+            SetCollectionAutoSelectionMode(CollectionAutoSelectionMode.Off);
+            await StopCollectionOverrideAsync(resumeDefault);
+        }
+
+        private async Task HandleCollectionAutoSelectionEligibilityChangedAsync()
+        {
+            if (!IsCollectionAutoSelectionEnabled())
+            {
+                return;
+            }
+
+            List<ConfigurationCollection> eligibleCollections = GetEligibleAutoSelectionCollections();
+            if (eligibleCollections.Count == 0)
+            {
+                await StopCollectionAutoSelectionAsync(resumeDefault: true);
+                return;
+            }
+
+            bool activeCollectionStillEligible = !string.IsNullOrWhiteSpace(activeCollectionId)
+                && eligibleCollections.Any(collection => string.Equals(collection.Id, activeCollectionId, StringComparison.Ordinal));
+            if (!collectionOverrideActive || !activeCollectionStillEligible)
+            {
+                await SwitchToNextAutomaticCollectionAsync(isInitial: false);
+            }
+        }
+
+        private async Task<bool> SwitchToNextAutomaticCollectionAsync(bool isInitial)
+        {
+            CollectionAutoSelectionMode mode = appConfig.CollectionAutoSelection.Mode;
+            if (mode == CollectionAutoSelectionMode.Off)
+            {
+                collectionAutoSelectionTimer.Stop();
+                return false;
+            }
+
+            SyncCollectionsFromRows();
+            ConfigurationCollection? collection = GetNextAutomaticCollection(mode, isInitial);
+            if (collection == null)
+            {
+                await StopCollectionAutoSelectionAsync(resumeDefault: true);
+                return false;
+            }
+
+            if (collectionOverrideActive && string.Equals(activeCollectionId, collection.Id, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            await StartCollectionOverrideAsync(collection, CollectionActivationMode.Toggle, holdShortcut: null);
+            return true;
+        }
+
+        private ConfigurationCollection? GetNextAutomaticCollection(CollectionAutoSelectionMode mode, bool isInitial)
+        {
+            List<ConfigurationCollection> eligibleCollections = GetEligibleAutoSelectionCollections();
+            if (eligibleCollections.Count == 0)
+            {
+                return null;
+            }
+
+            return mode switch
+            {
+                CollectionAutoSelectionMode.Random => GetRandomAutomaticCollection(eligibleCollections),
+                CollectionAutoSelectionMode.Ascending => GetSequentialAutomaticCollection(eligibleCollections, ascending: true, isInitial: isInitial),
+                CollectionAutoSelectionMode.Descending => GetSequentialAutomaticCollection(eligibleCollections, ascending: false, isInitial: isInitial),
+                _ => null
+            };
+        }
+
+        private List<ConfigurationCollection> GetEligibleAutoSelectionCollections()
+        {
+            return collectionRows
+                .Select(row => FindCollectionById(row.Id))
+                .Where(collection => collection != null && collection.IncludedInAutoSelection && collection.HasTargets())
+                .Cast<ConfigurationCollection>()
+                .ToList();
+        }
+
+        private ConfigurationCollection GetRandomAutomaticCollection(List<ConfigurationCollection> eligibleCollections)
+        {
+            List<ConfigurationCollection> candidates = eligibleCollections;
+            if (eligibleCollections.Count > 1 && !string.IsNullOrWhiteSpace(activeCollectionId))
+            {
+                List<ConfigurationCollection> nonActiveCandidates = eligibleCollections
+                    .Where(collection => !string.Equals(collection.Id, activeCollectionId, StringComparison.Ordinal))
+                    .ToList();
+                if (nonActiveCandidates.Count > 0)
+                {
+                    candidates = nonActiveCandidates;
+                }
+            }
+
+            return candidates[collectionAutoSelectionRandom.Next(candidates.Count)];
+        }
+
+        private ConfigurationCollection GetSequentialAutomaticCollection(List<ConfigurationCollection> eligibleCollections, bool ascending, bool isInitial)
+        {
+            if (isInitial || string.IsNullOrWhiteSpace(activeCollectionId))
+            {
+                return ascending ? eligibleCollections[0] : eligibleCollections[^1];
+            }
+
+            int activeEligibleIndex = eligibleCollections.FindIndex(collection => string.Equals(collection.Id, activeCollectionId, StringComparison.Ordinal));
+            if (activeEligibleIndex >= 0)
+            {
+                int nextEligibleIndex = ascending
+                    ? (activeEligibleIndex + 1) % eligibleCollections.Count
+                    : (activeEligibleIndex - 1 + eligibleCollections.Count) % eligibleCollections.Count;
+                return eligibleCollections[nextEligibleIndex];
+            }
+
+            int activeRowIndex = collectionRows
+                .Select((row, index) => new { row.Id, Index = index })
+                .FirstOrDefault(item => string.Equals(item.Id, activeCollectionId, StringComparison.Ordinal))
+                ?.Index ?? -1;
+            if (activeRowIndex >= 0)
+            {
+                for (int offset = 1; offset <= collectionRows.Count; offset++)
+                {
+                    int candidateIndex = ascending
+                        ? (activeRowIndex + offset) % collectionRows.Count
+                        : (activeRowIndex - offset + collectionRows.Count) % collectionRows.Count;
+                    ConfigurationCollection? candidate = FindCollectionById(collectionRows[candidateIndex].Id);
+                    if (candidate != null && candidate.IncludedInAutoSelection && candidate.HasTargets())
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            return ascending ? eligibleCollections[0] : eligibleCollections[^1];
         }
 
         private IEnumerable<DeviceGridRow> BuildDeviceRows(DeviceConfig device)
@@ -1499,16 +1767,23 @@ namespace Ledqualizer
                 return;
             }
 
-            if (string.Equals(activeCollectionId, collection.Id, StringComparison.Ordinal))
-            {
-                await StopCollectionOverrideAsync(resumeDefault: true);
-            }
+            bool removedActiveCollection = string.Equals(activeCollectionId, collection.Id, StringComparison.Ordinal);
+            bool autoSelectionEnabled = IsCollectionAutoSelectionEnabled();
 
             appConfig.Collections.Remove(collection);
             CollectionGridRow? row = collectionRows.FirstOrDefault(item => item.Id == collection.Id);
             if (row != null)
             {
                 collectionRows.Remove(row);
+            }
+
+            if (autoSelectionEnabled)
+            {
+                await HandleCollectionAutoSelectionEligibilityChangedAsync();
+            }
+            else if (removedActiveCollection)
+            {
+                await StopCollectionOverrideAsync(resumeDefault: true);
             }
         }
 
@@ -1569,7 +1844,53 @@ namespace Ledqualizer
 
         private async void btnStopCollection_Click(object? sender, EventArgs e)
         {
-            await StopCollectionOverrideAsync(resumeDefault: true);
+            await StopCollectionAutoSelectionAsync(resumeDefault: true);
+        }
+
+        private async void cmbCollectionAutoMode_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (isLoading || syncingCollectionAutoSelectionControls)
+            {
+                return;
+            }
+
+            CollectionAutoSelectionMode mode = GetSelectedCollectionAutoSelectionMode();
+            if (mode == CollectionAutoSelectionMode.Off)
+            {
+                await StopCollectionAutoSelectionAsync(resumeDefault: true);
+                return;
+            }
+
+            await StartCollectionAutoSelectionAsync(mode, showMessage: true);
+        }
+
+        private void numCollectionAutoPeriod_ValueChanged(object? sender, EventArgs e)
+        {
+            if (isLoading || syncingCollectionAutoSelectionControls)
+            {
+                return;
+            }
+
+            appConfig.CollectionAutoSelection.PeriodSeconds = (int)numCollectionAutoPeriod.Value;
+            UpdateCollectionAutoSelectionTimerInterval();
+        }
+
+        private async void collectionAutoSelectionTimer_Tick(object? sender, EventArgs e)
+        {
+            if (collectionAutoSelectionTickInProgress)
+            {
+                return;
+            }
+
+            collectionAutoSelectionTickInProgress = true;
+            try
+            {
+                await SwitchToNextAutomaticCollectionAsync(isInitial: false);
+            }
+            finally
+            {
+                collectionAutoSelectionTickInProgress = false;
+            }
         }
 
         private KeyboardShortcutConfig? CaptureShortcut(KeyboardShortcutConfig? current, string title)
@@ -1719,27 +2040,27 @@ namespace Ledqualizer
             }
         }
 
-        private void dgvCollections_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+        private async void dgvCollections_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
             if (!ShouldHandleValueChangedImmediately(dgvCollections, e))
             {
                 return;
             }
 
-            HandleCollectionCellChanged(e.RowIndex);
+            await HandleCollectionCellChangedAsync(e.RowIndex);
         }
 
-        private void dgvCollections_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
+        private async void dgvCollections_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
         {
             if (IsImmediateCommitColumn(dgvCollections, e.ColumnIndex))
             {
                 return;
             }
 
-            HandleCollectionCellChanged(e.RowIndex);
+            await HandleCollectionCellChangedAsync(e.RowIndex);
         }
 
-        private void HandleCollectionCellChanged(int rowIndex)
+        private async Task HandleCollectionCellChangedAsync(int rowIndex)
         {
             if (isLoading || rowIndex < 0)
             {
@@ -1757,9 +2078,15 @@ namespace Ledqualizer
                 return;
             }
 
+            bool includedChanged = collection.IncludedInAutoSelection != row.IncludedInAutoSelection;
             collection.Name = string.IsNullOrWhiteSpace(row.Name) ? collection.Name : row.Name.Trim();
             collection.ActivationMode = row.ActivationMode;
+            collection.IncludedInAutoSelection = row.IncludedInAutoSelection;
             RefreshCollectionRow(collection);
+            if (includedChanged)
+            {
+                await HandleCollectionAutoSelectionEligibilityChangedAsync();
+            }
         }
 
         private void dgvCollections_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
@@ -1804,7 +2131,7 @@ namespace Ledqualizer
 
             if (appConfig.ResetShortcut != null && !appConfig.ResetShortcut.IsEmpty && shortcut.Matches(appConfig.ResetShortcut))
             {
-                await StopCollectionOverrideAsync(resumeDefault: true);
+                await StopCollectionAutoSelectionAsync(resumeDefault: true);
                 return;
             }
 
@@ -2823,10 +3150,12 @@ namespace Ledqualizer
 
             try
             {
+                collectionAutoSelectionTimer.Stop();
                 await StopCollectionOverrideAsync(resumeDefault: false);
                 await StopAllDeviceRunsAsync();
                 SyncConfigFromUi();
                 appConfig.Save();
+                collectionAutoSelectionTimer.Dispose();
                 globalShortcutManager?.Dispose();
                 globalShortcutManager = null;
                 shutdownCompleted = true;

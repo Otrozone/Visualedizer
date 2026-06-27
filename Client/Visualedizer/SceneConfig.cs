@@ -108,6 +108,20 @@ namespace Ledqualizer
         Hold
     }
 
+    public enum CollectionAutoSelectionMode
+    {
+        Off,
+        Random,
+        Ascending,
+        Descending
+    }
+
+    public sealed class CollectionAutoSelectionSettings
+    {
+        public CollectionAutoSelectionMode Mode { get; set; } = CollectionAutoSelectionMode.Off;
+        public int PeriodSeconds { get; set; } = 30;
+    }
+
     public sealed class KeyboardShortcutConfig
     {
         public bool Control { get; set; }
@@ -251,6 +265,7 @@ namespace Ledqualizer
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string Name { get; set; } = "Collection";
         public CollectionActivationMode ActivationMode { get; set; } = CollectionActivationMode.Toggle;
+        public bool IncludedInAutoSelection { get; set; }
         public KeyboardShortcutConfig Shortcut { get; set; } = new();
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
         public List<CollectionDeviceSnapshot> Devices { get; set; } = new();
@@ -997,6 +1012,7 @@ namespace Ledqualizer
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string Name { get; set; } = "Collection";
         public CollectionActivationMode ActivationMode { get; set; } = CollectionActivationMode.Toggle;
+        public bool IncludedInAutoSelection { get; set; }
         public string ShortcutText { get; set; } = string.Empty;
         public string TargetSummary { get; set; } = string.Empty;
         public string StatusText { get; set; } = "Inactive";
@@ -1008,6 +1024,7 @@ namespace Ledqualizer
                 Id = collection.Id,
                 Name = collection.Name,
                 ActivationMode = collection.ActivationMode,
+                IncludedInAutoSelection = collection.IncludedInAutoSelection,
                 ShortcutText = collection.Shortcut?.ToString() ?? string.Empty,
                 TargetSummary = CollectionSummaryBuilder.Build(collection),
                 StatusText = isActive ? "Active" : "Inactive"

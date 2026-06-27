@@ -17,6 +17,7 @@ namespace Ledqualizer
         public List<DeviceConfig> Devices { get; set; } = new();
         public List<SceneConfig> Scenes { get; set; } = new();
         public List<ConfigurationCollection> Collections { get; set; } = new();
+        public CollectionAutoSelectionSettings CollectionAutoSelection { get; set; } = new();
         public KeyboardShortcutConfig ResetShortcut { get; set; } = new();
 
         public int Delay { get; set; } = 20;
@@ -35,6 +36,7 @@ namespace Ledqualizer
             Devices.Clear();
             Scenes.Clear();
             Collections.Clear();
+            CollectionAutoSelection = new CollectionAutoSelectionSettings();
             ResetShortcut = new KeyboardShortcutConfig();
 
             if (File.Exists(JsonFileName))
@@ -73,6 +75,7 @@ namespace Ledqualizer
             Devices = loaded.Devices ?? new List<DeviceConfig>();
             Scenes = loaded.Scenes ?? new List<SceneConfig>();
             Collections = loaded.Collections ?? new List<ConfigurationCollection>();
+            CollectionAutoSelection = loaded.CollectionAutoSelection ?? new CollectionAutoSelectionSettings();
             ResetShortcut = loaded.ResetShortcut ?? new KeyboardShortcutConfig();
             Delay = loaded.Delay;
             StrobeTriggerX = loaded.StrobeTriggerX;
@@ -88,6 +91,13 @@ namespace Ledqualizer
         private void EnsureDefaults()
         {
             Collections ??= new List<ConfigurationCollection>();
+            CollectionAutoSelection ??= new CollectionAutoSelectionSettings();
+            if (!Enum.IsDefined(typeof(CollectionAutoSelectionMode), CollectionAutoSelection.Mode))
+            {
+                CollectionAutoSelection.Mode = CollectionAutoSelectionMode.Off;
+            }
+
+            CollectionAutoSelection.PeriodSeconds = Math.Max(1, Math.Min(3600, CollectionAutoSelection.PeriodSeconds));
             ResetShortcut ??= new KeyboardShortcutConfig();
 
             if (Scenes.Count == 0)

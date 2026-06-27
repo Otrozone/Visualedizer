@@ -42,7 +42,12 @@ namespace Ledqualizer
         private Button btnSetResetShortcut;
         private Button btnStopCollection;
         private Label lblResetShortcut;
+        private Label lblCollectionAutoMode;
+        private ComboBox cmbCollectionAutoMode;
+        private Label lblCollectionAutoPeriod;
+        private NumericUpDown numCollectionAutoPeriod;
         private DataGridView dgvCollections;
+        private DataGridViewCheckBoxColumn colCollectionAutoSelection;
         private DataGridViewTextBoxColumn colCollectionName;
         private DataGridViewComboBoxColumn colCollectionMode;
         private DataGridViewTextBoxColumn colCollectionShortcut;
@@ -103,7 +108,12 @@ namespace Ledqualizer
             btnSetResetShortcut = new Button();
             btnStopCollection = new Button();
             lblResetShortcut = new Label();
+            lblCollectionAutoMode = new Label();
+            cmbCollectionAutoMode = new ComboBox();
+            lblCollectionAutoPeriod = new Label();
+            numCollectionAutoPeriod = new NumericUpDown();
             dgvCollections = new DataGridView();
+            colCollectionAutoSelection = new DataGridViewCheckBoxColumn();
             colCollectionName = new DataGridViewTextBoxColumn();
             colCollectionMode = new DataGridViewComboBoxColumn();
             colCollectionShortcut = new DataGridViewTextBoxColumn();
@@ -127,6 +137,7 @@ namespace Ledqualizer
             splitContainerMain.Panel2.SuspendLayout();
             splitContainerMain.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgvScenes).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numCollectionAutoPeriod).BeginInit();
             ((System.ComponentModel.ISupportInitialize)dgvCollections).BeginInit();
             statusStrip.SuspendLayout();
             SuspendLayout();
@@ -151,6 +162,10 @@ namespace Ledqualizer
             splitContainerWorkspace.Panel2.Controls.Add(lblResetShortcut);
             splitContainerWorkspace.Panel2.Controls.Add(btnStopCollection);
             splitContainerWorkspace.Panel2.Controls.Add(btnSetResetShortcut);
+            splitContainerWorkspace.Panel2.Controls.Add(numCollectionAutoPeriod);
+            splitContainerWorkspace.Panel2.Controls.Add(lblCollectionAutoPeriod);
+            splitContainerWorkspace.Panel2.Controls.Add(cmbCollectionAutoMode);
+            splitContainerWorkspace.Panel2.Controls.Add(lblCollectionAutoMode);
             splitContainerWorkspace.Panel2.Controls.Add(btnClearCollectionShortcut);
             splitContainerWorkspace.Panel2.Controls.Add(btnAssignCollectionShortcut);
             splitContainerWorkspace.Panel2.Controls.Add(btnRemoveCollection);
@@ -551,19 +566,63 @@ namespace Ledqualizer
             lblResetShortcut.Size = new Size(114, 15);
             lblResetShortcut.TabIndex = 7;
             lblResetShortcut.Text = "Reset shortcut: none";
-            // 
+            //
+            // lblCollectionAutoMode
+            //
+            lblCollectionAutoMode.AutoSize = true;
+            lblCollectionAutoMode.Location = new Point(435, 11);
+            lblCollectionAutoMode.Name = "lblCollectionAutoMode";
+            lblCollectionAutoMode.Size = new Size(65, 15);
+            lblCollectionAutoMode.TabIndex = 8;
+            lblCollectionAutoMode.Text = "Auto mode";
+            //
+            // cmbCollectionAutoMode
+            //
+            cmbCollectionAutoMode.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbCollectionAutoMode.FormattingEnabled = true;
+            cmbCollectionAutoMode.Location = new Point(435, 34);
+            cmbCollectionAutoMode.Name = "cmbCollectionAutoMode";
+            cmbCollectionAutoMode.Size = new Size(110, 23);
+            cmbCollectionAutoMode.TabIndex = 9;
+            //
+            // lblCollectionAutoPeriod
+            //
+            lblCollectionAutoPeriod.AutoSize = true;
+            lblCollectionAutoPeriod.Location = new Point(557, 11);
+            lblCollectionAutoPeriod.Name = "lblCollectionAutoPeriod";
+            lblCollectionAutoPeriod.Size = new Size(57, 15);
+            lblCollectionAutoPeriod.TabIndex = 10;
+            lblCollectionAutoPeriod.Text = "Period (s)";
+            //
+            // numCollectionAutoPeriod
+            //
+            numCollectionAutoPeriod.Location = new Point(557, 34);
+            numCollectionAutoPeriod.Maximum = new decimal(new int[] { 3600, 0, 0, 0 });
+            numCollectionAutoPeriod.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            numCollectionAutoPeriod.Name = "numCollectionAutoPeriod";
+            numCollectionAutoPeriod.Size = new Size(85, 23);
+            numCollectionAutoPeriod.TabIndex = 11;
+            numCollectionAutoPeriod.Value = new decimal(new int[] { 30, 0, 0, 0 });
+            //
             // dgvCollections
-            // 
+            //
             dgvCollections.AllowUserToAddRows = false;
             dgvCollections.AllowUserToDeleteRows = false;
             dgvCollections.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             dgvCollections.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvCollections.Columns.AddRange(new DataGridViewColumn[] { colCollectionName, colCollectionMode, colCollectionShortcut, colCollectionTargets, colCollectionStatus });
+            dgvCollections.Columns.AddRange(new DataGridViewColumn[] { colCollectionAutoSelection, colCollectionName, colCollectionMode, colCollectionShortcut, colCollectionTargets, colCollectionStatus });
             dgvCollections.Location = new Point(12, 63);
             dgvCollections.Name = "dgvCollections";
             dgvCollections.RowHeadersVisible = false;
             dgvCollections.Size = new Size(1079, 97);
-            dgvCollections.TabIndex = 8;
+            dgvCollections.TabIndex = 12;
+            //
+            // colCollectionAutoSelection
+            //
+            colCollectionAutoSelection.DataPropertyName = "IncludedInAutoSelection";
+            colCollectionAutoSelection.HeaderText = "Auto";
+            colCollectionAutoSelection.Name = "colCollectionAutoSelection";
+            colCollectionAutoSelection.Width = 45;
             // 
             // colCollectionName
             // 
@@ -656,6 +715,7 @@ namespace Ledqualizer
             ((System.ComponentModel.ISupportInitialize)splitContainerMain).EndInit();
             splitContainerMain.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dgvScenes).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numCollectionAutoPeriod).EndInit();
             ((System.ComponentModel.ISupportInitialize)dgvCollections).EndInit();
             statusStrip.ResumeLayout(false);
             statusStrip.PerformLayout();
