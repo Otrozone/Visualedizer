@@ -81,6 +81,13 @@ namespace Ledqualizer
         RandomRange
     }
 
+    public enum LedStrobeOperationMode
+    {
+        TimedLoop,
+        VolumeThresholdChance,
+        BandThresholdChance
+    }
+
     public enum AuxiliaryTriggerEventType
     {
         Volume,
@@ -385,6 +392,7 @@ namespace Ledqualizer
 
     public sealed class LedStrobeSceneConfig
     {
+        public LedStrobeOperationMode OperationMode { get; set; } = LedStrobeOperationMode.TimedLoop;
         public StrobeTimingMode OnDurationMode { get; set; } = StrobeTimingMode.Constant;
         public int OnDurationMs { get; set; } = 80;
         public int OnDurationMinMs { get; set; } = 80;
@@ -399,6 +407,12 @@ namespace Ledqualizer
         public double HueMax { get; set; } = 360;
         public int Saturation { get; set; } = 100;
         public int Brightness { get; set; } = 100;
+        public int VolumeThresholdPercent { get; set; } = 65;
+        public int VolumeChancePercent { get; set; } = 100;
+        public double BandFrequencyLowHz { get; set; } = 60;
+        public double BandFrequencyHighHz { get; set; } = 250;
+        public double BandThresholdDb { get; set; } = -30;
+        public int BandChancePercent { get; set; } = 100;
 
         public LedStrobeSceneConfig Clone()
         {
@@ -1148,7 +1162,14 @@ namespace Ledqualizer
             string on = BuildStrobeDurationSummary(config.OnDurationMode, config.OnDurationMs, config.OnDurationMinMs, config.OnDurationMaxMs);
             string off = BuildStrobeDurationSummary(config.OffDurationMode, config.OffDurationMs, config.OffDurationMinMs, config.OffDurationMaxMs);
             string hue = BuildStrobeHueSummary(config);
-            return $"On {on}, off {off}, hue {hue}, Sat {Math.Clamp(config.Saturation, 0, 100)}%, Bright {Math.Clamp(config.Brightness, 0, 100)}%";
+            string color = $"hue {hue}, Sat {Math.Clamp(config.Saturation, 0, 100)}%, Bright {Math.Clamp(config.Brightness, 0, 100)}%";
+
+            return config.OperationMode switch
+            {
+                LedStrobeOperationMode.VolumeThresholdChance => $"Volume >= {Math.Clamp(config.VolumeThresholdPercent, 0, 100)}%, {Math.Clamp(config.VolumeChancePercent, 0, 100)}% chance, flash {on}, {color}",
+                LedStrobeOperationMode.BandThresholdChance => $"{Math.Min(config.BandFrequencyLowHz, config.BandFrequencyHighHz):F0}-{Math.Max(config.BandFrequencyLowHz, config.BandFrequencyHighHz):F0} Hz >= {config.BandThresholdDb:F1} dB, {Math.Clamp(config.BandChancePercent, 0, 100)}% chance, flash {on}, {color}",
+                _ => $"On {on}, off {off}, {color}"
+            };
         }
 
         private static string BuildStrobeDurationSummary(StrobeTimingMode mode, int constantMs, int minMs, int maxMs)

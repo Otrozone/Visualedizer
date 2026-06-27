@@ -12,6 +12,7 @@ namespace Ledqualizer
             TopLevel = false;
             Dock = DockStyle.Fill;
 
+            cbOperationMode.DataSource = Enum.GetValues<LedStrobeOperationMode>();
             cbOnDurationMode.DataSource = Enum.GetValues<StrobeTimingMode>();
             cbOffDurationMode.DataSource = Enum.GetValues<StrobeTimingMode>();
             cbHueMode.DataSource = Enum.GetValues<StrobeHueMode>();
@@ -24,6 +25,37 @@ namespace Ledqualizer
 
         public event EventHandler? SceneChanged;
 
+        public event EventHandler? SelectedAudioDeviceChanged;
+
+        public void LoadAudioDevices(string? selectedDeviceId)
+        {
+            AcVolume.LoadAudioDevicesToComboBox(cbAudioDevices);
+            SelectAudioDevice(selectedDeviceId);
+        }
+
+        public void SelectAudioDevice(string? deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+            {
+                return;
+            }
+
+            for (int i = 0; i < cbAudioDevices.Items.Count; i++)
+            {
+                if (cbAudioDevices.Items[i] is AcVolume.DeviceDescriptor descriptor
+                    && string.Equals(descriptor.DeviceId, deviceId, StringComparison.Ordinal))
+                {
+                    cbAudioDevices.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        public string? GetSelectedAudioDeviceId()
+        {
+            return (cbAudioDevices.SelectedItem as AcVolume.DeviceDescriptor)?.DeviceId;
+        }
+
         public void LoadScene(SceneConfig scene)
         {
             CurrentScene = scene;
@@ -31,6 +63,17 @@ namespace Ledqualizer
             try
             {
                 LedStrobeSceneConfig config = scene.LedStrobe;
+                cbOperationMode.SelectedItem = EnsureEnum(config.OperationMode, LedStrobeOperationMode.TimedLoop);
+                numVolumeThreshold.Value = ClampDecimal(config.VolumeThresholdPercent, numVolumeThreshold);
+                numVolumeChance.Value = ClampDecimal(config.VolumeChancePercent, numVolumeChance);
+                SetRangeValues(
+                    numBandLowHz,
+                    numBandHighHz,
+                    (int)Math.Round(config.BandFrequencyLowHz),
+                    (int)Math.Round(config.BandFrequencyHighHz));
+                numBandThresholdDb.Value = ClampDecimal(config.BandThresholdDb, numBandThresholdDb);
+                numBandChance.Value = ClampDecimal(config.BandChancePercent, numBandChance);
+
                 cbOnDurationMode.SelectedItem = EnsureEnum(config.OnDurationMode, StrobeTimingMode.Constant);
                 numOnDurationMs.Value = ClampDecimal(config.OnDurationMs, numOnDurationMs);
                 SetRangeValues(numOnDurationMinMs, numOnDurationMaxMs, config.OnDurationMinMs, config.OnDurationMaxMs);
@@ -66,6 +109,7 @@ namespace Ledqualizer
             {
                 EnsureRangeOrder(numOnDurationMinMs, numOnDurationMaxMs, sender);
                 EnsureRangeOrder(numOffDurationMinMs, numOffDurationMaxMs, sender);
+                EnsureRangeOrder(numBandLowHz, numBandHighHz, sender);
             }
             finally
             {
@@ -78,6 +122,26 @@ namespace Ledqualizer
 
         private void UpdateControlStates()
         {
+            LedStrobeOperationMode operationMode = GetSelectedOperationMode();
+            bool timedLoop = operationMode == LedStrobeOperationMode.TimedLoop;
+            bool volumeThreshold = operationMode == LedStrobeOperationMode.VolumeThresholdChance;
+            bool bandThreshold = operationMode == LedStrobeOperationMode.BandThresholdChance;
+
+            lblAudioDevice.Enabled = volumeThreshold || bandThreshold;
+            cbAudioDevices.Enabled = volumeThreshold || bandThreshold;
+            lblVolumeThreshold.Enabled = volumeThreshold;
+            numVolumeThreshold.Enabled = volumeThreshold;
+            lblVolumeChance.Enabled = volumeThreshold;
+            numVolumeChance.Enabled = volumeThreshold;
+            lblBandLowHz.Enabled = bandThreshold;
+            numBandLowHz.Enabled = bandThreshold;
+            lblBandHighHz.Enabled = bandThreshold;
+            numBandHighHz.Enabled = bandThreshold;
+            lblBandThresholdDb.Enabled = bandThreshold;
+            numBandThresholdDb.Enabled = bandThreshold;
+            lblBandChance.Enabled = bandThreshold;
+            numBandChance.Enabled = bandThreshold;
+
             bool onRandom = GetSelectedTimingMode(cbOnDurationMode) == StrobeTimingMode.RandomRange;
             lblOnDurationMs.Enabled = !onRandom;
             numOnDurationMs.Enabled = !onRandom;
@@ -86,6 +150,7 @@ namespace Ledqualizer
             lblOnDurationMaxMs.Enabled = onRandom;
             numOnDurationMaxMs.Enabled = onRandom;
 
+            gbOffTiming.Enabled = timedLoop;
             bool offRandom = GetSelectedTimingMode(cbOffDurationMode) == StrobeTimingMode.RandomRange;
             lblOffDurationMs.Enabled = !offRandom;
             numOffDurationMs.Enabled = !offRandom;
@@ -109,6 +174,13 @@ namespace Ledqualizer
             }
 
             LedStrobeSceneConfig config = CurrentScene.LedStrobe;
+            config.OperationMode = GetSelectedOperationMode();
+            config.VolumeThresholdPercent = Math.Clamp((int)numVolumeThreshold.Value, 0, 100);
+            config.VolumeChancePercent = Math.Clamp((int)numVolumeChance.Value, 0, 100);
+            config.BandFrequencyLowHz = Math.Min((double)numBandLowHz.Value, (double)numBandHighHz.Value);
+            config.BandFrequencyHighHz = Math.Max((double)numBandLowHz.Value, (double)numBandHighHz.Value);
+            config.BandThresholdDb = (double)numBandThresholdDb.Value;
+            config.BandChancePercent = Math.Clamp((int)numBandChance.Value, 0, 100);
             config.OnDurationMode = GetSelectedTimingMode(cbOnDurationMode);
             config.OnDurationMs = Math.Max(1, (int)numOnDurationMs.Value);
             config.OnDurationMinMs = Math.Max(1, (int)numOnDurationMinMs.Value);
@@ -124,6 +196,16 @@ namespace Ledqualizer
             config.Saturation = (int)numSaturation.Value;
             config.Brightness = (int)numBrightness.Value;
             SceneChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void cbAudioDevices_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            SelectedAudioDeviceChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private LedStrobeOperationMode GetSelectedOperationMode()
+        {
+            return cbOperationMode.SelectedItem is LedStrobeOperationMode mode ? mode : LedStrobeOperationMode.TimedLoop;
         }
 
         private static StrobeTimingMode GetSelectedTimingMode(ComboBox comboBox)

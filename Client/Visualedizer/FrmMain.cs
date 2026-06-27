@@ -152,6 +152,7 @@ namespace Ledqualizer
             laserDmxEditor.SceneChanged += Editor_SceneChanged;
             strobeEditor.SceneChanged += Editor_SceneChanged;
             ledStrobeEditor.SceneChanged += Editor_SceneChanged;
+            ledStrobeEditor.SelectedAudioDeviceChanged += LedStrobeEditor_SelectedAudioDeviceChanged;
             laserDmxEditor.SendRequested += LaserDmxEditor_SendRequested;
             strobeEditor.TestRequested += StrobeEditor_TestRequested;
 
@@ -536,6 +537,12 @@ namespace Ledqualizer
                 {
                     spectralSegmentsEditor.LoadAudioDevices(selectedAudioDeviceId);
                     selectedAudioDeviceId ??= spectralSegmentsEditor.GetSelectedAudioDeviceId();
+                }
+
+                if (sceneEditors[SceneType.LedStrobe] is LedStrobeSceneEditorForm ledStrobeEditor)
+                {
+                    ledStrobeEditor.LoadAudioDevices(selectedAudioDeviceId);
+                    selectedAudioDeviceId ??= ledStrobeEditor.GetSelectedAudioDeviceId();
                 }
             }
             finally
@@ -2447,7 +2454,22 @@ namespace Ledqualizer
             SyncAudioDeviceEditors(excludeSpectralSegments: true);
         }
 
-        private void SyncAudioDeviceEditors(bool excludeVolume = false, bool excludeSpectral = false, bool excludeSpectralSegments = false)
+        private void LedStrobeEditor_SelectedAudioDeviceChanged(object? sender, EventArgs e)
+        {
+            if (syncingAudioDeviceSelection || sender is not LedStrobeSceneEditorForm ledStrobeEditor)
+            {
+                return;
+            }
+
+            selectedAudioDeviceId = ledStrobeEditor.GetSelectedAudioDeviceId();
+            SyncAudioDeviceEditors(excludeLedStrobe: true);
+        }
+
+        private void SyncAudioDeviceEditors(
+            bool excludeVolume = false,
+            bool excludeSpectral = false,
+            bool excludeSpectralSegments = false,
+            bool excludeLedStrobe = false)
         {
             syncingAudioDeviceSelection = true;
             try
@@ -2465,6 +2487,11 @@ namespace Ledqualizer
                 if (!excludeSpectralSegments && sceneEditors[SceneType.SpectralAnalysisSegments] is SpectralAnalysisSegmentsSceneEditorForm spectralSegmentsEditor)
                 {
                     spectralSegmentsEditor.SelectAudioDevice(selectedAudioDeviceId);
+                }
+
+                if (!excludeLedStrobe && sceneEditors[SceneType.LedStrobe] is LedStrobeSceneEditorForm ledStrobeEditor)
+                {
+                    ledStrobeEditor.SelectAudioDevice(selectedAudioDeviceId);
                 }
             }
             finally

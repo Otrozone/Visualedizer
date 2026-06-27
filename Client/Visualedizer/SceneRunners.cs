@@ -1245,6 +1245,7 @@ namespace Ledqualizer
             public bool IsOn { get; set; }
             public DateTime NextTransitionUtc { get; set; } = DateTime.MinValue;
             public double CurrentHue { get; set; }
+            public bool LastThresholdConditionHigh { get; set; }
             public Random Random { get; } = new();
         }
 
@@ -1385,7 +1386,11 @@ namespace Ledqualizer
                     CleanupSpectralSegmentSceneStates(assignments);
 
                     bool needsSingleBandSpectral = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysis);
-                    bool needsSpectralSegments = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysisSegments);
+                    bool needsLedStrobeBand = assignments.Any(assignment =>
+                        assignment.Scene.Type == SceneType.LedStrobe
+                        && assignment.Scene.LedStrobe.OperationMode == LedStrobeOperationMode.BandThresholdChance);
+                    bool needsSpectralSegments = assignments.Any(assignment => assignment.Scene.Type == SceneType.SpectralAnalysisSegments)
+                        || needsLedStrobeBand;
                     bool needsAuxiliarySpectral = laserScene?.LaserDmx.Trigger.EventType == AuxiliaryTriggerEventType.SpectralAnalysis
                         || strobeScene?.Strobe.Trigger.EventType == AuxiliaryTriggerEventType.SpectralAnalysis;
                     bool needsSpectral = needsSingleBandSpectral || needsSpectralSegments || needsAuxiliarySpectral;
@@ -1933,7 +1938,16 @@ namespace Ledqualizer
                 SceneType.SpectralAnalysisSegments => BuildSpectralAnalysisSegmentsFrame(assignment.Scene.Id, assignment.Scene.SpectralAnalysisSegments, assignment.LedCount, spectralSegmentAnalysis ?? spectralAnalysis, ref lastSpectralDb, spectralProgressReporter),
                 SceneType.ImageRowCapture => BuildImageCaptureFrame(assignment.Scene.Id, assignment.Scene.ImageRowCapture, assignment.LedCount, capturePreviewUpdater),
                 SceneType.SparkleAndFlash => BuildSparkleAndFlashFrame(assignment.Scene.Id, assignment.Scene.SparkleAndFlash, assignment.LedCount),
-                SceneType.LedStrobe => BuildLedStrobeFrame(assignment.Scene.Id, assignment.Scene.LedStrobe, assignment.LedCount),
+                SceneType.LedStrobe => BuildLedStrobeFrame(
+                    assignment.Scene.Id,
+                    assignment.Scene.LedStrobe,
+                    assignment.LedCount,
+                    audioDeviceIdProvider,
+                    ref sharedVolume,
+                    spectralSegmentAnalysis ?? spectralAnalysis,
+                    ref lastSpectralDb,
+                    volumeProgressReporter,
+                    spectralProgressReporter),
                 SceneType.LaserDmx => new byte[assignment.LedCount * 3],
                 SceneType.Strobe => new byte[assignment.LedCount * 3],
                 _ => BuildSolidFrame(assignment.LedCount, assignment.Scene.SolidColor),
@@ -2417,7 +2431,16 @@ namespace Ledqualizer
                 : min + (random.NextDouble() * (max - min));
         }
 
-        private byte[] BuildLedStrobeFrame(string sceneId, LedStrobeSceneConfig config, int ledCount)
+        private byte[] BuildLedStrobeFrame(
+            string sceneId,
+            LedStrobeSceneConfig config,
+            int ledCount,
+            Func<string?> audioDeviceIdProvider,
+            ref float? sharedVolume,
+            AcSpectralAnalysis spectralAnalysis,
+            ref double? lastSpectralDb,
+            Action<int> volumeProgressReporter,
+            Action<int> spectralProgressReporter)
         {
             byte[] frame = new byte[Math.Max(ledCount, 0) * 3];
             if (ledCount <= 0)
@@ -2425,47 +2448,92 @@ namespace Ledqualizer
                 return frame;
             }
 
+            DateTime nowUtc = DateTime.UtcNow;
+            LedStrobeOperationMode operationMode = ResolveLedStrobeOperationMode(config.OperationMode);
+            bool thresholdConditionHigh = operationMode switch
+            {
+                LedStrobeOperationMode.VolumeThresholdChance => EvaluateLedStrobeVolumeCondition(config, audioDeviceIdProvider, ref sharedVolume, volumeProgressReporter),
+                LedStrobeOperationMode.BandThresholdChance => EvaluateLedStrobeBandCondition(config, spectralAnalysis, ref lastSpectralDb, spectralProgressReporter),
+                _ => false
+            };
+
+            bool isOn;
+            double currentHue;
             LedStrobeSceneState state = GetOrCreateLedStrobeSceneState(sceneId);
             lock (state.SyncRoot)
             {
-                DateTime nowUtc = DateTime.UtcNow;
                 string signature = BuildLedStrobeSceneSignature(config);
                 if (!string.Equals(state.ConfigSignature, signature, StringComparison.Ordinal))
                 {
                     ResetLedStrobeState(state, config, signature, nowUtc);
                 }
 
-                int transitions = 0;
-                while (nowUtc >= state.NextTransitionUtc && transitions < 32)
+                if (operationMode == LedStrobeOperationMode.TimedLoop)
                 {
-                    AdvanceLedStrobePhase(state, config, state.NextTransitionUtc);
-                    transitions++;
+                    AdvanceLedStrobeTimedLoop(state, config, signature, nowUtc);
+                }
+                else
+                {
+                    EvaluateLedStrobeThresholdFlash(
+                        state,
+                        config,
+                        nowUtc,
+                        thresholdConditionHigh,
+                        operationMode == LedStrobeOperationMode.VolumeThresholdChance
+                            ? config.VolumeChancePercent
+                            : config.BandChancePercent);
                 }
 
-                if (nowUtc >= state.NextTransitionUtc)
-                {
-                    ResetLedStrobeState(state, config, signature, nowUtc);
-                }
+                isOn = state.IsOn;
+                currentHue = state.CurrentHue;
+            }
 
-                if (!state.IsOn)
-                {
-                    return frame;
-                }
-
-                Color color = Common.HSVToRGB(
-                    Math.Clamp(state.CurrentHue, 0.0, 360.0),
-                    Math.Clamp(config.Saturation, 0, 100) / 100.0,
-                    Math.Clamp(config.Brightness, 0, 100) / 100.0);
-                for (int i = 0; i < ledCount; i++)
-                {
-                    int index = i * 3;
-                    frame[index] = color.R;
-                    frame[index + 1] = color.G;
-                    frame[index + 2] = color.B;
-                }
-
+            if (!isOn)
+            {
                 return frame;
             }
+
+            Color color = Common.HSVToRGB(
+                Math.Clamp(currentHue, 0.0, 360.0),
+                Math.Clamp(config.Saturation, 0, 100) / 100.0,
+                Math.Clamp(config.Brightness, 0, 100) / 100.0);
+            for (int i = 0; i < ledCount; i++)
+            {
+                int index = i * 3;
+                frame[index] = color.R;
+                frame[index + 1] = color.G;
+                frame[index + 2] = color.B;
+            }
+
+            return frame;
+        }
+
+        private static LedStrobeOperationMode ResolveLedStrobeOperationMode(LedStrobeOperationMode operationMode)
+        {
+            return Enum.IsDefined(operationMode) ? operationMode : LedStrobeOperationMode.TimedLoop;
+        }
+
+        private static bool EvaluateLedStrobeVolumeCondition(
+            LedStrobeSceneConfig config,
+            Func<string?> audioDeviceIdProvider,
+            ref float? sharedVolume,
+            Action<int> progressReporter)
+        {
+            sharedVolume ??= VolumeSceneRunner.ReadVolume(audioDeviceIdProvider());
+            progressReporter((int)Math.Round(sharedVolume.Value * 100));
+            return (sharedVolume.Value * 100.0f) >= Math.Clamp(config.VolumeThresholdPercent, 0, 100);
+        }
+
+        private static bool EvaluateLedStrobeBandCondition(
+            LedStrobeSceneConfig config,
+            AcSpectralAnalysis spectralAnalysis,
+            ref double? lastSpectralDb,
+            Action<int> progressReporter)
+        {
+            double bandLevelDb = spectralAnalysis.GetBandLevelDb(config.BandFrequencyLowHz, config.BandFrequencyHighHz);
+            lastSpectralDb = bandLevelDb;
+            progressReporter((int)Math.Round(Math.Clamp(Common.MapValue(bandLevelDb, -90.0, 0.0, 0.0, 100.0), 0.0, 100.0)));
+            return bandLevelDb >= Math.Clamp(config.BandThresholdDb, -90.0, 0.0);
         }
 
         private static void ResetLedStrobeState(
@@ -2475,9 +2543,67 @@ namespace Ledqualizer
             DateTime nowUtc)
         {
             state.ConfigSignature = signature;
+            state.LastThresholdConditionHigh = false;
+            if (ResolveLedStrobeOperationMode(config.OperationMode) == LedStrobeOperationMode.TimedLoop)
+            {
+                state.IsOn = true;
+                state.CurrentHue = ResolveLedStrobeHue(config, state.Random);
+                state.NextTransitionUtc = nowUtc.AddMilliseconds(ResolveLedStrobeDurationMs(config, state.Random, true));
+                return;
+            }
+
+            state.IsOn = false;
+            state.CurrentHue = ResolveLedStrobeHue(config, state.Random);
+            state.NextTransitionUtc = DateTime.MinValue;
+        }
+
+        private static void AdvanceLedStrobeTimedLoop(
+            LedStrobeSceneState state,
+            LedStrobeSceneConfig config,
+            string signature,
+            DateTime nowUtc)
+        {
+            int transitions = 0;
+            while (nowUtc >= state.NextTransitionUtc && transitions < 32)
+            {
+                AdvanceLedStrobePhase(state, config, state.NextTransitionUtc);
+                transitions++;
+            }
+
+            if (nowUtc >= state.NextTransitionUtc)
+            {
+                ResetLedStrobeState(state, config, signature, nowUtc);
+            }
+        }
+
+        private static void EvaluateLedStrobeThresholdFlash(
+            LedStrobeSceneState state,
+            LedStrobeSceneConfig config,
+            DateTime nowUtc,
+            bool conditionHigh,
+            int chancePercent)
+        {
+            if (state.IsOn && nowUtc >= state.NextTransitionUtc)
+            {
+                state.IsOn = false;
+            }
+
+            bool thresholdReached = conditionHigh && !state.LastThresholdConditionHigh;
+            state.LastThresholdConditionHigh = conditionHigh;
+            if (!thresholdReached || !ShouldStartLedStrobeFlash(state.Random, chancePercent))
+            {
+                return;
+            }
+
             state.IsOn = true;
             state.CurrentHue = ResolveLedStrobeHue(config, state.Random);
             state.NextTransitionUtc = nowUtc.AddMilliseconds(ResolveLedStrobeDurationMs(config, state.Random, true));
+        }
+
+        private static bool ShouldStartLedStrobeFlash(Random random, int chancePercent)
+        {
+            int chance = Math.Clamp(chancePercent, 0, 100);
+            return chance >= 100 || (chance > 0 && random.Next(100) < chance);
         }
 
         private static void AdvanceLedStrobePhase(
@@ -2567,6 +2693,7 @@ namespace Ledqualizer
         private static string BuildLedStrobeSceneSignature(LedStrobeSceneConfig config)
         {
             return string.Join("|",
+                config.OperationMode,
                 config.OnDurationMode,
                 config.OnDurationMs,
                 config.OnDurationMinMs,
@@ -2580,7 +2707,13 @@ namespace Ledqualizer
                 config.HueMin.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
                 config.HueMax.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
                 config.Saturation,
-                config.Brightness);
+                config.Brightness,
+                config.VolumeThresholdPercent,
+                config.VolumeChancePercent,
+                config.BandFrequencyLowHz.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                config.BandFrequencyHighHz.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                config.BandThresholdDb.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                config.BandChancePercent);
         }
 
         private byte[] BuildSparkleAndFlashFrame(string sceneId, SparkleAndFlashSceneConfig config, int ledCount)
