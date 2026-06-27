@@ -53,7 +53,6 @@ namespace Ledqualizer
         private readonly BindingSource sceneGridBindingSource = new();
         private readonly BindingSource collectionGridBindingSource = new();
         private readonly Dictionary<string, DeviceRunEntry> deviceRuns = new();
-        private readonly Dictionary<string, DeviceRunEntry> collectionRuns = new();
         private readonly Dictionary<SceneType, Form> sceneEditors = new();
         private readonly List<SceneTypeOption> sceneTypeOptions = Enum.GetValues<SceneType>().Select(type => new SceneTypeOption(type)).ToList();
         private readonly BindingList<SceneAssignmentOption> ledSceneOptions = new();
@@ -547,7 +546,7 @@ namespace Ledqualizer
 
         private async Task ReconcileDeviceRunsAsync()
         {
-            if (isLoading || collectionOverrideActive || collectionOverrideChanging)
+            if (isLoading || collectionOverrideChanging)
             {
                 return;
             }
@@ -567,10 +566,7 @@ namespace Ledqualizer
                     await RefreshMetadataForEnabledDevicesAsync();
                     UpdateInvalidDeviceStatuses();
 
-                    Dictionary<string, DeviceConfig> desiredDevices = GetRootDeviceRows()
-                        .Select(BuildDeviceConfigFromRows)
-                        .Where(HasActiveTargets)
-                        .ToDictionary(device => device.Id, device => device);
+                    Dictionary<string, DeviceConfig> desiredDevices = GetDesiredRunDevices();
 
                     foreach (string deviceId in deviceRuns.Keys.ToList())
                     {
@@ -606,8 +602,30 @@ namespace Ledqualizer
             }
         }
 
+        private Dictionary<string, DeviceConfig> GetDesiredRunDevices()
+        {
+            if (collectionOverrideActive)
+            {
+                return GetActiveCollectionSnapshots()
+                    .Select(BuildDeviceConfigFromSnapshot)
+                    .Where(config => config.LedCount > 0 && IsValidDeviceConfig(config))
+                    .ToDictionary(config => config.Id, config => config, StringComparer.Ordinal);
+            }
+
+            return GetRootDeviceRows()
+                .Select(BuildDeviceConfigFromRows)
+                .Where(HasActiveTargets)
+                .ToDictionary(device => device.Id, device => device, StringComparer.Ordinal);
+        }
+
         private void UpdateInvalidDeviceStatuses()
         {
+            if (collectionOverrideActive)
+            {
+                UpdateCollectionOverrideDeviceStatuses();
+                return;
+            }
+
             foreach (DeviceGridRow row in deviceRows)
             {
                 DeviceGridRow rootRow = row.Kind == DeviceRowKind.Device
@@ -668,6 +686,55 @@ namespace Ledqualizer
                 {
                     row.Status = "Pending";
                 }
+                else
+                {
+                    row.Status = ResolvePostMetadataStatus(rootRow.Id);
+                }
+            }
+
+            dgvDevices.Refresh();
+        }
+
+        private void UpdateCollectionOverrideDeviceStatuses()
+        {
+            foreach (DeviceGridRow row in deviceRows)
+            {
+                DeviceGridRow rootRow = row.Kind == DeviceRowKind.Device
+                    ? row
+                    : FindRootDeviceRow(row.ParentDeviceId) ?? row;
+                CollectionDeviceSnapshot? snapshot = GetActiveCollectionSnapshot(rootRow.Id);
+                bool rowHasTarget = snapshot != null
+                    && (row.Kind == DeviceRowKind.Device
+                        ? HasSnapshotTargets(snapshot)
+                        : IsCollectionStripActive(rootRow.Id, row.StripIndex));
+
+                if (!rowHasTarget)
+                {
+                    row.Status = "Disconnected";
+                    continue;
+                }
+
+                DeviceConfig snapshotConfig = BuildDeviceConfigFromSnapshot(snapshot!);
+                if (!IsValidDeviceConfig(snapshotConfig))
+                {
+                    row.Status = "Invalid";
+                }
+                else if (snapshotConfig.LedCount <= 0)
+                {
+                    row.Status = "Metadata unavailable";
+                }
+                else if (deviceRuns.ContainsKey(rootRow.Id))
+                {
+                    row.Status = ResolvePostMetadataStatus(rootRow.Id);
+                }
+                else if (row.Status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                else
+                {
+                    row.Status = "Pending";
+                }
             }
 
             dgvDevices.Refresh();
@@ -716,42 +783,23 @@ namespace Ledqualizer
             collectionOverrideChanging = true;
             try
             {
-                List<DeviceConfig> previousCollectionDevices = CaptureCollectionRunDevices();
-                await StopCollectionRunsAsync();
-                await SendZeroLedFramesAsync(previousCollectionDevices);
-                await StopAllDeviceRunsAsync();
-
                 collectionOverrideActive = true;
                 activeCollectionId = collection.Id;
                 activeCollectionMode = activationMode;
                 activeHoldShortcut = holdShortcut?.Clone();
                 RefreshCollectionStatuses();
-
-                foreach (CollectionDeviceSnapshot snapshot in collection.Devices.Where(HasSnapshotTargets))
-                {
-                    DeviceConfig config = BuildDeviceConfigFromSnapshot(snapshot);
-                    if (config.LedCount <= 0 || !IsValidDeviceConfig(config))
-                    {
-                        continue;
-                    }
-
-                    RunController controller = new();
-                    controller.DeviceStatusChanged += RunController_DeviceStatusChanged;
-                    collectionRuns[config.Id] = new DeviceRunEntry(config, BuildSnapshotRunSignature(snapshot), controller);
-                    await controller.StartAsync(new[] { config }, CreateCollectionSceneRunner(snapshot));
-                }
-
-                UpdateConnectionSummary();
             }
             finally
             {
                 collectionOverrideChanging = false;
             }
+
+            await ReconcileDeviceRunsAsync();
         }
 
         private async Task StopCollectionOverrideAsync(bool resumeDefault)
         {
-            if (!collectionOverrideActive && collectionRuns.Count == 0)
+            if (!collectionOverrideActive)
             {
                 return;
             }
@@ -759,9 +807,6 @@ namespace Ledqualizer
             collectionOverrideChanging = true;
             try
             {
-                List<DeviceConfig> previousCollectionDevices = CaptureCollectionRunDevices();
-                await StopCollectionRunsAsync();
-                await SendZeroLedFramesAsync(previousCollectionDevices);
                 collectionOverrideActive = false;
                 activeCollectionId = null;
                 activeCollectionMode = null;
@@ -779,33 +824,42 @@ namespace Ledqualizer
             }
         }
 
-        private async Task StopCollectionRunsAsync()
-        {
-            foreach (string deviceId in collectionRuns.Keys.ToList())
-            {
-                if (!collectionRuns.TryGetValue(deviceId, out DeviceRunEntry? entry))
-                {
-                    continue;
-                }
-
-                collectionRuns.Remove(deviceId);
-                entry.Controller.DeviceStatusChanged -= RunController_DeviceStatusChanged;
-                await entry.Controller.StopAsync();
-            }
-        }
-
-        private List<DeviceConfig> CaptureCollectionRunDevices()
-        {
-            return collectionRuns.Values
-                .Select(entry => entry.Config.Clone())
-                .ToList();
-        }
-
         private static bool HasSnapshotTargets(CollectionDeviceSnapshot snapshot)
         {
             return snapshot.LaserScene != null
                 || snapshot.StrobeScene != null
                 || snapshot.Strips.Any(strip => strip.Scene != null && strip.LedCount > 0);
+        }
+
+        private IEnumerable<CollectionDeviceSnapshot> GetActiveCollectionSnapshots()
+        {
+            if (!collectionOverrideActive || string.IsNullOrWhiteSpace(activeCollectionId))
+            {
+                return Enumerable.Empty<CollectionDeviceSnapshot>();
+            }
+
+            ConfigurationCollection? collection = FindCollectionById(activeCollectionId);
+            return collection?.Devices.Where(HasSnapshotTargets) ?? Enumerable.Empty<CollectionDeviceSnapshot>();
+        }
+
+        private CollectionDeviceSnapshot? GetActiveCollectionSnapshot(string deviceId)
+        {
+            return GetActiveCollectionSnapshots()
+                .FirstOrDefault(snapshot => string.Equals(snapshot.DeviceId, deviceId, StringComparison.Ordinal));
+        }
+
+        private bool IsCollectionDeviceActive(string deviceId)
+        {
+            return GetActiveCollectionSnapshot(deviceId) != null;
+        }
+
+        private bool IsCollectionStripActive(string deviceId, int stripIndex)
+        {
+            CollectionDeviceSnapshot? snapshot = GetActiveCollectionSnapshot(deviceId);
+            return snapshot?.Strips.Any(strip =>
+                strip.StripIndex == stripIndex
+                && strip.Scene != null
+                && strip.LedCount > 0) == true;
         }
 
         private DeviceConfig BuildDeviceConfigFromSnapshot(CollectionDeviceSnapshot snapshot)
@@ -834,20 +888,6 @@ namespace Ledqualizer
             };
         }
 
-        private ISceneRunner CreateCollectionSceneRunner(CollectionDeviceSnapshot snapshot)
-        {
-            return new CompositeSceneRunner(
-                () => GetSnapshotSceneAssignments(snapshot),
-                () => snapshot.LaserScene,
-                () => snapshot.StrobeScene,
-                () => selectedAudioDeviceId,
-                () => ReadUi(() => (int)numDelay.Value),
-                UpdatePreview,
-                UpdateVolumeProgress,
-                UpdateSpectralProgress,
-                UpdateRate);
-        }
-
         private static IReadOnlyList<DeviceSceneAssignment> GetSnapshotSceneAssignments(CollectionDeviceSnapshot snapshot)
         {
             return snapshot.Strips
@@ -859,13 +899,6 @@ namespace Ledqualizer
                     LedCount = strip.LedCount
                 })
                 .ToList();
-        }
-
-        private static string BuildSnapshotRunSignature(CollectionDeviceSnapshot snapshot)
-        {
-            string stripSignature = string.Join("|", snapshot.Strips
-                .Select(strip => $"{strip.StripIndex}:{strip.StartIndex}:{strip.LedCount}:{strip.Scene?.Id}:{strip.Scene?.Type}"));
-            return $"{snapshot.Host}|{snapshot.Port}|{snapshot.LedCount}|{snapshot.StripCount}|{snapshot.LaserScene?.Id}:{snapshot.LaserScene?.Type}|{snapshot.StrobeScene?.Id}:{snapshot.StrobeScene?.Type}|{stripSignature}";
         }
 
         private bool RequiresRestart(DeviceRunEntry current, DeviceConfig desired)
@@ -910,9 +943,16 @@ namespace Ledqualizer
             return rootRow.Enabled || GetStripRows(deviceId).Any(row => row.Enabled);
         }
 
+        private bool HasActiveRuntimeTarget(string deviceId)
+        {
+            return collectionOverrideActive
+                ? IsCollectionDeviceActive(deviceId)
+                : HasAnyEnabledTarget(deviceId);
+        }
+
         private string ResolveActiveStatus(string deviceId)
         {
-            return collectionRuns.ContainsKey(deviceId)
+            return IsCollectionDeviceActive(deviceId)
                 ? "Collection active"
                 : deviceRuns.ContainsKey(deviceId) ? "Effect active" : "Online";
         }
@@ -920,7 +960,7 @@ namespace Ledqualizer
         private string ResolvePostMetadataStatus(string deviceId)
         {
             DeviceGridRow? rootRow = FindRootDeviceRow(deviceId);
-            if (rootRow == null || !HasAnyEnabledTarget(deviceId))
+            if (rootRow == null || !HasActiveRuntimeTarget(deviceId))
             {
                 return "Disconnected";
             }
@@ -929,10 +969,10 @@ namespace Ledqualizer
             {
                 "Connecting" => "Connecting",
                 string status when status.StartsWith("Offline", StringComparison.OrdinalIgnoreCase) => status,
-                "Invalid" => "Invalid",
-                "Metadata unavailable" => "Metadata unavailable",
-                "Scene missing" => "Scene missing",
-                "Scene incompatible" => "Scene incompatible",
+                "Invalid" when !collectionOverrideActive => "Invalid",
+                "Metadata unavailable" when !collectionOverrideActive => "Metadata unavailable",
+                "Scene missing" when !collectionOverrideActive => "Scene missing",
+                "Scene incompatible" when !collectionOverrideActive => "Scene incompatible",
                 _ => ResolveActiveStatus(deviceId)
             };
         }
@@ -946,25 +986,55 @@ namespace Ledqualizer
 
         private string BuildRunSignature(DeviceConfig config)
         {
-            string laserSceneType = FindSceneById(config.AssignedLaserSceneId)?.Type.ToString() ?? string.Empty;
-            string strobeSceneType = FindSceneById(config.AssignedStrobeSceneId)?.Type.ToString() ?? string.Empty;
             string stripSignature = string.Join("|", config.Strips
-                .Select(strip => $"{strip.StripIndex}:{strip.LedCount}:{strip.Enabled}:{strip.AssignedSceneId}:{FindSceneById(strip.AssignedSceneId)?.Type.ToString() ?? string.Empty}"));
-            return $"{config.Host}|{config.Port}|{config.LedCount}|{config.StripCount}|{config.Enabled}|{config.AssignedLaserSceneId}|{laserSceneType}|{config.AssignedStrobeSceneId}|{strobeSceneType}|{stripSignature}";
+                .OrderBy(strip => strip.StripIndex)
+                .Select(strip => $"{strip.StripIndex}:{strip.LedCount}"));
+            return $"{config.Host}|{config.Port}|{config.LedCount}|{config.StripCount}|{stripSignature}";
         }
 
         private ISceneRunner CreateCompositeSceneRunner(string deviceId)
         {
             return new CompositeSceneRunner(
-                () => GetDeviceSceneAssignments(deviceId),
-                () => GetAssignedLaserScene(deviceId),
-                () => GetAssignedStrobeScene(deviceId),
+                () => GetActiveSceneAssignments(deviceId),
+                () => GetActiveLaserScene(deviceId),
+                () => GetActiveStrobeScene(deviceId),
                 () => selectedAudioDeviceId,
                 () => ReadUi(() => (int)numDelay.Value),
                 UpdatePreview,
                 UpdateVolumeProgress,
                 UpdateSpectralProgress,
                 UpdateRate);
+        }
+
+        private IReadOnlyList<DeviceSceneAssignment> GetActiveSceneAssignments(string deviceId)
+        {
+            if (collectionOverrideActive)
+            {
+                CollectionDeviceSnapshot? snapshot = GetActiveCollectionSnapshot(deviceId);
+                return snapshot == null ? Array.Empty<DeviceSceneAssignment>() : GetSnapshotSceneAssignments(snapshot);
+            }
+
+            return GetDeviceSceneAssignments(deviceId);
+        }
+
+        private SceneConfig? GetActiveLaserScene(string deviceId)
+        {
+            if (collectionOverrideActive)
+            {
+                return GetActiveCollectionSnapshot(deviceId)?.LaserScene;
+            }
+
+            return GetAssignedLaserScene(deviceId);
+        }
+
+        private SceneConfig? GetActiveStrobeScene(string deviceId)
+        {
+            if (collectionOverrideActive)
+            {
+                return GetActiveCollectionSnapshot(deviceId)?.StrobeScene;
+            }
+
+            return GetAssignedStrobeScene(deviceId);
         }
 
         private IReadOnlyList<DeviceSceneAssignment> GetDeviceSceneAssignments(string deviceId)
@@ -1320,44 +1390,6 @@ namespace Ledqualizer
             }
         }
 
-        private async Task SendZeroLedFramesAsync(IReadOnlyList<DeviceConfig> devices)
-        {
-            HashSet<string> visitedEndpoints = new(StringComparer.OrdinalIgnoreCase);
-            foreach (DeviceConfig device in devices)
-            {
-                if (!IsValidDeviceConfig(device) || device.LedCount <= 0)
-                {
-                    continue;
-                }
-
-                string endpointKey = $"{device.Host.Trim()}:{device.Port}";
-                if (!visitedEndpoints.Add(endpointKey))
-                {
-                    continue;
-                }
-
-                byte[] offFrame = new byte[device.LedCount * 3];
-                var session = new DeviceSession(device, (_, _, _) => { });
-                using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-
-                try
-                {
-                    if (await session.ConnectAsync(timeout.Token).ConfigureAwait(false))
-                    {
-                        await session.SendFrameAsync(offFrame, timeout.Token).ConfigureAwait(false);
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    // Best-effort blackout; release/resume must continue even if a device is unreachable.
-                }
-                finally
-                {
-                    await session.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
-                }
-            }
-        }
-
         private void RunController_DeviceStatusChanged(string deviceId, ConnectionState state, string? detail)
         {
             SafeUi(() =>
@@ -1373,13 +1405,16 @@ namespace Ledqualizer
                     ConnectionState.Connecting => "Connecting",
                     ConnectionState.Connected => ResolveActiveStatus(deviceId),
                     ConnectionState.Faulted => string.IsNullOrWhiteSpace(detail) ? "Offline" : $"Offline: {detail}",
-                    _ => HasAnyEnabledTarget(deviceId) ? "Pending" : "Disconnected"
+                    _ => HasActiveRuntimeTarget(deviceId) ? "Pending" : "Disconnected"
                 };
 
                 rootRow.Status = status;
                 foreach (DeviceGridRow stripRow in GetStripRows(deviceId))
                 {
-                    stripRow.Status = stripRow.Enabled ? status : "Disconnected";
+                    bool stripActive = collectionOverrideActive
+                        ? IsCollectionStripActive(deviceId, stripRow.StripIndex)
+                        : stripRow.Enabled;
+                    stripRow.Status = stripActive ? status : "Disconnected";
                 }
 
                 dgvDevices.Refresh();
@@ -1396,8 +1431,12 @@ namespace Ledqualizer
         {
             if (collectionOverrideActive)
             {
-                int enabledCollectionCount = collectionRuns.Count;
-                int connectedCollectionCount = GetRootDeviceRows().Count(item => item.Status is "Collection active" or "Online" or "Effect active");
+                int enabledCollectionCount = GetActiveCollectionSnapshots()
+                    .Select(BuildDeviceConfigFromSnapshot)
+                    .Count(config => config.LedCount > 0 && IsValidDeviceConfig(config));
+                int connectedCollectionCount = GetRootDeviceRows()
+                    .Count(item => IsCollectionDeviceActive(item.Id)
+                        && item.Status is "Collection active" or "Online" or "Effect active");
                 statLblConnection.Text = enabledCollectionCount == 0
                     ? "Collection active: no targets"
                     : $"Collection: {connectedCollectionCount}/{enabledCollectionCount} online";
@@ -2633,7 +2672,10 @@ namespace Ledqualizer
                             stripRow.Host = row.Host;
                             stripRow.Port = row.Port;
                             stripRow.LedCount = stripMetadata.LedCount;
-                            stripRow.Status = stripRow.Enabled ? ResolvePostMetadataStatus(row.Id) : "Disconnected";
+                            bool stripActive = collectionOverrideActive
+                                ? IsCollectionStripActive(row.Id, stripRow.StripIndex)
+                                : stripRow.Enabled;
+                            stripRow.Status = stripActive ? ResolvePostMetadataStatus(row.Id) : "Disconnected";
                         }
                     }
 
@@ -2691,7 +2733,7 @@ namespace Ledqualizer
                         config.Strips = refreshedStrips;
                     }
 
-                    if (!HasAnyEnabledTarget(row.Id))
+                    if (!HasActiveRuntimeTarget(row.Id))
                     {
                         row.Status = "Disconnected";
                     }
@@ -2700,7 +2742,10 @@ namespace Ledqualizer
                         row.Status = ResolvePostMetadataStatus(row.Id);
                         foreach (DeviceGridRow stripRow in GetStripRows(row.Id))
                         {
-                            stripRow.Status = stripRow.Enabled ? row.Status : "Disconnected";
+                            bool stripActive = collectionOverrideActive
+                                ? IsCollectionStripActive(row.Id, stripRow.StripIndex)
+                                : stripRow.Enabled;
+                            stripRow.Status = stripActive ? row.Status : "Disconnected";
                         }
                     }
 
@@ -2716,7 +2761,7 @@ namespace Ledqualizer
             {
                 SafeUi(() =>
                 {
-                    if (HasAnyEnabledTarget(row.Id) && row.LedCount <= 0)
+                    if (HasActiveRuntimeTarget(row.Id) && row.LedCount <= 0)
                     {
                         row.Status = "Metadata unavailable";
                         dgvDevices.Refresh();
